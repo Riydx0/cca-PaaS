@@ -39,7 +39,30 @@ cca-PaaS/
 └── scripts/                 # Utility scripts
 ```
 
-## Getting Started
+## Quick Deploy (Docker — 3 lines)
+
+```bash
+git clone https://github.com/Riydx0/cca-PaaS && cd cca-PaaS
+cp .env.example .env   # edit .env with your Clerk keys and a strong DB_PASSWORD
+docker compose up -d --build
+```
+
+The app will be live at **http://your-server-ip** on port 80.
+
+> **Requirements:** Docker 24+ and Docker Compose v2 installed on the server.
+> Get Docker: `curl -fsSL https://get.docker.com | sh`
+
+### First Run (Admin Setup)
+
+After the containers start, set up your super_admin:
+
+1. Open `http://your-server-ip` and sign up
+2. Go to `http://your-server-ip/bootstrap` and click **"Grant Super Admin Access"**
+3. Sign out and back in — the **Admin Panel** link will appear in the sidebar
+
+---
+
+## Getting Started (Local Development)
 
 ### Prerequisites
 

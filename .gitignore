@@ -52,3 +52,6 @@ replit.md
 .upm/
 .config/
 attached_assets/
+
+# Local secrets — never commit
+.env
