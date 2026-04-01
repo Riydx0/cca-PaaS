@@ -25,7 +25,6 @@ services:
       NODE_ENV: production
       PORT: 8080
       DATABASE_URL: postgresql://cca:${DB_PASSWORD:-changeme}@db:5432/cca_paas
-      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
       SESSION_SECRET: ${SESSION_SECRET}
     depends_on:
       db:
@@ -38,7 +37,6 @@ services:
       context: .
       target: frontend
       args:
-        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
         VITE_CLERK_PROXY_URL: ${VITE_CLERK_PROXY_URL:-""}
     restart: unless-stopped
     ports:

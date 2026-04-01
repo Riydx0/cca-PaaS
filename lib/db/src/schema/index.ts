@@ -1,3 +1,4 @@
 export * from "./cloudServices";
 export * from "./serverOrders";
 export * from "./systemUpdateLogs";
+export * from "./settings";

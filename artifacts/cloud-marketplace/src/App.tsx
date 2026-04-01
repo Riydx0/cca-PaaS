@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { ClerkProvider, SignIn, SignUp, Show, useClerk, useAuth } from '@clerk/react';
+import { useEffect, useRef, useState } from "react";
+import { ClerkProvider, Show, useClerk, useAuth } from '@clerk/react';
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from 'wouter';
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -9,6 +9,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 import { useRole } from "@/hooks/useRole";
+import { Loader2, ServerCrash } from "lucide-react";
 
 // User Pages
 import { Landing } from "@/pages/Landing";
@@ -18,6 +19,7 @@ import { Dashboard } from "@/pages/Dashboard";
 import { Services } from "@/pages/Services";
 import { Orders } from "@/pages/Orders";
 import { Bootstrap } from "@/pages/Bootstrap";
+import { SetupPage } from "@/pages/SetupPage";
 
 // Admin Pages
 import { AdminDashboard } from "@/pages/admin/AdminDashboard";
@@ -34,12 +36,10 @@ function normalizeOptionalEnv(value: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const clerkProxyUrl = normalizeOptionalEnv(import.meta.env.VITE_CLERK_PROXY_URL);
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-console.log('[Clerk] RAW VITE_CLERK_PROXY_URL:', JSON.stringify(import.meta.env.VITE_CLERK_PROXY_URL));
-console.log('[Clerk] NORMALIZED clerkProxyUrl:', clerkProxyUrl);
+const buildTimePK = normalizeOptionalEnv(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 
 function stripBase(path: string): string {
   return basePath && path.startsWith(basePath)
@@ -47,8 +47,33 @@ function stripBase(path: string): string {
     : path;
 }
 
-if (!clerkPubKey) {
-  throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in .env file');
+type AppConfig = {
+  setupComplete: boolean;
+  clerkPublishableKey: string | null;
+  appUrl: string | null;
+};
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+    </div>
+  );
+}
+
+function ErrorScreen({ message }: { message: string }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3 p-4">
+      <ServerCrash className="w-10 h-10 text-destructive" />
+      <p className="text-destructive font-medium text-center">{message}</p>
+      <button
+        onClick={() => window.location.reload()}
+        className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+      >
+        Retry
+      </button>
+    </div>
+  );
 }
 
 function ClerkQueryClientCacheInvalidator() {
@@ -122,12 +147,12 @@ function AdminRoute({ component: Component, superAdminOnly = false }: { componen
   );
 }
 
-function ClerkProviderWithRoutes() {
+function ClerkProviderWithRoutes({ publishableKey }: { publishableKey: string }) {
   const [, setLocation] = useLocation();
 
   return (
     <ClerkProvider
-      publishableKey={clerkPubKey}
+      publishableKey={publishableKey}
       {...(clerkProxyUrl ? { proxyUrl: clerkProxyUrl } : {})}
       routerPush={(to) => setLocation(stripBase(to))}
       routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
@@ -178,13 +203,70 @@ function ClerkProviderWithRoutes() {
   );
 }
 
+function AppRouter() {
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [loadingConfig, setLoadingConfig] = useState(!buildTimePK);
+  const [configError, setConfigError] = useState<string | null>(null);
+  const [runtimePK, setRuntimePK] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (buildTimePK) return;
+
+    fetch("/api/config")
+      .then((r) => r.json())
+      .then((data: AppConfig) => {
+        setConfig(data);
+        if (data.clerkPublishableKey) {
+          setRuntimePK(data.clerkPublishableKey);
+        }
+      })
+      .catch(() => {
+        setConfigError("Cannot connect to the API server. Make sure all Docker containers are running.");
+      })
+      .finally(() => setLoadingConfig(false));
+  }, []);
+
+  if (loadingConfig) return <LoadingScreen />;
+  if (configError) return <ErrorScreen message={configError} />;
+
+  const publishableKey = buildTimePK ?? runtimePK;
+
+  if (!publishableKey || (config && !config.setupComplete)) {
+    return (
+      <WouterRouter base={basePath}>
+        <Switch>
+          <Route path="/setup">
+            <SetupPage
+              onSetupComplete={(pk) => {
+                setRuntimePK(pk);
+                setConfig((prev) => ({
+                  ...prev!,
+                  setupComplete: true,
+                  clerkPublishableKey: pk,
+                }));
+              }}
+            />
+          </Route>
+          <Route>
+            <Redirect to="/setup" />
+          </Route>
+        </Switch>
+      </WouterRouter>
+    );
+  }
+
+  return (
+    <WouterRouter base={basePath}>
+      <ClerkProviderWithRoutes publishableKey={publishableKey} />
+    </WouterRouter>
+  );
+}
+
 function App() {
   return (
     <I18nProvider>
       <TooltipProvider>
-        <WouterRouter base={basePath}>
-          <ClerkProviderWithRoutes />
-        </WouterRouter>
+        <AppRouter />
         <Toaster />
       </TooltipProvider>
     </I18nProvider>

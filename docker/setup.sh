@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================
 #  cca-PaaS — Interactive Setup Script
-#  Prompts for Clerk keys + optional DB password,
-#  generates SESSION_SECRET, writes .env, and launches Docker.
+#  Generates .env (DB password + SESSION_SECRET) and launches Docker.
+#  Clerk keys are configured via the web UI on first visit.
 # ============================================================
 set -e
 
@@ -28,11 +28,11 @@ print_success() {
   echo -e "${BOLD}${GREEN}║            cca-PaaS is LIVE!                     ║${RESET}"
   echo -e "${BOLD}${GREEN}╚══════════════════════════════════════════════════╝${RESET}"
   echo ""
-  echo -e "  Open your browser:"
-  echo -e "  ${BOLD}${CYAN}http://${SERVER_IP:-your-server-ip}${RESET}"
+  echo -e "  Open your browser and finish setup:"
+  echo -e "  ${BOLD}${CYAN}http://${SERVER_IP:-your-server-ip}/setup${RESET}"
   echo ""
-  echo -e "  Admin setup ${DIM}(first time only)${RESET}:"
-  echo -e "  ${CYAN}http://${SERVER_IP:-your-server-ip}/bootstrap${RESET}"
+  echo -e "  ${DIM}You will be asked to enter your Clerk API keys${RESET}"
+  echo -e "  ${DIM}and your app URL — this only happens once.${RESET}"
   echo ""
   echo -e "  Useful commands:"
   echo -e "  ${DIM}docker compose logs -f       # view live logs${RESET}"
@@ -51,6 +51,7 @@ echo -e "${BOLD}╚════════════════════�
 echo ""
 echo -e "${DIM}  This script will configure your environment and launch${RESET}"
 echo -e "${DIM}  cca-PaaS with Docker. It takes about 2-5 minutes.${RESET}"
+echo -e "${DIM}  Clerk API keys are configured via the web UI after launch.${RESET}"
 echo ""
 
 # ── dependency checks ────────────────────────────────────────
@@ -94,51 +95,9 @@ if [ -f .env ]; then
 fi
 
 # ════════════════════════════════════════════════════════════
-#  Step 1 — Clerk Secret Key
+#  Step 1 of 1 — Database Password (optional)
 # ════════════════════════════════════════════════════════════
-echo -e "${BOLD}Step 1 of 3 — Clerk Secret Key${RESET}"
-echo -e "  Get it from: ${CYAN}https://dashboard.clerk.com${RESET} → API Keys"
-echo -e "  ${DIM}Starts with: sk_live_... or sk_test_...${RESET}"
-echo ""
-
-CLERK_SECRET_KEY=""
-while true; do
-  read -rp "  Clerk Secret Key: " CLERK_SECRET_KEY
-  if [[ "$CLERK_SECRET_KEY" == sk_* ]]; then
-    success "Clerk Secret Key accepted."
-    break
-  else
-    error "Invalid key — must start with 'sk_'. Try again."
-  fi
-done
-
-echo ""
-
-# ════════════════════════════════════════════════════════════
-#  Step 2 — Clerk Publishable Key
-# ════════════════════════════════════════════════════════════
-echo -e "${BOLD}Step 2 of 3 — Clerk Publishable Key${RESET}"
-echo -e "  Same page: ${CYAN}https://dashboard.clerk.com${RESET} → API Keys"
-echo -e "  ${DIM}Starts with: pk_live_... or pk_test_...${RESET}"
-echo ""
-
-VITE_CLERK_PUBLISHABLE_KEY=""
-while true; do
-  read -rp "  Clerk Publishable Key: " VITE_CLERK_PUBLISHABLE_KEY
-  if [[ "$VITE_CLERK_PUBLISHABLE_KEY" == pk_* ]]; then
-    success "Clerk Publishable Key accepted."
-    break
-  else
-    error "Invalid key — must start with 'pk_'. Try again."
-  fi
-done
-
-echo ""
-
-# ════════════════════════════════════════════════════════════
-#  Step 3 — Database Password (optional)
-# ════════════════════════════════════════════════════════════
-echo -e "${BOLD}Step 3 of 3 — Database Password${RESET}"
+echo -e "${BOLD}Step 1 of 1 — Database Password${RESET}"
 echo -e "  ${DIM}Press Enter to auto-generate a secure random password.${RESET}"
 echo ""
 
@@ -175,9 +134,6 @@ cat > .env <<EOF
 # ============================================================
 
 DB_PASSWORD=${DB_PASSWORD}
-
-CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
-VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY}
 
 SESSION_SECRET=${SESSION_SECRET}
 
