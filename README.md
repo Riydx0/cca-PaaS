@@ -60,14 +60,37 @@ The script supports the following distributions:
 | AlmaLinux | 8, 9 |
 | Fedora | 38+ |
 
-> **Prefer manual install?** Run the official one-liner for your distro:
+> **Prefer manual install?** Use these fully self-contained commands:
 >
-> | Distro | Command |
-> |---|---|
-> | Ubuntu / Debian | `curl -fsSL https://get.docker.com \| sudo sh` |
-> | CentOS 7 | `yum install -y docker-ce docker-compose-plugin` *(after adding Docker repo)* |
-> | Rocky / Alma | `dnf install -y docker-ce docker-compose-plugin` *(after adding Docker repo)* |
-> | Fedora | `dnf install -y docker-ce docker-compose-plugin` |
+> **Ubuntu / Debian**
+> ```bash
+> curl -fsSL https://get.docker.com | sudo sh
+> sudo usermod -aG docker $USER && newgrp docker
+> ```
+>
+> **CentOS 7**
+> ```bash
+> sudo yum install -y yum-utils
+> sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+> sudo yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+> sudo systemctl enable --now docker && sudo usermod -aG docker $USER
+> ```
+>
+> **Rocky Linux / AlmaLinux / CentOS 8+**
+> ```bash
+> sudo dnf install -y dnf-plugins-core
+> sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+> sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+> sudo systemctl enable --now docker && sudo usermod -aG docker $USER
+> ```
+>
+> **Fedora**
+> ```bash
+> sudo dnf install -y dnf-plugins-core
+> sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+> sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+> sudo systemctl enable --now docker && sudo usermod -aG docker $USER
+> ```
 
 After the script completes, **log out and back in** (or run `newgrp docker`) so Docker works without `sudo`.
 

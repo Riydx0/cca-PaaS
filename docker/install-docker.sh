@@ -53,6 +53,42 @@ case "$DISTRO" in
   *)                     DISTRO_FAMILY="" ;;
 esac
 
+# ── version guard (auto-detected path) ──────────────────────
+check_version_ubuntu()  {
+  local major="${VERSION_ID%%.*}"
+  case "$major" in
+    20|22|24) ;;
+    *) warn "Ubuntu ${VERSION_ID} is not officially tested. Supported: 20.04, 22.04, 24.04. Proceeding anyway..." ;;
+  esac
+}
+check_version_debian()  {
+  local major="${VERSION_ID%%.*}"
+  case "$major" in
+    11|12) ;;
+    *) warn "Debian ${VERSION_ID} is not officially tested. Supported: 11, 12. Proceeding anyway..." ;;
+  esac
+}
+check_version_centos()  {
+  local major="${VERSION_ID%%.*}"
+  case "$major" in
+    7|8) ;;
+    *) warn "CentOS ${VERSION_ID} is not officially tested. Supported: 7, 8/Stream. Proceeding anyway..." ;;
+  esac
+}
+check_version_rhel()    {
+  local major="${VERSION_ID%%.*}"
+  case "$major" in
+    8|9) ;;
+    *) warn "Rocky/AlmaLinux ${VERSION_ID} is not officially tested. Supported: 8, 9. Proceeding anyway..." ;;
+  esac
+}
+check_version_fedora()  {
+  local major="${VERSION_ID%%.*}"
+  if [ "$major" -lt 38 ] 2>/dev/null; then
+    warn "Fedora ${VERSION_ID} is not officially tested. Supported: 38+. Proceeding anyway..."
+  fi
+}
+
 # ── manual menu if distro not detected ──────────────────────
 if [ -z "$DISTRO_FAMILY" ]; then
   warn "Could not auto-detect your Linux distribution."
@@ -79,6 +115,15 @@ if [ -z "$DISTRO_FAMILY" ]; then
 fi
 
 info "Detected: ${DISTRO:-$DISTRO_FAMILY} ${VERSION_ID}"
+
+# Run version check for auto-detected path
+case "$DISTRO_FAMILY" in
+  ubuntu)  check_version_ubuntu ;;
+  debian)  check_version_debian ;;
+  centos)  check_version_centos ;;
+  rhel)    check_version_rhel ;;
+  fedora)  check_version_fedora ;;
+esac
 echo ""
 
 # ════════════════════════════════════════════════════════════
@@ -95,15 +140,14 @@ install_ubuntu_debian() {
 
   info "Adding Docker's official GPG key..."
   install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/"${DISTRO}"/gpg \
+  curl -fsSL "https://download.docker.com/linux/${DISTRO}/gpg" \
     | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
   chmod a+r /etc/apt/keyrings/docker.gpg
 
   info "Adding Docker apt repository..."
   echo \
     "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-    https://download.docker.com/linux/${DISTRO} \
-    $(lsb_release -cs) stable" \
+https://download.docker.com/linux/${DISTRO} $(lsb_release -cs) stable" \
     > /etc/apt/sources.list.d/docker.list
 
   info "Installing Docker Engine + Compose plugin..."
@@ -128,17 +172,31 @@ install_centos7() {
 }
 
 install_centos8_rhel_fedora() {
-  local PM="dnf"
-  command -v dnf &>/dev/null || PM="yum"
+  # Pick package manager
+  if command -v dnf &>/dev/null; then
+    PM="dnf"
+  else
+    PM="yum"
+  fi
 
-  info "Installing dnf-plugins-core..."
-  $PM install -y -q dnf-plugins-core 2>/dev/null || true
+  info "Installing dnf-plugins-core (for config-manager sub-command)..."
+  $PM install -y -q dnf-plugins-core
+
+  # Verify config-manager is available after install
+  if ! $PM config-manager --version &>/dev/null 2>&1; then
+    error "'${PM} config-manager' not available after installing dnf-plugins-core."
+    error "Try: ${PM} install -y dnf-plugins-core && ${PM} config-manager --add-repo ..."
+    exit 1
+  fi
 
   info "Adding Docker CE repository..."
-  $PM config-manager --add-repo \
-    https://download.docker.com/linux/centos/docker-ce.repo 2>/dev/null || \
-  $PM config-manager --add-repo \
-    https://download.docker.com/linux/fedora/docker-ce.repo
+  if [ "$DISTRO_FAMILY" = "fedora" ]; then
+    $PM config-manager --add-repo \
+      https://download.docker.com/linux/fedora/docker-ce.repo
+  else
+    $PM config-manager --add-repo \
+      https://download.docker.com/linux/centos/docker-ce.repo
+  fi
 
   info "Installing Docker Engine + Compose plugin..."
   $PM install -y -q \
@@ -164,6 +222,10 @@ case "$DISTRO_FAMILY" in
   rhel|fedora)
     install_centos8_rhel_fedora
     ;;
+  *)
+    error "Unsupported distribution family: ${DISTRO_FAMILY}. Cannot proceed."
+    exit 1
+    ;;
 esac
 
 # ── Enable & start Docker ────────────────────────────────────
@@ -186,8 +248,8 @@ success "Docker $(docker --version | awk '{print $3}' | tr -d ',') installed suc
 success "Docker Compose $(docker compose version --short) installed successfully!"
 echo ""
 echo -e "${BOLD}Next steps:${RESET}"
-echo "  1. (Re-login or run: newgrp docker)"
-echo "  2. Copy and fill environment variables:"
+echo "  1. Re-login or run:  newgrp docker"
+echo "  2. Fill in your environment:"
 echo "       cp .env.example .env && nano .env"
 echo "  3. Launch cca-PaaS:"
 echo "       docker compose up -d --build"
