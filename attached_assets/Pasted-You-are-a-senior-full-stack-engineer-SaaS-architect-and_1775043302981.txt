@@ -1,0 +1,412 @@
+You are a senior full-stack engineer, SaaS architect, and secure systems designer.
+
+Extend the existing Cloud Services Marketplace project with a **professional Admin Panel and Super Admin system**.
+
+This must be implemented cleanly, securely, and in a production-minded way.
+
+---
+
+# Goals
+
+Add:
+
+1. Admin role
+2. Super Admin role
+3. Admin dashboard
+4. User management
+5. Order management
+6. Cloud service management
+7. System update management for Super Admin
+8. GitHub update check system
+9. Update execution system
+10. Update logs
+11. Multilingual support (Arabic + English)
+12. Responsive design for mobile, tablet, and desktop
+
+---
+
+# Roles and Permissions
+
+Implement 3 roles:
+
+* `user`
+* `admin`
+* `super_admin`
+
+## user
+
+Can:
+
+* view services
+* request servers
+* view own orders
+
+## admin
+
+Can:
+
+* access admin dashboard
+* view all users
+* view all orders
+* update order statuses
+* view services
+
+## super_admin
+
+Can do everything admin can do, plus:
+
+* create/edit/delete cloud services
+* manage user roles
+* access system update page
+* check for updates from GitHub
+* trigger application update
+* view update logs
+
+---
+
+# Backend Requirements
+
+## 1) Role Protection
+
+Add proper dependencies / guards:
+
+* require_admin
+* require_super_admin
+
+Protect all admin routes.
+
+---
+
+## 2) Admin Pages and Routes
+
+Create admin routes and templates for:
+
+### Admin Dashboard
+
+* `/admin/dashboard`
+
+Show:
+
+* total users
+* total orders
+* total active services
+* pending orders count
+
+### User Management
+
+* `/admin/users`
+* list users
+* search users
+* show role
+* allow super_admin to change role
+* optionally allow deactivate user flag if architecture supports it
+
+### Order Management
+
+* `/admin/orders`
+* list all orders
+* filter by status
+* view order details
+* allow admin and super_admin to update order status:
+
+  * Pending
+  * Provisioning
+  * Active
+  * Failed
+  * Cancelled
+
+### Service Management
+
+Only super_admin:
+
+* `/admin/services`
+* add service
+* edit service
+* delete service
+* toggle active/inactive
+
+---
+
+## 3) System Updates Module (Super Admin Only)
+
+Create a secure **System Updates** section.
+
+### Route:
+
+* `/admin/system/updates`
+
+This page must display:
+
+* current application version
+* latest available GitHub version
+* last checked time
+* last updated time
+* update status
+* update logs
+* buttons:
+
+  * Check for Updates
+  * Run Update
+
+---
+
+# GitHub Update System
+
+Implement a professional but simple update system.
+
+## 1) Version Tracking
+
+Add a `VERSION` file to the project root.
+Example:
+`1.0.0`
+
+Current version must be read from this file.
+
+## 2) Check for Updates
+
+Implement backend logic to check GitHub for latest version.
+
+Use one of these acceptable methods:
+
+* compare local VERSION with a remote VERSION file from GitHub raw URL
+* or compare with latest GitHub release via GitHub API
+
+Preferred simple method:
+
+* local file: `VERSION`
+* remote raw URL: a `VERSION` file in the GitHub repository
+
+When the Super Admin clicks **Check for Updates**:
+
+* fetch remote version
+* compare it with local version
+* show:
+
+  * Up to date
+  * or Update available
+
+Store last checked timestamp.
+
+## 3) Run Update
+
+When Super Admin clicks **Run Update**:
+
+* execute a controlled update workflow
+* do NOT allow arbitrary shell execution
+* do NOT expose command execution to users
+
+Use a tightly controlled updater flow only.
+
+Acceptable implementation approach:
+
+* call a dedicated update service
+* that executes only predefined safe commands such as:
+
+  * `git fetch`
+  * `git pull origin main`
+  * install dependencies if needed
+  * optional app restart hook placeholder
+
+Important:
+
+* no free-form shell input
+* no terminal exposed in UI
+* only super_admin can trigger this
+* return update result to the UI
+* store all attempts in update logs
+
+If actual restart is environment-dependent, implement a placeholder and document it clearly.
+If Replit limitations prevent full auto-restart, still implement:
+
+* update check
+* update run simulation or controlled update logic
+* clear status reporting
+
+---
+
+# Update Logs
+
+Create a database model for update logs, for example:
+
+## SystemUpdateLog
+
+Fields:
+
+* id
+* triggered_by_user_id
+* current_version
+* target_version
+* status
+* message
+* created_at
+* completed_at
+
+Statuses can include:
+
+* checked
+* update_available
+* updating
+* completed
+* failed
+
+Display logs in the Super Admin update page.
+
+---
+
+# UI/UX Requirements
+
+The Admin and Super Admin interface must match the premium style of the main product.
+
+It must be:
+
+* modern
+* polished
+* enterprise-grade
+* multilingual
+* responsive
+
+## Design Requirements
+
+Use:
+
+* premium sidebar
+* topbar
+* dashboard cards
+* tables or card lists that work well on mobile
+* status badges
+* polished forms
+* elegant modals or inline edit sections if needed
+
+### Pages to create
+
+Create admin templates such as:
+
+* `templates/admin/dashboard.html`
+* `templates/admin/users.html`
+* `templates/admin/orders.html`
+* `templates/admin/services.html`
+* `templates/admin/system_updates.html`
+
+---
+
+# Multilingual Support
+
+Preserve and extend the existing Arabic/English support.
+
+Requirements:
+
+* all admin labels and buttons must be translated
+* support RTL for Arabic
+* support LTR for English
+* admin UI must feel natural in both languages
+
+Include translations for:
+
+* Users
+* Orders
+* Services
+* Dashboard
+* System Updates
+* Check for Updates
+* Run Update
+* Status
+* Role
+* Save
+* Edit
+* Delete
+* Pending
+* Active
+* Failed
+* Cancelled
+* Update Available
+* Up to Date
+
+---
+
+# Responsive Design
+
+Admin panel must work well on:
+
+* mobile
+* tablet
+* desktop
+
+Requirements:
+
+* responsive sidebar or collapsible navigation
+* cards/tables adapt to narrow screens
+* action buttons remain usable on touch devices
+* update page remains readable on mobile
+
+---
+
+# Code Structure
+
+Add clean backend files if needed, such as:
+
+* `services/admin_service.py`
+* `services/update_service.py`
+* `schemas/admin.py`
+* `schemas/update.py`
+
+Keep the architecture clean and modular.
+
+Do not put everything in one route file.
+
+---
+
+# Security Requirements
+
+This is critical.
+
+## Must do:
+
+* restrict update execution to super_admin only
+* do not expose arbitrary shell commands
+* use a fixed controlled update function only
+* validate roles carefully
+* keep environment-based config clean
+
+## Nice to have:
+
+* log every update attempt
+* show success/failure clearly
+* document environment limitations in README
+
+---
+
+# README Updates
+
+Update the README with:
+
+* admin role overview
+* super_admin role overview
+* how the update system works
+* how version checking works
+* any limitations in Replit for restart behavior
+* how to configure GitHub VERSION checking
+
+---
+
+# Final Output Requirement
+
+Generate the actual code and files needed to implement all of the above.
+
+Add:
+
+1. role-based protection
+2. admin templates
+3. admin routes
+4. user management UI
+5. order management UI
+6. service management UI
+7. system updates UI
+8. VERSION file
+9. update log model
+10. update service
+11. multilingual admin support
+12. responsive admin design
+13. README updates
+
+Do not return explanations only.
+Return full code changes and full file contents where needed.

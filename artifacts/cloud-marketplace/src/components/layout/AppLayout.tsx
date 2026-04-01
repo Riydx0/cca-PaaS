@@ -3,7 +3,8 @@ import { Link, useLocation } from "wouter";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { useClerk, useUser } from "@clerk/react";
-import { LayoutDashboard, Server, Receipt, Menu, LogOut, Cloud } from "lucide-react";
+import { useRole } from "@/hooks/useRole";
+import { LayoutDashboard, Server, Receipt, Menu, LogOut, Cloud, ShieldCheck } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -11,6 +12,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { signOut } = useClerk();
   const { user } = useUser();
+  const { isAdmin } = useRole();
 
   const toggleLanguage = () => {
     setLanguage(language === "en" ? "ar" : "en");
@@ -22,23 +24,69 @@ export function AppLayout({ children }: { children: ReactNode }) {
     { href: "/orders", label: t("nav.orders"), icon: Receipt },
   ];
 
-  const NavLinks = () => (
+  const NavLinks = ({ onClick }: { onClick?: () => void }) => (
     <>
       {navItems.map((item) => {
         const isActive = location === item.href;
         return (
-          <Link key={item.href} href={item.href} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isActive ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm" : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"}`}>
-            <item.icon className="h-5 w-5" />
-            <span className="font-medium text-sm">{item.label}</span>
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onClick}
+            className={`flex items-center gap-3 ps-3 pe-3 py-2.5 rounded-lg transition-all duration-150 text-sm font-medium ${
+              isActive
+                ? "bg-sidebar-primary text-white shadow-sm"
+                : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            }`}
+          >
+            <item.icon className="h-5 w-5 shrink-0" />
+            <span>{item.label}</span>
           </Link>
         );
       })}
+      {isAdmin && (
+        <div className="pt-4 border-t border-sidebar-border mt-2">
+          <Link
+            href="/admin/dashboard"
+            onClick={onClick}
+            className={`flex items-center gap-3 ps-3 pe-3 py-2.5 rounded-lg transition-all duration-150 text-sm font-medium ${
+              location.startsWith("/admin")
+                ? "bg-amber-500/20 text-amber-300"
+                : "text-amber-400/70 hover:bg-sidebar-accent hover:text-amber-300"
+            }`}
+          >
+            <ShieldCheck className="h-5 w-5 shrink-0" />
+            <span>{t("nav.admin")}</span>
+          </Link>
+        </div>
+      )}
     </>
+  );
+
+  const SidebarBottom = () => (
+    <div className="p-4 border-t border-sidebar-border space-y-3 shrink-0">
+      <div className="flex items-center gap-3 px-1">
+        <div className="h-8 w-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-sm shrink-0 uppercase">
+          {user?.firstName?.[0] ?? user?.emailAddresses[0]?.emailAddress?.charAt(0) ?? "U"}
+        </div>
+        <div className="text-sm truncate text-sidebar-foreground/70 font-medium flex-1 min-w-0">
+          {user?.emailAddresses[0]?.emailAddress}
+        </div>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full justify-start gap-2 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+        onClick={() => signOut()}
+      >
+        <LogOut className="h-4 w-4" />
+        {t("nav.signOut")}
+      </Button>
+    </div>
   );
 
   return (
     <div className="min-h-screen bg-background flex w-full">
-      {/* Desktop Sidebar */}
       <aside className="hidden md:flex w-64 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground shrink-0">
         <div className="px-5 border-b border-sidebar-border h-[70px] flex items-center gap-3">
           <div className="bg-gradient-to-br from-blue-500 to-blue-700 text-white p-1.5 rounded-md shadow-sm">
@@ -46,23 +94,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
           <span className="font-bold text-white text-lg tracking-tight">CloudMarket</span>
         </div>
-        <nav className="flex-1 p-4 space-y-1.5">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <NavLinks />
         </nav>
-        <div className="p-4 border-t border-sidebar-border space-y-4">
-          <div className="flex items-center gap-3 px-1">
-            <div className="h-8 w-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-sm shrink-0">
-              {user?.emailAddresses[0]?.emailAddress?.charAt(0).toUpperCase() || "U"}
-            </div>
-            <div className="text-sm truncate text-sidebar-foreground/90 font-medium">
-              {user?.emailAddresses[0]?.emailAddress}
-            </div>
-          </div>
-          <Button variant="ghost" className="w-full justify-start gap-2 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent" onClick={() => signOut()}>
-            <LogOut className="h-4 w-4" />
-            {t("nav.signOut")}
-          </Button>
-        </div>
+        <SidebarBottom />
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 h-[100dvh] overflow-hidden">
@@ -74,30 +109,20 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side={language === "ar" ? "right" : "left"} className="w-72 p-0 flex flex-col border-none bg-sidebar text-sidebar-foreground">
+              <SheetContent
+                side={language === "ar" ? "right" : "left"}
+                className="w-72 p-0 flex flex-col bg-sidebar text-sidebar-foreground border-sidebar-border"
+              >
                 <div className="px-5 border-b border-sidebar-border h-[70px] flex items-center gap-3">
                   <div className="bg-gradient-to-br from-blue-500 to-blue-700 text-white p-1.5 rounded-md shadow-sm">
                     <Cloud className="h-5 w-5" />
                   </div>
                   <span className="font-bold text-white text-lg tracking-tight">CloudMarket</span>
                 </div>
-                <nav className="p-4 space-y-1.5 flex-1">
+                <nav className="p-4 space-y-1 flex-1 overflow-y-auto">
                   <NavLinks />
                 </nav>
-                <div className="p-4 border-t border-sidebar-border space-y-4 bg-sidebar-accent/20">
-                  <div className="flex items-center gap-3 px-1">
-                    <div className="h-8 w-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-sm shrink-0">
-                      {user?.emailAddresses[0]?.emailAddress?.charAt(0).toUpperCase() || "U"}
-                    </div>
-                    <div className="text-sm truncate text-sidebar-foreground/90 font-medium">
-                      {user?.emailAddresses[0]?.emailAddress}
-                    </div>
-                  </div>
-                  <Button variant="ghost" className="w-full justify-start gap-2 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent" onClick={() => signOut()}>
-                    <LogOut className="h-4 w-4" />
-                    {t("nav.signOut")}
-                  </Button>
-                </div>
+                <SidebarBottom />
               </SheetContent>
             </Sheet>
             <div className="md:hidden flex items-center gap-2 px-2">
@@ -108,17 +133,20 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={toggleLanguage} className="font-medium hover:bg-secondary">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleLanguage}
+              className="font-medium hover:bg-secondary"
+            >
               {language === "en" ? "عربي" : "EN"}
             </Button>
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 md:p-8">
-          <div className="max-w-6xl mx-auto w-full">
-            {children}
-          </div>
+        <main className="flex-1 overflow-auto p-4 md:p-8 bg-muted/20">
+          <div className="max-w-6xl mx-auto w-full">{children}</div>
         </main>
       </div>
     </div>

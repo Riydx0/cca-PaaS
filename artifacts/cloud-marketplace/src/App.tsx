@@ -7,14 +7,24 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { I18nProvider } from "@/lib/i18n";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { AdminLayout } from "@/components/layout/AdminLayout";
+import { useRole } from "@/hooks/useRole";
 
-// Pages
+// User Pages
 import { Landing } from "@/pages/Landing";
 import { SignInPage } from "@/pages/SignInPage";
 import { SignUpPage } from "@/pages/SignUpPage";
 import { Dashboard } from "@/pages/Dashboard";
 import { Services } from "@/pages/Services";
 import { Orders } from "@/pages/Orders";
+import { Bootstrap } from "@/pages/Bootstrap";
+
+// Admin Pages
+import { AdminDashboard } from "@/pages/admin/AdminDashboard";
+import { AdminUsers } from "@/pages/admin/AdminUsers";
+import { AdminOrders } from "@/pages/admin/AdminOrders";
+import { AdminServices } from "@/pages/admin/AdminServices";
+import { AdminSystemUpdates } from "@/pages/admin/AdminSystemUpdates";
 
 const queryClient = new QueryClient();
 
@@ -82,6 +92,37 @@ function ProtectedRoute({ component: Component }: { component: any }) {
   );
 }
 
+function AdminRoute({ component: Component, superAdminOnly = false }: { component: any; superAdminOnly?: boolean }) {
+  const { isAdmin, isSuperAdmin, isLoaded } = useRole();
+
+  if (!isLoaded) return null;
+
+  if (superAdminOnly && !isSuperAdmin) {
+    return (
+      <Show when="signed-in">
+        <Redirect to="/admin/dashboard" />
+      </Show>
+    );
+  }
+
+  return (
+    <>
+      <Show when="signed-in">
+        {isAdmin ? (
+          <AdminLayout>
+            <Component />
+          </AdminLayout>
+        ) : (
+          <Redirect to="/dashboard" />
+        )}
+      </Show>
+      <Show when="signed-out">
+        <Redirect to="/" />
+      </Show>
+    </>
+  );
+}
+
 function ClerkProviderWithRoutes() {
   const [, setLocation] = useLocation();
 
@@ -98,6 +139,9 @@ function ClerkProviderWithRoutes() {
           <Route path="/" component={HomeRedirect} />
           <Route path="/sign-in/*?" component={SignInPage} />
           <Route path="/sign-up/*?" component={SignUpPage} />
+          <Route path="/bootstrap" component={Bootstrap} />
+
+          {/* User Routes */}
           <Route path="/dashboard">
             <ProtectedRoute component={Dashboard} />
           </Route>
@@ -107,6 +151,27 @@ function ClerkProviderWithRoutes() {
           <Route path="/orders">
             <ProtectedRoute component={Orders} />
           </Route>
+
+          {/* Admin Routes */}
+          <Route path="/admin">
+            <Redirect to="/admin/dashboard" />
+          </Route>
+          <Route path="/admin/dashboard">
+            <AdminRoute component={AdminDashboard} />
+          </Route>
+          <Route path="/admin/users">
+            <AdminRoute component={AdminUsers} />
+          </Route>
+          <Route path="/admin/orders">
+            <AdminRoute component={AdminOrders} />
+          </Route>
+          <Route path="/admin/services">
+            <AdminRoute component={AdminServices} />
+          </Route>
+          <Route path="/admin/system">
+            <AdminRoute component={AdminSystemUpdates} superAdminOnly />
+          </Route>
+
           <Route component={NotFound} />
         </Switch>
       </QueryClientProvider>
