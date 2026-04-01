@@ -44,10 +44,11 @@ Thumbs.db
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 
-# Replit (internal — not for public repos)
+# Internal environment files
 .cache/
 .local/
 .replit
 replit.md
 .upm/
 .config/
+attached_assets/
