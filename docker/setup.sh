@@ -19,7 +19,27 @@ info()    { echo -e "${CYAN}[cca-PaaS]${RESET} $*"; }
 success() { echo -e "${GREEN}[✔]${RESET} $*"; }
 warn()    { echo -e "${YELLOW}[!]${RESET} $*"; }
 error()   { echo -e "${RED}[✘]${RESET} $*" >&2; }
-ask()     { echo -e "${BLUE}[?]${RESET} $*"; }
+
+# ── print_success — defined early so it can be called anywhere ──
+print_success() {
+  SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+  echo ""
+  echo -e "${BOLD}${GREEN}╔══════════════════════════════════════════════════╗${RESET}"
+  echo -e "${BOLD}${GREEN}║            cca-PaaS is LIVE!                     ║${RESET}"
+  echo -e "${BOLD}${GREEN}╚══════════════════════════════════════════════════╝${RESET}"
+  echo ""
+  echo -e "  Open your browser:"
+  echo -e "  ${BOLD}${CYAN}http://${SERVER_IP:-your-server-ip}${RESET}"
+  echo ""
+  echo -e "  Admin setup ${DIM}(first time only)${RESET}:"
+  echo -e "  ${CYAN}http://${SERVER_IP:-your-server-ip}/bootstrap${RESET}"
+  echo ""
+  echo -e "  Useful commands:"
+  echo -e "  ${DIM}docker compose logs -f       # view live logs${RESET}"
+  echo -e "  ${DIM}docker compose down          # stop the app${RESET}"
+  echo -e "  ${DIM}docker compose restart       # restart all services${RESET}"
+  echo ""
+}
 
 # ── banner ──────────────────────────────────────────────────
 clear 2>/dev/null || true
@@ -33,7 +53,7 @@ echo -e "${DIM}  This script will configure your environment and launch${RESET}"
 echo -e "${DIM}  cca-PaaS with Docker. It takes about 2-5 minutes.${RESET}"
 echo ""
 
-# ── check Docker is available ────────────────────────────────
+# ── dependency checks ────────────────────────────────────────
 if ! command -v docker &>/dev/null; then
   error "Docker is not installed."
   error "Run first:  sudo bash docker/install-docker.sh"
@@ -46,6 +66,13 @@ if ! docker compose version &>/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v openssl &>/dev/null; then
+  error "openssl is not installed. Install it first:"
+  error "  Ubuntu/Debian:  apt-get install -y openssl"
+  error "  CentOS/Fedora:  dnf install -y openssl"
+  exit 1
+fi
+
 # ── check for existing .env ──────────────────────────────────
 if [ -f .env ]; then
   echo ""
@@ -53,7 +80,9 @@ if [ -f .env ]; then
   read -rp "  Overwrite it and reconfigure? [y/N]: " OVERWRITE
   echo ""
   case "$OVERWRITE" in
-    [Yy]*) rm -f .env ;;
+    [Yy]*)
+      rm -f .env
+      ;;
     *)
       info "Keeping existing .env. Launching Docker with current config..."
       echo ""
@@ -117,7 +146,7 @@ read -rp "  DB Password [leave blank to auto-generate]: " DB_PASSWORD_INPUT
 echo ""
 
 if [ -z "$DB_PASSWORD_INPUT" ]; then
-  DB_PASSWORD="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9@#$%' | head -c 24)"
+  DB_PASSWORD="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 24)"
   success "Auto-generated a secure DB password."
 else
   DB_PASSWORD="$DB_PASSWORD_INPUT"
@@ -129,7 +158,6 @@ fi
 # ════════════════════════════════════════════════════════════
 SESSION_SECRET="$(openssl rand -hex 32)"
 success "Session secret generated automatically."
-
 echo ""
 
 # ════════════════════════════════════════════════════════════
@@ -161,28 +189,5 @@ echo -e "${DIM}  This may take 2-5 minutes on first run.${RESET}"
 echo ""
 
 docker compose up -d --build
-
-# ════════════════════════════════════════════════════════════
-#  Done
-# ════════════════════════════════════════════════════════════
-print_success() {
-  SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
-  echo ""
-  echo -e "${BOLD}${GREEN}╔══════════════════════════════════════════════════╗${RESET}"
-  echo -e "${BOLD}${GREEN}║              cca-PaaS is LIVE! 🎉               ║${RESET}"
-  echo -e "${BOLD}${GREEN}╚══════════════════════════════════════════════════╝${RESET}"
-  echo ""
-  echo -e "  Open your browser and go to:"
-  echo -e "  ${BOLD}${CYAN}http://${SERVER_IP:-your-server-ip}${RESET}"
-  echo ""
-  echo -e "  ${DIM}Admin setup (first time only):${RESET}"
-  echo -e "  ${CYAN}http://${SERVER_IP:-your-server-ip}/bootstrap${RESET}"
-  echo ""
-  echo -e "  Useful commands:"
-  echo -e "  ${DIM}docker compose logs -f       # view live logs${RESET}"
-  echo -e "  ${DIM}docker compose down          # stop the app${RESET}"
-  echo -e "  ${DIM}docker compose restart       # restart all services${RESET}"
-  echo ""
-}
 
 print_success
