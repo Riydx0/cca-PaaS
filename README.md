@@ -39,6 +39,20 @@ cca-PaaS/
 └── scripts/                 # Utility scripts
 ```
 
+## System Requirements
+
+Before deploying, ensure your server meets the following minimum specifications:
+
+| Requirement | Minimum |
+|---|---|
+| **OS** | Ubuntu 20.04 / 22.04 / 24.04, Debian 11 / 12, CentOS 7 / 8, Rocky Linux 8 / 9, AlmaLinux 8 / 9, Fedora 38+ |
+| **CPU** | 2 cores |
+| **RAM** | 2 GB |
+| **Disk** | 10 GB |
+| **Architecture** | x64 |
+
+---
+
 ## Linux — Install Docker
 
 Before deploying, Docker and Docker Compose must be installed on your server.
