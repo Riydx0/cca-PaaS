@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useI18n } from "@/lib/i18n";
-import { Server, Key, Globe, CheckCircle, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
+import { Server, Key, Globe, CheckCircle, AlertCircle, Loader2, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,44 +12,27 @@ interface SetupForm {
   appUrl: string;
   clerkPublishableKey: string;
   clerkSecretKey: string;
+  setupToken: string;
 }
 
 interface FieldErrors {
   appUrl?: string;
   clerkPublishableKey?: string;
   clerkSecretKey?: string;
-}
-
-function validate(form: SetupForm): FieldErrors {
-  const errors: FieldErrors = {};
-  if (!form.appUrl.trim()) {
-    errors.appUrl = "Required";
-  } else {
-    try { new URL(form.appUrl); } catch { errors.appUrl = "Must be a valid URL (e.g. https://example.com)"; }
-  }
-  if (!form.clerkPublishableKey.trim()) {
-    errors.clerkPublishableKey = "Required";
-  } else if (!form.clerkPublishableKey.startsWith("pk_")) {
-    errors.clerkPublishableKey = "Must start with pk_live_ or pk_test_";
-  }
-  if (!form.clerkSecretKey.trim()) {
-    errors.clerkSecretKey = "Required";
-  } else if (!form.clerkSecretKey.startsWith("sk_")) {
-    errors.clerkSecretKey = "Must start with sk_live_ or sk_test_";
-  }
-  return errors;
+  setupToken?: string;
 }
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 30000;
 
 export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) => void }) {
-  const { dir } = useI18n();
+  const { t, dir } = useI18n();
   const [, setLocation] = useLocation();
   const [form, setForm] = useState<SetupForm>({
     appUrl: typeof window !== "undefined" ? window.location.origin : "",
     clerkPublishableKey: "",
     clerkSecretKey: "",
+    setupToken: "",
   });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -74,7 +57,7 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
       if (Date.now() - pollStartRef.current > POLL_TIMEOUT_MS) {
         stopPolling();
         setRestarting(false);
-        setApiError("API did not come back online within 30 seconds. Please refresh the page.");
+        setApiError(t("setup.err.timeout"));
         return;
       }
       try {
@@ -91,7 +74,32 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
         // API still restarting — keep polling
       }
     }, POLL_INTERVAL_MS);
-  }, [onSetupComplete, setLocation, stopPolling]);
+  }, [onSetupComplete, setLocation, stopPolling, t]);
+
+  function validate(f: SetupForm): FieldErrors {
+    const errs: FieldErrors = {};
+    if (!f.appUrl.trim()) {
+      errs.appUrl = t("setup.err.required");
+    } else {
+      try { new URL(f.appUrl); } catch { errs.appUrl = t("setup.err.urlInvalid"); }
+    }
+    if (!f.clerkPublishableKey.trim()) {
+      errs.clerkPublishableKey = t("setup.err.required");
+    } else if (!f.clerkPublishableKey.startsWith("pk_")) {
+      errs.clerkPublishableKey = t("setup.err.pkInvalid");
+    }
+    if (!f.clerkSecretKey.trim()) {
+      errs.clerkSecretKey = t("setup.err.required");
+    } else if (!f.clerkSecretKey.startsWith("sk_")) {
+      errs.clerkSecretKey = t("setup.err.skInvalid");
+    }
+    if (!f.setupToken.trim()) {
+      errs.setupToken = t("setup.err.required");
+    } else if (f.setupToken.trim().length !== 32) {
+      errs.setupToken = t("setup.err.tokenInvalid");
+    }
+    return errs;
+  }
 
   function handleChange(field: keyof SetupForm, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -118,6 +126,7 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
           appUrl: form.appUrl.trim().replace(/\/$/, ""),
           clerkPublishableKey: form.clerkPublishableKey.trim(),
           clerkSecretKey: form.clerkSecretKey.trim(),
+          setupToken: form.setupToken.trim(),
         }),
       });
 
@@ -125,7 +134,6 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
         const data = await res.json().catch(() => ({}));
         setSuccess(true);
         if (data.restarting) {
-          // API will restart — poll until it's back with setupComplete: true
           startPolling(form.clerkPublishableKey.trim());
         } else {
           setTimeout(() => {
@@ -138,7 +146,7 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
         setApiError(data.error ?? `Server error (${res.status})`);
       }
     } catch {
-      setApiError("Cannot reach the API server. Make sure all Docker containers are running.");
+      setApiError(t("setup.err.apiDown"));
     } finally {
       setSubmitting(false);
     }
@@ -154,10 +162,8 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 mb-4">
             <Server className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">cca-PaaS Setup</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Configure your instance — this only happens once
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">{t("setup.title")}</h1>
+          <p className="text-muted-foreground mt-1 text-sm">{t("setup.subtitle")}</p>
         </div>
 
         {success ? (
@@ -166,16 +172,14 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
               {restarting ? (
                 <>
                   <Loader2 className="w-12 h-12 text-primary mx-auto mb-3 animate-spin" />
-                  <h2 className="text-lg font-semibold">Applying configuration…</h2>
-                  <p className="text-muted-foreground text-sm mt-1">
-                    The server is restarting with your Clerk keys. This takes a few seconds.
-                  </p>
+                  <h2 className="text-lg font-semibold">{t("setup.applying")}</h2>
+                  <p className="text-muted-foreground text-sm mt-1">{t("setup.applyingHint")}</p>
                 </>
               ) : (
                 <>
                   <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-                  <h2 className="text-lg font-semibold text-emerald-600">Setup Complete!</h2>
-                  <p className="text-muted-foreground text-sm mt-1">Redirecting to sign-in…</p>
+                  <h2 className="text-lg font-semibold text-emerald-600">{t("setup.complete")}</h2>
+                  <p className="text-muted-foreground text-sm mt-1">{t("setup.redirecting")}</p>
                 </>
               )}
               {apiError && (
@@ -186,53 +190,78 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
         ) : (
           <Card>
             <CardHeader className="pb-4">
-              <CardTitle className="text-lg">Initial Configuration</CardTitle>
+              <CardTitle className="text-lg">{t("setup.cardTitle")}</CardTitle>
               <CardDescription>
-                Enter your Clerk authentication keys from{" "}
+                {t("setup.cardDesc")}{" "}
                 <a
                   href="https://dashboard.clerk.com"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary underline-offset-2 hover:underline"
                 >
-                  dashboard.clerk.com
+                  {t("setup.cardDescLink")}
                 </a>{" "}
-                → API Keys
+                {t("setup.cardDescSuffix")}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-5">
+
+                {/* Setup Token */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="setupToken" className="flex items-center gap-1.5 text-sm">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    {t("setup.label.token")}
+                  </Label>
+                  <Input
+                    id="setupToken"
+                    type="text"
+                    placeholder={t("setup.placeholder.token")}
+                    value={form.setupToken}
+                    onChange={(e) => handleChange("setupToken", e.target.value)}
+                    className={`font-mono text-sm ${errors.setupToken ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                    disabled={submitting}
+                    autoComplete="off"
+                  />
+                  {errors.setupToken ? (
+                    <p className="text-destructive text-xs">{errors.setupToken}</p>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">{t("setup.hint.token")}</p>
+                  )}
+                </div>
+
+                {/* App URL */}
                 <div className="space-y-1.5">
                   <Label htmlFor="appUrl" className="flex items-center gap-1.5 text-sm">
                     <Globe className="w-3.5 h-3.5" />
-                    App URL
+                    {t("setup.label.appUrl")}
                   </Label>
                   <Input
                     id="appUrl"
                     type="url"
-                    placeholder="https://your-server-ip-or-domain.com"
+                    placeholder={t("setup.placeholder.appUrl")}
                     value={form.appUrl}
                     onChange={(e) => handleChange("appUrl", e.target.value)}
                     className={errors.appUrl ? "border-destructive focus-visible:ring-destructive" : ""}
                     disabled={submitting}
                   />
-                  {errors.appUrl && (
+                  {errors.appUrl ? (
                     <p className="text-destructive text-xs">{errors.appUrl}</p>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">{t("setup.hint.appUrl")}</p>
                   )}
-                  <p className="text-muted-foreground text-xs">
-                    The public URL of this instance (used by Clerk for redirects)
-                  </p>
                 </div>
 
+                {/* Clerk Publishable Key */}
                 <div className="space-y-1.5">
                   <Label htmlFor="pk" className="flex items-center gap-1.5 text-sm">
                     <Key className="w-3.5 h-3.5" />
-                    Clerk Publishable Key
+                    {t("setup.label.pk")}
                   </Label>
                   <Input
                     id="pk"
                     type="text"
-                    placeholder="pk_live_... or pk_test_..."
+                    placeholder={t("setup.placeholder.pk")}
                     value={form.clerkPublishableKey}
                     onChange={(e) => handleChange("clerkPublishableKey", e.target.value)}
                     className={errors.clerkPublishableKey ? "border-destructive focus-visible:ring-destructive" : ""}
@@ -243,16 +272,17 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
                   )}
                 </div>
 
+                {/* Clerk Secret Key */}
                 <div className="space-y-1.5">
                   <Label htmlFor="sk" className="flex items-center gap-1.5 text-sm">
                     <Key className="w-3.5 h-3.5" />
-                    Clerk Secret Key
+                    {t("setup.label.sk")}
                   </Label>
                   <div className="relative">
                     <Input
                       id="sk"
                       type={showSK ? "text" : "password"}
-                      placeholder="sk_live_... or sk_test_..."
+                      placeholder={t("setup.placeholder.sk")}
                       value={form.clerkSecretKey}
                       onChange={(e) => handleChange("clerkSecretKey", e.target.value)}
                       className={`pr-10 ${errors.clerkSecretKey ? "border-destructive focus-visible:ring-destructive" : ""}`}
@@ -268,12 +298,11 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
                       {showSK ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  {errors.clerkSecretKey && (
+                  {errors.clerkSecretKey ? (
                     <p className="text-destructive text-xs">{errors.clerkSecretKey}</p>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">{t("setup.hint.sk")}</p>
                   )}
-                  <p className="text-muted-foreground text-xs">
-                    Stored securely in your database — never exposed to the browser
-                  </p>
                 </div>
 
                 {apiError && (
@@ -287,10 +316,10 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
                   {submitting ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Saving…
+                      {t("setup.btn.saving")}
                     </>
                   ) : (
-                    "Save & Launch"
+                    t("setup.btn.save")
                   )}
                 </Button>
               </form>
@@ -299,7 +328,7 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
         )}
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          cca-PaaS · Self-hosted Cloud Services Marketplace
+          {t("setup.footer")}
         </p>
       </div>
     </div>

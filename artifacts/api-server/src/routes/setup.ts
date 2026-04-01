@@ -5,9 +5,14 @@ import { eq } from "drizzle-orm";
 
 const router = Router();
 
-function validateSetupBody(body: unknown): { clerkPublishableKey: string; clerkSecretKey: string; appUrl: string } | { error: string } {
+function validateSetupBody(body: unknown): {
+  clerkPublishableKey: string;
+  clerkSecretKey: string;
+  appUrl: string;
+  setupToken: string;
+} | { error: string } {
   if (!body || typeof body !== "object") return { error: "Request body is required" };
-  const { clerkPublishableKey, clerkSecretKey, appUrl } = body as Record<string, unknown>;
+  const { clerkPublishableKey, clerkSecretKey, appUrl, setupToken } = body as Record<string, unknown>;
 
   if (typeof clerkPublishableKey !== "string" || !clerkPublishableKey.startsWith("pk_")) {
     return { error: "clerkPublishableKey must start with pk_live_ or pk_test_" };
@@ -23,8 +28,11 @@ function validateSetupBody(body: unknown): { clerkPublishableKey: string; clerkS
   } catch {
     return { error: "appUrl must be a valid URL (e.g. https://example.com)" };
   }
+  if (typeof setupToken !== "string" || setupToken.trim().length === 0) {
+    return { error: "setupToken is required" };
+  }
 
-  return { clerkPublishableKey, clerkSecretKey, appUrl };
+  return { clerkPublishableKey, clerkSecretKey, appUrl, setupToken: setupToken.trim() };
 }
 
 router.post("/setup", async (req, res) => {
@@ -43,7 +51,21 @@ router.post("/setup", async (req, res) => {
       return res.status(400).json(validated);
     }
 
-    const { clerkPublishableKey, clerkSecretKey, appUrl } = validated;
+    const { clerkPublishableKey, clerkSecretKey, appUrl, setupToken } = validated;
+
+    // Validate bootstrap token against the one generated on startup
+    const tokenRows = await db
+      .select()
+      .from(settingsTable)
+      .where(eq(settingsTable.key, "SETUP_TOKEN"));
+
+    if (tokenRows.length === 0 || !tokenRows[0].value) {
+      return res.status(500).json({ error: "Setup token not initialized — restart the API server" });
+    }
+
+    if (setupToken !== tokenRows[0].value) {
+      return res.status(401).json({ error: "Invalid setup token. Check the API server startup logs." });
+    }
 
     const entries = [
       { key: "CLERK_PUBLISHABLE_KEY", value: clerkPublishableKey },
