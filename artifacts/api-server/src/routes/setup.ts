@@ -64,7 +64,14 @@ router.post("/setup", async (req, res) => {
 
     process.env["CLERK_SECRET_KEY"] = clerkSecretKey;
 
-    return res.json({ success: true });
+    res.json({ success: true, restarting: true });
+
+    // Restart the API process so clerkMiddleware (initialized at boot) re-reads
+    // the DB-stored secret key correctly. Docker's restart:unless-stopped policy
+    // will bring it back up automatically within a second or two.
+    setTimeout(() => {
+      process.exit(0);
+    }, 500);
   } catch {
     return res.status(500).json({ error: "Database error during setup" });
   }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useI18n } from "@/lib/i18n";
 import { Server, Key, Globe, CheckCircle, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
@@ -40,6 +40,9 @@ function validate(form: SetupForm): FieldErrors {
   return errors;
 }
 
+const POLL_INTERVAL_MS = 2000;
+const POLL_TIMEOUT_MS = 30000;
+
 export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) => void }) {
   const { dir } = useI18n();
   const [, setLocation] = useLocation();
@@ -52,7 +55,43 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const [showSK, setShowSK] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollStartRef = useRef<number>(0);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const startPolling = useCallback((pk: string) => {
+    setRestarting(true);
+    pollStartRef.current = Date.now();
+    pollRef.current = setInterval(async () => {
+      if (Date.now() - pollStartRef.current > POLL_TIMEOUT_MS) {
+        stopPolling();
+        setRestarting(false);
+        setApiError("API did not come back online within 30 seconds. Please refresh the page.");
+        return;
+      }
+      try {
+        const r = await fetch("/api/config");
+        if (!r.ok) return;
+        const data = await r.json();
+        if (data.setupComplete && data.clerkPublishableKey) {
+          stopPolling();
+          setRestarting(false);
+          onSetupComplete(pk);
+          setLocation("/sign-in");
+        }
+      } catch {
+        // API still restarting — keep polling
+      }
+    }, POLL_INTERVAL_MS);
+  }, [onSetupComplete, setLocation, stopPolling]);
 
   function handleChange(field: keyof SetupForm, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -83,11 +122,17 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
         setSuccess(true);
-        setTimeout(() => {
-          onSetupComplete(form.clerkPublishableKey.trim());
-          setLocation("/sign-in");
-        }, 1800);
+        if (data.restarting) {
+          // API will restart — poll until it's back with setupComplete: true
+          startPolling(form.clerkPublishableKey.trim());
+        } else {
+          setTimeout(() => {
+            onSetupComplete(form.clerkPublishableKey.trim());
+            setLocation("/sign-in");
+          }, 1200);
+        }
       } else {
         const data = await res.json().catch(() => ({}));
         setApiError(data.error ?? `Server error (${res.status})`);
@@ -118,9 +163,24 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
         {success ? (
           <Card className="border-emerald-200/60 bg-emerald-50/10">
             <CardContent className="pt-8 pb-8 text-center">
-              <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-              <h2 className="text-lg font-semibold text-emerald-600">Setup Complete!</h2>
-              <p className="text-muted-foreground text-sm mt-1">Redirecting to sign-in…</p>
+              {restarting ? (
+                <>
+                  <Loader2 className="w-12 h-12 text-primary mx-auto mb-3 animate-spin" />
+                  <h2 className="text-lg font-semibold">Applying configuration…</h2>
+                  <p className="text-muted-foreground text-sm mt-1">
+                    The server is restarting with your Clerk keys. This takes a few seconds.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+                  <h2 className="text-lg font-semibold text-emerald-600">Setup Complete!</h2>
+                  <p className="text-muted-foreground text-sm mt-1">Redirecting to sign-in…</p>
+                </>
+              )}
+              {apiError && (
+                <p className="text-destructive text-sm mt-3">{apiError}</p>
+              )}
             </CardContent>
           </Card>
         ) : (

@@ -1,15 +1,23 @@
 import { getAuth, createClerkClient } from "@clerk/express";
 import type { Request, Response, NextFunction } from "express";
 
-const clerkClient = createClerkClient({
-  secretKey: process.env.CLERK_SECRET_KEY!,
-});
+let _clerkClient: ReturnType<typeof createClerkClient> | null = null;
+let _cachedKey: string | undefined = undefined;
+
+function getClerkClient(): ReturnType<typeof createClerkClient> {
+  const currentKey = process.env["CLERK_SECRET_KEY"];
+  if (!_clerkClient || currentKey !== _cachedKey) {
+    _clerkClient = createClerkClient({ secretKey: currentKey });
+    _cachedKey = currentKey;
+  }
+  return _clerkClient;
+}
 
 async function getRole(req: Request): Promise<string | null> {
   const { userId } = getAuth(req);
   if (!userId) return null;
   try {
-    const user = await clerkClient.users.getUser(userId);
+    const user = await getClerkClient().users.getUser(userId);
     return (user.publicMetadata?.role as string) ?? "user";
   } catch {
     return null;
@@ -48,4 +56,10 @@ export async function requireSuperAdmin(req: Request, res: Response, next: NextF
   next();
 }
 
-export { clerkClient };
+// Reactive proxy — always delegates to the current getClerkClient() instance
+// so callers in admin routes work correctly after setup wizard sets CLERK_SECRET_KEY
+export const clerkClient = new Proxy({} as ReturnType<typeof createClerkClient>, {
+  get(_target, prop: string | symbol) {
+    return (getClerkClient() as Record<string | symbol, unknown>)[prop];
+  },
+});

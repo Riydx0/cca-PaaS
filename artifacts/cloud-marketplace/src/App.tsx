@@ -213,7 +213,10 @@ function AppRouter() {
     if (buildTimePK) return;
 
     fetch("/api/config")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`API /config returned HTTP ${r.status}`);
+        return r.json();
+      })
       .then((data: AppConfig) => {
         setConfig(data);
         if (data.clerkPublishableKey) {
