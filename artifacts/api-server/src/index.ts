@@ -2,7 +2,6 @@ import { logger } from "./lib/logger";
 import { db } from "@workspace/db";
 import { settingsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
-import app from "./app";
 
 async function loadSettingsFromDb(): Promise<void> {
   try {
@@ -26,7 +25,15 @@ async function loadSettingsFromDb(): Promise<void> {
   }
 }
 
+// Load CLERK_SECRET_KEY from DB BEFORE app.ts is evaluated.
+// Static ESM imports are hoisted and evaluated immediately, so we use a
+// top-level await here to ensure process.env is set before clerkMiddleware()
+// in app.ts has a chance to read it.
 await loadSettingsFromDb();
+
+// Dynamic import defers app.ts evaluation until after the await above.
+// This guarantees clerkMiddleware() initializes with the DB-loaded key.
+const { default: app } = await import("./app.js");
 
 const rawPort = process.env["PORT"];
 
