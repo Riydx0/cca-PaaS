@@ -110,17 +110,22 @@ After the script completes, **log out and back in** (or run `newgrp docker`) so 
 
 ---
 
-## Quick Deploy (Docker — 3 lines)
+## Quick Deploy (3 commands)
 
 ```bash
+# 1. Clone the project
 git clone https://github.com/Riydx0/cca-PaaS && cd cca-PaaS
-cp .env.example .env   # edit .env with your Clerk keys and a strong DB_PASSWORD
-docker compose up -d --build
+
+# 2. Install Docker (if not already installed)
+sudo bash docker/install-docker.sh
+
+# 3. Configure and launch — answers 3 questions then starts automatically
+bash docker/setup.sh
 ```
 
-The app will be live at **http://your-server-ip** on port 80.
+The setup script will ask for your Clerk API keys, auto-generate a secure database password and session secret, write the `.env` file, and start Docker — **no manual file editing required**.
 
-> **Requirements:** Docker 24+ and Docker Compose v2 (installed by the script above).
+The app will be live at **http://your-server-ip** on port 80 when done.
 
 ### First Run (Admin Setup)
 
