@@ -23,13 +23,17 @@ RUN pnpm --filter @workspace/api-server run build
 # Build frontend (Vite → dist/public, static files)
 # VITE_* vars are baked into the bundle at build time
 ARG VITE_CLERK_PUBLISHABLE_KEY
-ARG VITE_CLERK_PROXY_URL=""
+ARG VITE_CLERK_PROXY_URL
 ENV PORT=3000 \
     BASE_PATH=/ \
     NODE_ENV=production \
-    VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY} \
-    VITE_CLERK_PROXY_URL=${VITE_CLERK_PROXY_URL}
-RUN pnpm --filter @workspace/cloud-marketplace run build
+    VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY}
+# Only set VITE_CLERK_PROXY_URL if non-empty, so Vite never bakes in ""
+RUN if [ -n "$VITE_CLERK_PROXY_URL" ]; then \
+      VITE_CLERK_PROXY_URL="$VITE_CLERK_PROXY_URL" pnpm --filter @workspace/cloud-marketplace run build; \
+    else \
+      pnpm --filter @workspace/cloud-marketplace run build; \
+    fi
 
 # ================================================
 # Stage 2: API — Node + pnpm (for db migrations)

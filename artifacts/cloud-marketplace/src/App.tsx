@@ -28,9 +28,18 @@ import { AdminSystemUpdates } from "@/pages/admin/AdminSystemUpdates";
 
 const queryClient = new QueryClient();
 
+function normalizeOptionalEnv(value: string | undefined): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+const clerkProxyUrl = normalizeOptionalEnv(import.meta.env.VITE_CLERK_PROXY_URL);
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+console.log('[Clerk] RAW VITE_CLERK_PROXY_URL:', JSON.stringify(import.meta.env.VITE_CLERK_PROXY_URL));
+console.log('[Clerk] NORMALIZED clerkProxyUrl:', clerkProxyUrl);
 
 function stripBase(path: string): string {
   return basePath && path.startsWith(basePath)
