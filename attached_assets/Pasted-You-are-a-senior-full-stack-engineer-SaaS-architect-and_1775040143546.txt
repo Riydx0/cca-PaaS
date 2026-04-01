@@ -1,0 +1,447 @@
+You are a senior full-stack engineer, SaaS architect, and elite UI/UX designer.
+
+Build a **premium, production-grade Cloud Services Marketplace** web application.
+
+This is NOT a basic project.
+It must look and feel like a real SaaS product used by companies.
+
+---
+
+# 🔷 Tech Stack
+
+* Backend: Python FastAPI
+* Frontend: HTML + Jinja Templates
+* Styling: Tailwind CSS
+* Database: SQLite (ready for PostgreSQL later)
+* ORM: SQLAlchemy
+* Auth: JWT (OAuth2PasswordBearer)
+* Environment: Replit
+
+---
+
+# 🔷 Product Vision
+
+A **B2B Cloud Marketplace platform** where users can:
+
+* Register / Login
+* Browse cloud server offerings
+* View specifications (CPU, RAM, Storage, etc.)
+* Request servers
+* Track their orders
+
+Future goal:
+Integrate with:
+
+* Google Cloud
+* Alibaba Cloud
+* Contabo
+* Huawei Cloud
+
+⚠️ For now → provisioning must be MOCKED only.
+
+---
+
+# 🔷 Project Architecture (MANDATORY)
+
+Create a **clean, scalable, modular architecture**:
+
+```bash
+app/
+  main.py
+
+  core/
+    config.py
+    database.py
+    security.py
+
+  models/
+    models.py
+
+  schemas/
+    auth.py
+    server.py
+
+  services/
+    auth_service.py
+    cloud_provider_service.py
+    server_service.py
+
+  api/
+    routes.py
+
+  templates/
+    base.html
+    login.html
+    register.html
+    dashboard.html
+    my_orders.html
+
+  static/
+    css/
+      output.css
+    js/
+      app.js
+
+requirements.txt
+.env.example
+.gitignore
+README.md
+```
+
+Follow clean separation of concerns.
+
+---
+
+# 🔷 Database Models
+
+Create:
+
+## User
+
+* id
+* full_name
+* email (unique)
+* hashed_password
+* role
+* created_at
+
+## CloudService
+
+* id
+* provider
+* name
+* cpu
+* ram_gb
+* storage_gb
+* storage_type
+* bandwidth_tb
+* price_monthly
+* region
+* is_active
+* created_at
+
+## ServerOrder
+
+* id
+* user_id (FK)
+* cloud_service_id (FK)
+* status (Pending / Active / Failed)
+* requested_region
+* notes
+* external_order_id
+* provider_response
+* created_at
+
+Define relationships correctly.
+
+---
+
+# 🔷 Authentication (JWT)
+
+Implement:
+
+* Register
+* Login
+* Password hashing (bcrypt)
+* JWT token creation
+* Protected routes
+
+Use:
+
+* OAuth2PasswordBearer
+* passlib
+* python-jose
+
+⚠️ SECRET_KEY must come from environment variables.
+
+---
+
+# 🔷 Service Layer (IMPORTANT)
+
+## CloudProviderService
+
+Design it for future APIs.
+
+Now:
+
+* create `provision_server()`
+* return mock success response
+
+## ServerOrderService
+
+Create:
+
+`create_pending_order()`
+
+This must:
+
+* validate service exists
+* call provider mock
+* create order in DB
+* set status = "Pending"
+
+Write clean, extendable code.
+
+---
+
+# 🔷 API Routes
+
+## Auth
+
+* POST /auth/register
+* POST /auth/login
+
+## Services
+
+* GET /services
+
+## Orders
+
+* POST /orders/request-server
+* GET /orders/my-orders
+
+Also create UI routes:
+
+* /login
+* /register
+* /dashboard
+* /orders
+
+---
+
+# 🔷 Seed Data
+
+Insert realistic cloud services:
+
+Example:
+
+* Contabo VPS S SSD
+* Contabo VPS M SSD
+* Contabo VPS L NVMe
+
+Include:
+CPU, RAM, Storage, Bandwidth, Price, Region
+
+---
+
+# 🔷 🌍 MULTILINGUAL SUPPORT (CRITICAL)
+
+Support:
+
+* English (en)
+* Arabic (ar)
+
+## Requirements:
+
+* Add language switcher in UI
+* Use simple i18n system (dictionary-based)
+* Translate:
+
+  * navigation
+  * buttons
+  * titles
+  * labels
+
+## RTL/LTR Handling:
+
+* Arabic → dir="rtl"
+* English → dir="ltr"
+
+Layout must properly flip for RTL:
+
+* sidebar
+* text alignment
+* spacing
+
+Arabic must feel native, not broken.
+
+---
+
+# 🔷 📱 RESPONSIVE DESIGN (CRITICAL)
+
+UI must work perfectly on:
+
+* Mobile
+* Tablet (iPad)
+* Laptop
+* Desktop
+
+Requirements:
+
+* Mobile-first design
+* Responsive sidebar (collapsible)
+* Responsive grid system
+* Clean breakpoints
+* Touch-friendly buttons
+* Cards adapt to screen size
+* Orders page works on mobile
+
+No layout breaking allowed.
+
+---
+
+# 🔷 🎨 UI/UX DESIGN (VERY IMPORTANT)
+
+This must look like a **premium SaaS product**.
+
+NOT a basic template.
+
+## Style Direction:
+
+* Modern SaaS Dashboard
+* Enterprise-grade
+* Clean + Minimal + Elegant
+* High-quality spacing & typography
+
+Inspired by:
+
+* Cloud platforms
+* B2B SaaS dashboards
+
+---
+
+## UI Requirements:
+
+* Sidebar (professional)
+* Topbar (clean)
+* Cards (elegant)
+* Soft shadows
+* Smooth hover effects
+* Clean borders
+* Premium spacing
+* Consistent typography
+
+---
+
+## Color Style:
+
+* Background: white / soft gray
+* Text: dark
+* Primary: premium blue
+* Accents: subtle
+
+---
+
+## Dashboard UI:
+
+Show services as **premium cards**:
+
+Each card:
+
+* Provider
+* Name
+* CPU
+* RAM
+* Storage
+* Bandwidth
+* Price
+* Region
+* Button: "Request Server"
+
+---
+
+## Auth Pages:
+
+* Centered card
+* Clean layout
+* Premium look
+* Smooth inputs
+
+---
+
+## Orders Page:
+
+* Show order status
+* Clean list or cards
+* Mobile-friendly
+
+---
+
+# 🔷 Frontend Rules
+
+Use:
+
+* Jinja templates
+* Tailwind CSS
+
+Create:
+
+* base layout
+* sidebar
+* topbar
+* reusable components
+
+⚠️ DO NOT use React or Vue.
+
+---
+
+# 🔷 Security & Config
+
+* Use `.env`
+* No hardcoded secrets
+* Prepare for production config
+* Add `.env.example`
+
+---
+
+# 🔷 Code Quality
+
+* Clean architecture
+* Modular files
+* Readable code
+* Comments for future API integrations
+* No messy code
+
+---
+
+# 🔷 README
+
+Include:
+
+* project overview
+* setup instructions
+* how to run
+* folder structure
+* multilingual explanation
+* responsive design explanation
+
+Run command:
+
+uvicorn app.main:app --reload
+
+---
+
+# 🔷 Final Output
+
+Generate FULL working project.
+
+Include:
+
+1. Structure
+2. Backend
+3. Models
+4. Auth
+5. Services
+6. Routes
+7. Templates
+8. Tailwind UI
+9. Multilingual system
+10. Responsive layout
+11. Seed data
+12. README
+
+---
+
+# 🔷 Final Requirement
+
+The result must be:
+
+* clean
+* production-ready foundation
+* visually impressive
+* multilingual (Arabic + English)
+* responsive
+* scalable
+
+DO NOT return explanations.
+Return full working code.

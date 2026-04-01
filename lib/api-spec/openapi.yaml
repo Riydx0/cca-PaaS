@@ -1,22 +1,26 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Cloud Services Marketplace API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: services
+    description: Cloud service offerings
+  - name: orders
+    description: Server orders
+  - name: stats
+    description: Dashboard statistics
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,7 +28,159 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /services:
+    get:
+      operationId: listServices
+      tags: [services]
+      summary: List all cloud services
+      parameters:
+        - name: provider
+          in: query
+          schema:
+            type: string
+        - name: region
+          in: query
+          schema:
+            type: string
+        - name: minPrice
+          in: query
+          schema:
+            type: number
+        - name: maxPrice
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: List of cloud services
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CloudService"
+
+  /services/{id}:
+    get:
+      operationId: getService
+      tags: [services]
+      summary: Get a cloud service by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Cloud service details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CloudService"
+        "404":
+          description: Service not found
+
+  /orders:
+    get:
+      operationId: listMyOrders
+      tags: [orders]
+      summary: Get current user's orders
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of user orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServerOrder"
+    post:
+      operationId: createOrder
+      tags: [orders]
+      summary: Request a server
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderBody"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerOrder"
+        "400":
+          description: Invalid request
+        "404":
+          description: Service not found
+
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      tags: [orders]
+      summary: Get order by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerOrder"
+        "404":
+          description: Order not found
+
+  /stats/dashboard:
+    get:
+      operationId: getDashboardStats
+      tags: [stats]
+      summary: Get dashboard statistics for the current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /stats/providers:
+    get:
+      operationId: getProviderStats
+      tags: [stats]
+      summary: Get stats grouped by cloud provider
+      responses:
+        "200":
+          description: Provider statistics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProviderStat"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
   schemas:
     HealthStatus:
       type: object
@@ -34,3 +190,134 @@ components:
       required:
         - status
 
+    CloudService:
+      type: object
+      properties:
+        id:
+          type: integer
+        provider:
+          type: string
+        name:
+          type: string
+        cpu:
+          type: integer
+        ramGb:
+          type: integer
+        storageGb:
+          type: integer
+        storageType:
+          type: string
+        bandwidthTb:
+          type: number
+        priceMonthly:
+          type: number
+        region:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - provider
+        - name
+        - cpu
+        - ramGb
+        - storageGb
+        - storageType
+        - bandwidthTb
+        - priceMonthly
+        - region
+        - isActive
+        - createdAt
+
+    ServerOrder:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        cloudServiceId:
+          type: integer
+        status:
+          type: string
+          enum: [Pending, Active, Failed]
+        requestedRegion:
+          type: string
+        notes:
+          type: string
+          nullable: true
+        externalOrderId:
+          type: string
+          nullable: true
+        providerResponse:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        cloudService:
+          $ref: "#/components/schemas/CloudService"
+          nullable: true
+      required:
+        - id
+        - userId
+        - cloudServiceId
+        - status
+        - requestedRegion
+        - createdAt
+
+    CreateOrderBody:
+      type: object
+      properties:
+        cloudServiceId:
+          type: integer
+        requestedRegion:
+          type: string
+        notes:
+          type: string
+          nullable: true
+      required:
+        - cloudServiceId
+        - requestedRegion
+
+    DashboardStats:
+      type: object
+      properties:
+        totalOrders:
+          type: integer
+        activeOrders:
+          type: integer
+        pendingOrders:
+          type: integer
+        failedOrders:
+          type: integer
+        totalServices:
+          type: integer
+        recentOrders:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServerOrder"
+      required:
+        - totalOrders
+        - activeOrders
+        - pendingOrders
+        - failedOrders
+        - totalServices
+        - recentOrders
+
+    ProviderStat:
+      type: object
+      properties:
+        provider:
+          type: string
+        count:
+          type: integer
+        avgPrice:
+          type: number
+      required:
+        - provider
+        - count
+        - avgPrice
