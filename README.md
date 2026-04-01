@@ -39,6 +39,40 @@ cca-PaaS/
 └── scripts/                 # Utility scripts
 ```
 
+## Linux — Install Docker
+
+Before deploying, Docker and Docker Compose must be installed on your server.
+Use the bundled installer script — it auto-detects your distribution and handles everything:
+
+```bash
+git clone https://github.com/Riydx0/cca-PaaS && cd cca-PaaS
+sudo bash docker/install-docker.sh
+```
+
+The script supports the following distributions:
+
+| Distribution | Versions |
+|---|---|
+| Ubuntu | 20.04 LTS, 22.04 LTS, 24.04 LTS |
+| Debian | 11 (Bullseye), 12 (Bookworm) |
+| CentOS | 7, 8 / Stream |
+| Rocky Linux | 8, 9 |
+| AlmaLinux | 8, 9 |
+| Fedora | 38+ |
+
+> **Prefer manual install?** Run the official one-liner for your distro:
+>
+> | Distro | Command |
+> |---|---|
+> | Ubuntu / Debian | `curl -fsSL https://get.docker.com \| sudo sh` |
+> | CentOS 7 | `yum install -y docker-ce docker-compose-plugin` *(after adding Docker repo)* |
+> | Rocky / Alma | `dnf install -y docker-ce docker-compose-plugin` *(after adding Docker repo)* |
+> | Fedora | `dnf install -y docker-ce docker-compose-plugin` |
+
+After the script completes, **log out and back in** (or run `newgrp docker`) so Docker works without `sudo`.
+
+---
+
 ## Quick Deploy (Docker — 3 lines)
 
 ```bash
@@ -49,8 +83,7 @@ docker compose up -d --build
 
 The app will be live at **http://your-server-ip** on port 80.
 
-> **Requirements:** Docker 24+ and Docker Compose v2 installed on the server.
-> Get Docker: `curl -fsSL https://get.docker.com | sh`
+> **Requirements:** Docker 24+ and Docker Compose v2 (installed by the script above).
 
 ### First Run (Admin Setup)
 
