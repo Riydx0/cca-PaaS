@@ -68,12 +68,12 @@ if [ -z "$DISTRO_FAMILY" ]; then
   echo ""
   read -rp "  Enter number [1-7]: " CHOICE
   case "$CHOICE" in
-    1) DISTRO_FAMILY="ubuntu" ;;
-    2) DISTRO_FAMILY="debian" ;;
-    3) DISTRO_FAMILY="centos"; VERSION_ID="7" ;;
-    4) DISTRO_FAMILY="centos"; VERSION_ID="8" ;;
-    5) DISTRO_FAMILY="rhel" ;;
-    6) DISTRO_FAMILY="fedora" ;;
+    1) DISTRO_FAMILY="ubuntu"; DISTRO="ubuntu" ;;
+    2) DISTRO_FAMILY="debian"; DISTRO="debian" ;;
+    3) DISTRO_FAMILY="centos"; DISTRO="centos"; VERSION_ID="7" ;;
+    4) DISTRO_FAMILY="centos"; DISTRO="centos"; VERSION_ID="8" ;;
+    5) DISTRO_FAMILY="rhel";   DISTRO="centos" ;;
+    6) DISTRO_FAMILY="fedora"; DISTRO="fedora" ;;
     *) info "Exiting."; exit 0 ;;
   esac
 fi
