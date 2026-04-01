@@ -149,7 +149,11 @@ if [ -z "$DB_PASSWORD_INPUT" ]; then
   DB_PASSWORD="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 24)"
   success "Auto-generated a secure DB password."
 else
-  DB_PASSWORD="$DB_PASSWORD_INPUT"
+  # Strip characters that would break .env parsing (quotes, $, spaces, #, backslash)
+  DB_PASSWORD="$(echo "$DB_PASSWORD_INPUT" | tr -d "'\"\$\\ #")"
+  if [ "$DB_PASSWORD" != "$DB_PASSWORD_INPUT" ]; then
+    warn "Some special characters were removed from your DB password for .env compatibility."
+  fi
   success "DB Password set."
 fi
 
@@ -176,6 +180,12 @@ CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
 VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY}
 
 SESSION_SECRET=${SESSION_SECRET}
+
+# Optional: port to expose on the host machine (default: 80)
+# LISTEN_PORT=80
+
+# Optional: custom domain Clerk proxy (requires DNS setup)
+# VITE_CLERK_PROXY_URL=https://yourdomain.com/api/__clerk
 EOF
 
 success ".env file created."
