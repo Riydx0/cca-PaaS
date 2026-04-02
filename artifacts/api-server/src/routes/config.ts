@@ -20,16 +20,22 @@ router.get("/config", async (_req, res) => {
 
     const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
 
+    const envAppUrl = process.env["APP_URL"];
+    const appUrlHint =
+      envAppUrl && envAppUrl.trim().length > 0 ? envAppUrl.trim() : null;
+
     res.json({
       setupComplete: map["SETUP_COMPLETE"] === "true",
       clerkPublishableKey: map["CLERK_PUBLISHABLE_KEY"] ?? null,
       appUrl: map["APP_URL"] ?? null,
+      appUrlHint,
     });
   } catch {
     res.status(500).json({
       setupComplete: false,
       clerkPublishableKey: null,
       appUrl: null,
+      appUrlHint: null,
       error: "Database unavailable",
     });
   }

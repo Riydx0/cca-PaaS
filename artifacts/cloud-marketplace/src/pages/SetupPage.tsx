@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useI18n } from "@/lib/i18n";
-import { Server, Key, Globe, CheckCircle, AlertCircle, Loader2, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { Server, Key, Globe, CheckCircle, AlertCircle, Loader2, Eye, EyeOff, ShieldCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,11 +25,22 @@ interface FieldErrors {
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 30000;
 
-export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) => void }) {
+export function SetupPage({
+  onSetupComplete,
+  appUrlHint,
+}: {
+  onSetupComplete: (pk: string) => void;
+  appUrlHint: string | null;
+}) {
   const { t, dir } = useI18n();
   const [, setLocation] = useLocation();
+
+  const defaultAppUrl =
+    appUrlHint ??
+    (typeof window !== "undefined" ? window.location.origin : "");
+
   const [form, setForm] = useState<SetupForm>({
-    appUrl: typeof window !== "undefined" ? window.location.origin : "",
+    appUrl: defaultAppUrl,
     clerkPublishableKey: "",
     clerkSecretKey: "",
     setupToken: "",
@@ -247,6 +258,11 @@ export function SetupPage({ onSetupComplete }: { onSetupComplete: (pk: string) =
                   />
                   {errors.appUrl ? (
                     <p className="text-destructive text-xs">{errors.appUrl}</p>
+                  ) : appUrlHint && form.appUrl === appUrlHint ? (
+                    <p className="text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" />
+                      {t("setup.hint.appUrlFromEnv")}
+                    </p>
                   ) : (
                     <p className="text-muted-foreground text-xs">{t("setup.hint.appUrl")}</p>
                   )}

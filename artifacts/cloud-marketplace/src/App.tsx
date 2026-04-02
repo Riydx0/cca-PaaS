@@ -51,6 +51,7 @@ type AppConfig = {
   setupComplete: boolean;
   clerkPublishableKey: string | null;
   appUrl: string | null;
+  appUrlHint: string | null;
 };
 
 function LoadingScreen() {
@@ -240,6 +241,7 @@ function AppRouter() {
         <Switch>
           <Route path="/setup">
             <SetupPage
+              appUrlHint={config?.appUrlHint ?? null}
               onSetupComplete={(pk) => {
                 setRuntimePK(pk);
                 setConfig((prev) => ({
