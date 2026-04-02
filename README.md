@@ -110,7 +110,7 @@ After the script completes, **log out and back in** (or run `newgrp docker`) so 
 
 ---
 
-## Quick Deploy (3 commands)
+## Quick Deploy (4 steps)
 
 ```bash
 # 1. Clone the project
@@ -119,20 +119,56 @@ git clone https://github.com/Riydx0/cca-PaaS && cd cca-PaaS
 # 2. Install Docker (if not already installed)
 sudo bash docker/install-docker.sh
 
-# 3. Configure and launch — answers 3 questions then starts automatically
+# 3. Run the setup script — it asks for a DB password (optional), then starts Docker automatically
 bash docker/setup.sh
+
+# 4. Open the setup wizard in your browser
+#    http://your-server-ip/setup
 ```
 
-The setup script will ask for your Clerk API keys, auto-generate a secure database password and session secret, write the `.env` file, and start Docker — **no manual file editing required**.
+The setup script asks for one optional input (a custom DB password — press Enter to auto-generate one), then builds and starts the app with Docker Compose. **No manual file editing required.**
 
-The app will be live at **http://your-server-ip** on port 80 when done.
+Once the containers are running, open **http://your-server-ip/setup** in your browser to complete the first-run configuration.
 
-### First Run (Admin Setup)
+---
 
-After the containers start, set up your super_admin:
+## First-Run Setup Wizard
 
-1. Open `http://your-server-ip` and sign up
-2. Go to `http://your-server-ip/bootstrap` and click **"Grant Super Admin Access"**
+When you open `/setup` for the first time, you will be prompted for:
+
+- **Clerk Publishable Key** (`pk_...`)
+- **Clerk Secret Key** (`sk_...`)
+- **App URL** — the public URL or IP your app is served from (e.g. `http://your-server-ip`)
+- **Setup Token** — a one-time security token generated at startup (see below)
+
+### What is the Setup Token?
+
+The Setup Token is a randomly generated secret that the API server creates on its very first start. It ensures that only someone with server access can complete the initial configuration.
+
+**How to find it:**
+
+```bash
+docker compose logs api | grep "Setup Token"
+```
+
+You will see a line like:
+
+```
+[cca-PaaS] Setup Token: a1b2c3d4e5f6...
+```
+
+Copy that value and paste it into the Setup Token field on the `/setup` page.
+
+> **Note:** The token is stored in the database after first use. Once setup is complete, the `/setup` page is no longer accessible.
+
+---
+
+## Admin Setup
+
+After completing the setup wizard:
+
+1. Open `http://your-server-ip` and sign up for an account
+2. Navigate to `http://your-server-ip/bootstrap` and click **"Grant Super Admin Access"**
 3. Sign out and back in — the **Admin Panel** link will appear in the sidebar
 
 ---
@@ -174,16 +210,6 @@ pnpm --filter @workspace/api-server run dev
 # Start frontend (separate terminal)
 pnpm --filter @workspace/cloud-marketplace run dev
 ```
-
-## Admin Setup
-
-After signing up, call the bootstrap endpoint once to grant super_admin access:
-
-```bash
-POST /api/admin/bootstrap
-```
-
-Sign out and back in to activate the role. From there, manage users, orders, and services via the Admin Panel.
 
 ## Developer
 
