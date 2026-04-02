@@ -65,6 +65,51 @@ server {
 NGINXEOF
 }
 
+# HTTP with specific server_name — used as fallback when SSL cert is unavailable
+# but a domain was entered. Better than server_name _ which accepts all hosts.
+generate_nginx_http_domain() {
+  local domain="$1"
+  cat > docker/nginx.conf <<NGINXEOF
+server {
+    listen 80;
+    server_name ${domain};
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location /api/ {
+        proxy_pass http://api:8080/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 60s;
+        proxy_connect_timeout 10s;
+    }
+
+    location /api/__clerk/ {
+        proxy_pass http://api:8080/api/__clerk/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files \$uri =404;
+    }
+
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+}
+NGINXEOF
+}
+
 # Cloudflare: trusted real IP resolution + safe proto detection only from CF IPs
 # Uses: set_real_ip_from (trusted proxy CIDR list) + real_ip_header CF-Connecting-IP
 # Then geo on $realip_remote_addr to detect CF edge connections and trust their
@@ -383,6 +428,8 @@ if [ -n "$DOMAIN_INPUT" ]; then
     APP_URL="https://${DOMAIN}"
     info "Generating nginx config for Cloudflare..."
     generate_nginx_cloudflare "$DOMAIN"
+    # Remove stale SSL override from a previous Let's Encrypt run (mode change)
+    rm -f docker-compose.override.yml
     success "nginx.conf: Cloudflare proxy mode (HTTP origin, HTTPS at edge)."
     echo ""
     echo -e "  ${DIM}Reminder: enable Cloudflare orange-cloud proxy on your A record.${RESET}"
@@ -411,7 +458,7 @@ if [ -n "$DOMAIN_INPUT" ]; then
         warn "Cannot auto-install certbot. Please install manually and re-run."
         warn "Falling back to HTTP-only mode."
         APP_URL="http://${DOMAIN}"
-        generate_nginx_default
+        generate_nginx_http_domain "$DOMAIN"
         success "nginx.conf configured (HTTP only — add SSL later manually)."
       fi
     fi
@@ -441,7 +488,9 @@ if [ -n "$DOMAIN_INPUT" ]; then
         warn "  Run 'certbot certonly --standalone -d ${DOMAIN}' manually after fixing."
         warn "Falling back to HTTP-only mode."
         APP_URL="http://${DOMAIN}"
-        generate_nginx_default
+        generate_nginx_http_domain "$DOMAIN"
+        # Remove stale SSL override if present from a previous run
+        rm -f docker-compose.override.yml
       fi
     fi
   fi
