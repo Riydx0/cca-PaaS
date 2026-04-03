@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq, count } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { AuditService } from "../services/audit_service";
 
 const router = Router();
 
@@ -126,6 +127,15 @@ router.post("/auth/login", async (req: any, res) => {
 
     req.session.userId = user.id;
     req.session.userRole = user.role;
+
+    AuditService.logEvent({
+      userId: user.id,
+      action: "auth.login",
+      entityType: "user",
+      entityId: user.id,
+      details: { email: user.email },
+      ipAddress: req.ip,
+    }).catch(() => {});
 
     res.json({
       id: user.id,

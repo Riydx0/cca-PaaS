@@ -3,6 +3,7 @@ import { requireAdmin, requireSuperAdmin } from "../../middlewares/requireRole";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq, ilike, or, desc } from "drizzle-orm";
+import { AuditService } from "../../services/audit_service";
 
 const router = Router();
 
@@ -83,6 +84,15 @@ router.patch("/:userId/role", requireSuperAdmin, async (req, res) => {
       res.status(404).json({ error: "User not found" });
       return;
     }
+
+    AuditService.logEvent({
+      userId: (req as any).currentUser?.id,
+      action: "user.role_change",
+      entityType: "user",
+      entityId: userId,
+      details: { newRole: role },
+      ipAddress: req.ip,
+    }).catch(() => {});
 
     res.json({ success: true, userId, role });
   } catch (err) {

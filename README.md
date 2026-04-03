@@ -202,6 +202,85 @@ pnpm --filter @workspace/api-server run dev
 pnpm --filter @workspace/cloud-marketplace run dev
 ```
 
+---
+
+## Billing Module
+
+### Overview
+
+The platform includes a complete billing system with invoices, payment records, and audit logs.
+
+### Data Models
+
+**Invoice** (`invoices` table)
+- Tracks billing for users, optionally linked to a server order
+- Statuses: `Draft` → `Issued` → `Pending` → `Paid` / `Overdue` / `Cancelled`
+- Auto-generates unique invoice numbers (e.g. `INV-LXYZ123-AB4C`)
+- Supports SAR and other currencies
+
+**PaymentRecord** (`payment_records` table)
+- Records every payment attempt against an invoice
+- Statuses: `Pending`, `Completed`, `Failed`, `Refunded`
+- Linked to provider name and transaction reference
+
+**AuditLog** (`audit_logs` table)
+- Captures all sensitive actions: login, order creation, role change, invoice status change, etc.
+- Stores entity type, entity ID, IP address, and JSON details
+
+### Payment Gateway Readiness
+
+The `PaymentGatewayService` provides a pluggable interface for real payment gateways.
+Currently operates in mock mode. To connect a real gateway, set the corresponding environment variable:
+
+| Gateway | Environment Variable |
+|---|---|
+| Moyasar | `MOYASAR_API_KEY` |
+| STC Pay | `STC_PAY_API_KEY` |
+| HyperPay | `HYPERPAY_ACCESS_TOKEN` |
+
+When the env var is set, the service routes to that provider's API. When unset, it falls back to mock with a warning.
+
+### Audit Log System
+
+The `AuditService` is called automatically on all sensitive events:
+- User login (`auth.login`)
+- User role change (`user.role_change`)
+- Invoice creation (`invoice.create`)
+- Invoice marked paid (`invoice.mark_paid`)
+- Invoice cancelled (`invoice.cancel`)
+- Mock payment processed (`payment.mock_create`)
+
+### Role Permissions
+
+| Action | User | Admin | Super Admin |
+|---|---|---|---|
+| View own invoices/payments | ✓ | ✓ | ✓ |
+| View all invoices/payments | — | ✓ | ✓ |
+| View audit logs | — | ✓ | ✓ |
+| Mark invoice paid | — | — | ✓ |
+| Cancel invoice | — | — | ✓ |
+| Create invoice manually | — | — | ✓ |
+| Trigger mock payment | — | — | ✓ |
+
+### User Routes
+- `GET /api/billing/stats` — Personal billing stats
+- `GET /api/billing/invoices` — User's own invoices
+- `GET /api/billing/payments` — User's payment history
+
+### Admin Routes
+- `GET /api/admin/billing/stats` — Platform-wide financial stats
+- `GET /api/admin/invoices` — All invoices (with optional `?status=` filter)
+- `GET /api/admin/payments` — All payment records
+- `GET /api/admin/audit-logs` — Audit trail
+
+### Super Admin Routes
+- `POST /api/admin/invoices` — Create invoice manually
+- `POST /api/admin/invoices/:id/mark-paid` — Mark as paid
+- `POST /api/admin/invoices/:id/cancel` — Cancel invoice
+- `POST /api/admin/invoices/:id/mock-payment` — Simulate payment
+
+---
+
 ## Developer
 
 **riyadh alafraa**

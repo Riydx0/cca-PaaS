@@ -3,6 +3,7 @@ import { requireAdmin, requireSuperAdmin } from "../../middlewares/requireRole";
 import { db } from "@workspace/db";
 import { cloudServicesTable, insertCloudServiceSchema } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
+import { AuditService } from "../../services/audit_service";
 
 const router = Router();
 
@@ -28,6 +29,14 @@ router.post("/", requireSuperAdmin, async (req, res) => {
   }
   try {
     const [service] = await db.insert(cloudServicesTable).values(parsed.data).returning();
+    AuditService.logEvent({
+      userId: (req as any).currentUser?.id,
+      action: "service.create",
+      entityType: "service",
+      entityId: service.id,
+      details: { name: service.name, provider: service.provider },
+      ipAddress: req.ip,
+    }).catch(() => {});
     res.status(201).json(mapService(service));
   } catch (err) {
     console.error(err);
@@ -56,6 +65,14 @@ router.patch("/:id", requireSuperAdmin, async (req, res) => {
       res.status(404).json({ error: "Service not found" });
       return;
     }
+    AuditService.logEvent({
+      userId: (req as any).currentUser?.id,
+      action: "service.update",
+      entityType: "service",
+      entityId: id,
+      details: parsed.data as Record<string, unknown>,
+      ipAddress: req.ip,
+    }).catch(() => {});
     res.json(mapService(updated));
   } catch (err) {
     console.error(err);
@@ -78,6 +95,14 @@ router.delete("/:id", requireSuperAdmin, async (req, res) => {
       res.status(404).json({ error: "Service not found" });
       return;
     }
+    AuditService.logEvent({
+      userId: (req as any).currentUser?.id,
+      action: "service.delete",
+      entityType: "service",
+      entityId: id,
+      details: { name: deleted.name },
+      ipAddress: req.ip,
+    }).catch(() => {});
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -97,11 +122,20 @@ router.patch("/:id/toggle", requireSuperAdmin, async (req, res) => {
       res.status(404).json({ error: "Service not found" });
       return;
     }
+    const newIsActive = !service.isActive;
     const [updated] = await db
       .update(cloudServicesTable)
-      .set({ isActive: !service.isActive })
+      .set({ isActive: newIsActive })
       .where(eq(cloudServicesTable.id, id))
       .returning();
+    AuditService.logEvent({
+      userId: (req as any).currentUser?.id,
+      action: newIsActive ? "service.activate" : "service.deactivate",
+      entityType: "service",
+      entityId: id,
+      details: { name: service.name, isActive: newIsActive },
+      ipAddress: req.ip,
+    }).catch(() => {});
     res.json(mapService(updated));
   } catch (err) {
     console.error(err);

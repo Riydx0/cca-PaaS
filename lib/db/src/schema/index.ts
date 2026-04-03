@@ -3,3 +3,6 @@ export * from "./serverOrders";
 export * from "./systemUpdateLogs";
 export * from "./settings";
 export * from "./users";
+export * from "./invoices";
+export * from "./paymentRecords";
+export * from "./auditLogs";

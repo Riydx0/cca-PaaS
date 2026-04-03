@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   LayoutDashboard, Users, Receipt, Server, Settings, Menu, LogOut,
-  ShieldCheck, ArrowLeft, Cloud,
+  ShieldCheck, ArrowLeft, Cloud, CreditCard, Activity, FileText,
 } from "lucide-react";
 
 export function AdminLayout({ children }: { children: ReactNode }) {
@@ -21,6 +21,10 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     { href: "/admin/users", label: t("admin.nav.users"), icon: Users },
     { href: "/admin/orders", label: t("admin.nav.orders"), icon: Receipt },
     { href: "/admin/services", label: t("admin.nav.services"), icon: Server },
+    { href: "/admin/billing", label: t("admin.nav.billing"), icon: CreditCard },
+    { href: "/admin/invoices", label: t("admin.nav.invoices"), icon: FileText },
+    { href: "/admin/payments", label: t("admin.nav.payments"), icon: CreditCard },
+    { href: "/admin/audit-logs", label: t("admin.nav.auditLogs"), icon: Activity },
     ...(isSuperAdmin
       ? [{ href: "/admin/system", label: t("admin.nav.system"), icon: Settings }]
       : []),

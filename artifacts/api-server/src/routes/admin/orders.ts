@@ -3,6 +3,7 @@ import { requireAdmin } from "../../middlewares/requireRole";
 import { db } from "@workspace/db";
 import { cloudServicesTable, serverOrdersTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { AuditService } from "../../services/audit_service";
 
 const router = Router();
 
@@ -62,6 +63,15 @@ router.patch("/:id/status", requireAdmin, async (req, res) => {
       res.status(404).json({ error: "Order not found" });
       return;
     }
+
+    AuditService.logEvent({
+      userId: (req as any).currentUser?.id,
+      action: "order.status_change",
+      entityType: "order",
+      entityId: id,
+      details: { newStatus: status },
+      ipAddress: req.ip,
+    }).catch(() => {});
 
     res.json(updated);
   } catch (err) {

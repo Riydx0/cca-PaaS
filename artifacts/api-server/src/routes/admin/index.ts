@@ -4,6 +4,7 @@ import usersRouter from "./users";
 import ordersRouter from "./orders";
 import servicesRouter from "./services";
 import systemRouter from "./system";
+import billingRouter from "./billing";
 
 const router = Router();
 
@@ -12,5 +13,6 @@ router.use("/users", usersRouter);
 router.use("/orders", ordersRouter);
 router.use("/services", servicesRouter);
 router.use("/system", systemRouter);
+router.use("/", billingRouter);
 
 export default router;

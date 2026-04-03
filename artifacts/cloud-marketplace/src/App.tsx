@@ -18,6 +18,9 @@ import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
 import { Dashboard } from "@/pages/Dashboard";
 import { Services } from "@/pages/Services";
 import { Orders } from "@/pages/Orders";
+import { BillingPage } from "@/pages/BillingPage";
+import { InvoicesPage } from "@/pages/InvoicesPage";
+import { PaymentsPage } from "@/pages/PaymentsPage";
 import { SetupPage } from "@/pages/SetupPage";
 
 import { AdminDashboard } from "@/pages/admin/AdminDashboard";
@@ -25,6 +28,10 @@ import { AdminUsers } from "@/pages/admin/AdminUsers";
 import { AdminOrders } from "@/pages/admin/AdminOrders";
 import { AdminServices } from "@/pages/admin/AdminServices";
 import { AdminSystemUpdates } from "@/pages/admin/AdminSystemUpdates";
+import { AdminBillingPage } from "@/pages/admin/AdminBillingPage";
+import { AdminInvoicesPage } from "@/pages/admin/AdminInvoicesPage";
+import { AdminPaymentsPage } from "@/pages/admin/AdminPaymentsPage";
+import { AuditLogsPage } from "@/pages/admin/AuditLogsPage";
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -103,6 +110,15 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
       <Route path="/orders">
         <ProtectedRoute component={Orders} />
       </Route>
+      <Route path="/billing">
+        <ProtectedRoute component={BillingPage} />
+      </Route>
+      <Route path="/billing/invoices">
+        <ProtectedRoute component={InvoicesPage} />
+      </Route>
+      <Route path="/billing/payments">
+        <ProtectedRoute component={PaymentsPage} />
+      </Route>
 
       <Route path="/admin">
         <Redirect to="/admin/dashboard" />
@@ -121,6 +137,18 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
       </Route>
       <Route path="/admin/system">
         <AdminRoute component={AdminSystemUpdates} superAdminOnly />
+      </Route>
+      <Route path="/admin/billing">
+        <AdminRoute component={AdminBillingPage} />
+      </Route>
+      <Route path="/admin/invoices">
+        <AdminRoute component={AdminInvoicesPage} />
+      </Route>
+      <Route path="/admin/payments">
+        <AdminRoute component={AdminPaymentsPage} />
+      </Route>
+      <Route path="/admin/audit-logs">
+        <AdminRoute component={AuditLogsPage} />
       </Route>
 
       <Route component={NotFound} />

@@ -4,7 +4,7 @@ import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRole } from "@/hooks/useRole";
-import { LayoutDashboard, Server, Receipt, Menu, LogOut, Cloud, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Server, Receipt, Menu, LogOut, Cloud, ShieldCheck, CreditCard } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -21,6 +21,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
     { href: "/services", label: t("nav.services"), icon: Server },
     { href: "/orders", label: t("nav.orders"), icon: Receipt },
+    { href: "/billing", label: t("nav.billing"), icon: CreditCard },
   ];
 
   const NavLinks = ({ onClick }: { onClick?: () => void }) => (

@@ -4,6 +4,7 @@ import { cloudServicesTable, serverOrdersTable } from "@workspace/db/schema";
 import { CreateOrderBody } from "@workspace/api-zod";
 import { eq, and, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireRole";
+import { AuditService } from "../services/audit_service";
 
 const router: IRouter = Router();
 
@@ -78,6 +79,15 @@ router.post("/", requireAuth, async (req: any, res) => {
       providerResponse,
     })
     .returning();
+
+  AuditService.logEvent({
+    userId: parseInt(userId, 10),
+    action: "order.create",
+    entityType: "order",
+    entityId: order.id,
+    details: { cloudServiceId, requestedRegion, status: "Pending" },
+    ipAddress: (req as any).ip,
+  }).catch(() => {});
 
   res.status(201).json(formatOrder(order, service));
 });
