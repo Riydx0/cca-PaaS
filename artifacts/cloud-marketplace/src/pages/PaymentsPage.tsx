@@ -1,18 +1,14 @@
 import { useI18n } from "@/lib/i18n";
 import { adminFetch } from "@/lib/adminFetch";
 import { useQuery } from "@tanstack/react-query";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CreditCard, Calendar, Hash } from "lucide-react";
+import { CreditCard, Hash } from "lucide-react";
 import { motion } from "framer-motion";
-
-const statusColors: Record<string, string> = {
-  Completed: "bg-emerald-500/10 text-emerald-700 border-emerald-200",
-  Pending: "bg-amber-500/10 text-amber-700 border-amber-200",
-  Failed: "bg-red-500/10 text-red-700 border-red-200",
-  Refunded: "bg-purple-500/10 text-purple-700 border-purple-200",
-};
+import {
+  PaymentStatusBadge, formatAmount, formatDate,
+  tableHeaderCls, tableRowCls,
+} from "@/components/billing";
 
 export function PaymentsPage() {
   const { t, dir } = useI18n();
@@ -25,67 +21,74 @@ export function PaymentsPage() {
   return (
     <div className="space-y-6" dir={dir}>
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">{t("billing.page.payments")}</h1>
-        <p className="text-muted-foreground mt-1">{t("billing.page.paymentsDesc")}</p>
+        <h1 className="text-2xl font-bold tracking-tight">{t("billing.page.payments")}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t("billing.page.paymentsDesc")}</p>
       </div>
 
       <Card className="border shadow-sm overflow-hidden">
         {isLoading ? (
-          <div className="p-6 space-y-3">
-            {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16 rounded-lg" />)}
-          </div>
+          <CardContent className="p-6 space-y-3">
+            {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-14 rounded-lg" />)}
+          </CardContent>
         ) : !payments?.length ? (
-          <div className="py-20 flex flex-col items-center text-center text-muted-foreground">
-            <CreditCard className="h-12 w-12 mb-3 opacity-20" />
-            <p>{t("billing.empty.payments")}</p>
-          </div>
+          <CardContent className="py-20 flex flex-col items-center text-center text-muted-foreground">
+            <div className="p-4 rounded-full bg-muted mb-4">
+              <CreditCard className="h-8 w-8 opacity-40" />
+            </div>
+            <p className="font-semibold text-sm">{t("billing.empty.payments")}</p>
+          </CardContent>
         ) : (
           <>
-            <div className="hidden md:grid grid-cols-[1fr_120px_130px_150px_110px] gap-4 px-5 py-3 bg-muted/40 border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className={tableHeaderCls + " grid-cols-[1fr_140px_130px_180px_110px]"}>
               <span>{t("billing.col.paymentMethod")}</span>
-              <span>{t("billing.col.amount")}</span>
+              <span className="text-right">{t("billing.col.amount")}</span>
               <span>{t("billing.col.provider")}</span>
               <span>{t("billing.col.reference")}</span>
               <span>{t("billing.col.status")}</span>
             </div>
-            <div className="divide-y divide-border">
+
+            <div>
               {payments.map((pay, i) => (
                 <motion.div
                   key={pay.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: i * 0.02 }}
-                  className="grid grid-cols-1 md:grid-cols-[1fr_120px_130px_150px_110px] gap-3 md:gap-4 items-center px-5 py-4 hover:bg-muted/30 transition-colors"
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.025, duration: 0.2 }}
+                  className={tableRowCls + " grid grid-cols-1 md:grid-cols-[1fr_140px_130px_180px_110px] gap-3 md:gap-4 items-center"}
                 >
+                  {/* Method */}
                   <div className="flex items-center gap-3">
-                    <div className="bg-primary/10 p-2 rounded-md hidden sm:block shrink-0">
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 hidden sm:flex">
                       <CreditCard className="h-4 w-4 text-primary" />
                     </div>
                     <div className="min-w-0">
-                      <p className="font-semibold truncate">{pay.paymentMethod}</p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {new Date(pay.createdAt).toLocaleDateString()}
-                      </p>
+                      <p className="font-semibold text-sm truncate">{pay.paymentMethod}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatDate(pay.createdAt)}</p>
                     </div>
                   </div>
 
-                  <div className="text-sm font-medium">
-                    {pay.amount} {pay.currency}
+                  {/* Amount */}
+                  <div className="text-sm font-bold tabular-nums md:text-right text-foreground">
+                    {formatAmount(pay.amount, pay.currency)}
                   </div>
 
+                  {/* Provider */}
                   <div className="text-sm text-muted-foreground truncate">
-                    {pay.providerName ?? "—"}
+                    {pay.providerName ?? <span className="opacity-40">—</span>}
                   </div>
 
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Hash className="h-3 w-3 shrink-0" />
-                    <span className="truncate font-mono">{pay.transactionReference ?? "—"}</span>
+                  {/* Reference */}
+                  <div className="flex items-center gap-1.5">
+                    <Hash className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <span className="text-xs font-mono text-muted-foreground truncate">
+                      {pay.transactionReference ?? <span className="opacity-40">—</span>}
+                    </span>
                   </div>
 
-                  <Badge variant="outline" className={`text-xs w-fit ${statusColors[pay.status] ?? ""}`}>
-                    {pay.status}
-                  </Badge>
+                  {/* Status */}
+                  <div>
+                    <PaymentStatusBadge status={pay.status} />
+                  </div>
                 </motion.div>
               ))}
             </div>

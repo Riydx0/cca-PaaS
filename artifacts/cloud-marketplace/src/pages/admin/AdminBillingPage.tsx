@@ -2,19 +2,14 @@ import { useI18n } from "@/lib/i18n";
 import { adminFetch } from "@/lib/adminFetch";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Receipt, CheckCircle2, Clock, AlertCircle, CreditCard, Activity } from "lucide-react";
+import { Receipt, CheckCircle2, Clock, AlertCircle, CreditCard, Activity, Link2 } from "lucide-react";
+import { Link } from "wouter";
 import { motion } from "framer-motion";
-
-const statusColors: Record<string, string> = {
-  Paid: "bg-emerald-500/10 text-emerald-700 border-emerald-200",
-  Pending: "bg-amber-500/10 text-amber-700 border-amber-200",
-  Issued: "bg-blue-500/10 text-blue-700 border-blue-200",
-  Draft: "bg-secondary text-secondary-foreground border-border",
-  Overdue: "bg-red-500/10 text-red-700 border-red-200",
-  Cancelled: "bg-secondary text-secondary-foreground border-border",
-};
+import {
+  KpiCard, InvoiceStatusBadge, ActionBadge,
+  formatAmount, formatDate, formatDateTime, tableRowCls,
+} from "@/components/billing";
 
 export function AdminBillingPage() {
   const { t, dir } = useI18n();
@@ -31,7 +26,7 @@ export function AdminBillingPage() {
 
   const { data: auditLogs, isLoading: logsLoading } = useQuery<any[]>({
     queryKey: ["admin", "audit-logs"],
-    queryFn: () => adminFetch("/api/admin/audit-logs?limit=5"),
+    queryFn: () => adminFetch("/api/admin/audit-logs?limit=6"),
   });
 
   const kpiCards = [
@@ -39,139 +34,163 @@ export function AdminBillingPage() {
       label: t("billing.stat.totalInvoices"),
       value: stats?.total ?? 0,
       icon: Receipt,
-      color: "text-primary",
-      bg: "bg-primary/10",
+      iconColor: "text-primary",
+      iconBg: "bg-primary/10",
+      accentColor: "bg-primary",
     },
     {
       label: t("billing.stat.paid"),
       value: stats?.paid ?? 0,
       icon: CheckCircle2,
-      color: "text-emerald-600",
-      bg: "bg-emerald-500/10",
+      iconColor: "text-emerald-600",
+      iconBg: "bg-emerald-500/10",
+      accentColor: "bg-emerald-500",
     },
     {
       label: t("billing.stat.pending"),
       value: stats?.pending ?? 0,
       icon: Clock,
-      color: "text-amber-600",
-      bg: "bg-amber-500/10",
+      iconColor: "text-amber-600",
+      iconBg: "bg-amber-500/10",
+      accentColor: "bg-amber-500",
     },
     {
       label: t("billing.stat.overdue"),
       value: stats?.overdue ?? 0,
       icon: AlertCircle,
-      color: "text-red-600",
-      bg: "bg-red-500/10",
+      iconColor: "text-red-600",
+      iconBg: "bg-red-500/10",
+      accentColor: "bg-red-500",
     },
     {
       label: t("billing.stat.totalPaymentsVolume"),
-      value: stats ? `${stats.totalPaymentsVolume} ${t("billing.currency")}` : "0.00",
+      value: stats ? formatAmount(stats.totalPaymentsVolume, t("billing.currency")) : "0.00",
       icon: CreditCard,
-      color: "text-blue-600",
-      bg: "bg-blue-500/10",
+      iconColor: "text-blue-600",
+      iconBg: "bg-blue-500/10",
+      accentColor: "bg-blue-500",
     },
   ];
 
   return (
-    <div className="space-y-6" dir={dir}>
+    <div className="space-y-8" dir={dir}>
+      {/* Page header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">{t("admin.billing.title")}</h1>
-        <p className="text-muted-foreground mt-1">{t("admin.billing.desc")}</p>
+        <h1 className="text-2xl font-bold tracking-tight">{t("admin.billing.title")}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t("admin.billing.desc")}</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* KPI row — 5 cards, 2-col mobile, 5-col desktop */}
+      <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">
         {kpiCards.map((card, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}>
-            <Card className="border shadow-sm">
-              <CardContent className="p-5 flex items-center gap-3">
-                <div className={`p-2.5 rounded-xl ${card.bg}`}>
-                  <card.icon className={`h-5 w-5 ${card.color}`} />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">{card.label}</p>
-                  {statsLoading ? (
-                    <Skeleton className="h-6 w-16 mt-1" />
-                  ) : (
-                    <p className="text-xl font-bold">{card.value}</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <KpiCard key={i} {...card} loading={statsLoading} delay={i * 0.06} />
         ))}
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card className="border shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">{t("billing.recentInvoices")}</CardTitle>
+      {/* Bottom two panels */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Recent Invoices */}
+        <Card className="border shadow-sm overflow-hidden">
+          <CardHeader className="px-6 py-4 border-b border-border/60 bg-muted/20 flex flex-row items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-primary/10">
+                <Receipt className="h-4 w-4 text-primary" />
+              </div>
+              <CardTitle className="text-sm font-semibold">{t("billing.recentInvoices")}</CardTitle>
+            </div>
+            <Link href="/admin/billing/invoices" className="flex items-center gap-1 text-xs text-primary hover:underline font-medium">
+              <Link2 className="h-3 w-3" />
+              {t("billing.viewAll")}
+            </Link>
           </CardHeader>
           <CardContent className="p-0">
             {invLoading ? (
-              <div className="p-4 space-y-3">
-                {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 rounded" />)}
+              <div className="p-5 space-y-3">
+                {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
               </div>
             ) : !invoices?.length ? (
-              <div className="py-10 text-center text-muted-foreground text-sm">
-                <Receipt className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                {t("billing.empty.invoices")}
+              <div className="py-12 text-center text-muted-foreground text-sm">
+                <Receipt className="h-10 w-10 mx-auto mb-3 opacity-15" />
+                <p>{t("billing.empty.invoices")}</p>
               </div>
             ) : (
-              <div className="divide-y divide-border">
-                {invoices.slice(0, 5).map((inv) => (
-                  <div key={inv.id} className="flex items-center justify-between px-5 py-3">
-                    <div>
-                      <p className="text-sm font-medium">{inv.invoiceNumber}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {t("billing.col.user")}: #{inv.userId} · {new Date(inv.issueDate).toLocaleDateString()}
+              <div>
+                {invoices.slice(0, 6).map((inv, i) => (
+                  <motion.div
+                    key={inv.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.04 }}
+                    className={tableRowCls + " flex items-center justify-between"}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate">{inv.invoiceNumber}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t("billing.col.user")} #{inv.userId} · {formatDate(inv.issueDate)}
                       </p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-semibold">{inv.amount} {inv.currency}</span>
-                      <Badge variant="outline" className={`text-xs ${statusColors[inv.status] ?? ""}`}>
-                        {inv.status}
-                      </Badge>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-sm font-bold tabular-nums">
+                        {formatAmount(inv.amount, inv.currency)}
+                      </span>
+                      <InvoiceStatusBadge status={inv.status} />
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card className="border shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              {t("admin.billing.auditTitle")}
-            </CardTitle>
+        {/* Recent Audit Logs */}
+        <Card className="border shadow-sm overflow-hidden">
+          <CardHeader className="px-6 py-4 border-b border-border/60 bg-muted/20 flex flex-row items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-violet-500/10">
+                <Activity className="h-4 w-4 text-violet-600" />
+              </div>
+              <CardTitle className="text-sm font-semibold">{t("admin.billing.auditTitle")}</CardTitle>
+            </div>
+            <Link href="/admin/billing/audit-logs" className="flex items-center gap-1 text-xs text-primary hover:underline font-medium">
+              <Link2 className="h-3 w-3" />
+              {t("billing.viewAll")}
+            </Link>
           </CardHeader>
           <CardContent className="p-0">
             {logsLoading ? (
-              <div className="p-4 space-y-3">
-                {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-10 rounded" />)}
+              <div className="p-5 space-y-3">
+                {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 rounded-lg" />)}
               </div>
             ) : !auditLogs?.length ? (
-              <div className="py-10 text-center text-muted-foreground text-sm">
-                <Activity className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                {t("admin.billing.noAuditLogs")}
+              <div className="py-12 text-center text-muted-foreground text-sm">
+                <Activity className="h-10 w-10 mx-auto mb-3 opacity-15" />
+                <p>{t("admin.billing.noAuditLogs")}</p>
               </div>
             ) : (
-              <div className="divide-y divide-border">
-                {auditLogs.slice(0, 5).map((log) => (
-                  <div key={log.id} className="px-5 py-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{log.action}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {log.entityType}{log.entityId ? ` #${log.entityId}` : ""} · {new Date(log.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                      {log.userId && (
-                        <span className="text-xs text-muted-foreground shrink-0">#{log.userId}</span>
-                      )}
+              <div>
+                {auditLogs.slice(0, 6).map((log, i) => (
+                  <motion.div
+                    key={log.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.04 }}
+                    className={tableRowCls + " flex items-start justify-between gap-4"}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <ActionBadge action={log.action} />
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        {log.entityType}{log.entityId ? ` #${log.entityId}` : ""}
+                      </p>
                     </div>
-                  </div>
+                    <div className="text-right shrink-0">
+                      {log.userId && (
+                        <p className="text-xs font-medium text-muted-foreground">#{log.userId}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground/70 mt-0.5">
+                        {formatDateTime(log.createdAt)}
+                      </p>
+                    </div>
+                  </motion.div>
                 ))}
               </div>
             )}

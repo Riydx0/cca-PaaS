@@ -2,11 +2,14 @@ import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { adminFetch } from "@/lib/adminFetch";
 import { useQuery } from "@tanstack/react-query";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { Activity, User, Calendar, Info } from "lucide-react";
+import { Activity, Search, User } from "lucide-react";
 import { motion } from "framer-motion";
+import {
+  ActionBadge, formatDateTime, tableHeaderCls, tableRowCls,
+} from "@/components/billing";
 
 export function AuditLogsPage() {
   const { t, dir } = useI18n();
@@ -29,88 +32,106 @@ export function AuditLogsPage() {
 
   return (
     <div className="space-y-6" dir={dir}>
+      {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">{t("admin.billing.auditLogs")}</h1>
-        <p className="text-muted-foreground mt-1">{t("admin.billing.auditLogsDesc")}</p>
+        <h1 className="text-2xl font-bold tracking-tight">{t("admin.billing.auditLogs")}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t("admin.billing.auditLogsDesc")}</p>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Input
-          className="max-w-xs bg-card"
-          placeholder={t("admin.billing.searchAuditLogs")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      {/* Search bar */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            className="ps-9 w-64 bg-card"
+            placeholder={t("admin.billing.searchAuditLogs")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
         {filtered && (
-          <span className="text-sm text-muted-foreground">
+          <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full font-medium">
             {filtered.length} {t("admin.label.results")}
           </span>
         )}
       </div>
 
+      {/* Table */}
       <Card className="border shadow-sm overflow-hidden">
         {isLoading ? (
-          <div className="p-6 space-y-3">
-            {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-14 rounded-lg" />)}
-          </div>
+          <CardContent className="p-6 space-y-3">
+            {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
+          </CardContent>
         ) : !filtered?.length ? (
-          <div className="py-20 flex flex-col items-center text-center text-muted-foreground">
-            <Activity className="h-12 w-12 mb-3 opacity-20" />
-            <p>{t("admin.billing.noAuditLogs")}</p>
-          </div>
+          <CardContent className="py-20 flex flex-col items-center text-center text-muted-foreground">
+            <div className="p-4 rounded-full bg-muted mb-4">
+              <Activity className="h-8 w-8 opacity-40" />
+            </div>
+            <p className="font-semibold text-sm">{t("admin.billing.noAuditLogs")}</p>
+          </CardContent>
         ) : (
           <>
-            <div className="hidden lg:grid grid-cols-[1fr_140px_140px_120px_1fr] gap-4 px-5 py-3 bg-muted/40 border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className={tableHeaderCls + " grid-cols-[1.5fr_140px_120px_170px_1fr]"}>
               <span>{t("admin.billing.auditCol.action")}</span>
               <span>{t("admin.billing.auditCol.entityType")}</span>
               <span>{t("admin.billing.auditCol.user")}</span>
               <span>{t("admin.billing.auditCol.date")}</span>
               <span>{t("admin.billing.auditCol.details")}</span>
             </div>
-            <div className="divide-y divide-border">
+
+            <div>
               {filtered.map((log, i) => (
                 <motion.div
                   key={log.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: i * 0.01 }}
-                  className="grid grid-cols-1 lg:grid-cols-[1fr_140px_140px_120px_1fr] gap-3 lg:gap-4 items-start px-5 py-4 hover:bg-muted/30 transition-colors"
+                  className={tableRowCls + " grid grid-cols-1 lg:grid-cols-[1.5fr_140px_120px_170px_1fr] gap-3 lg:gap-4 items-start"}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="bg-primary/10 p-2 rounded-md hidden sm:block shrink-0">
-                      <Activity className="h-4 w-4 text-primary" />
+                  {/* Action */}
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-7 h-7 rounded-md bg-muted flex items-center justify-center shrink-0 mt-0.5 hidden sm:flex">
+                      <Activity className="h-3.5 w-3.5 text-muted-foreground" />
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-sm truncate">{log.action}</p>
+                    <div>
+                      <ActionBadge action={log.action} />
                       {log.entityId && (
-                        <p className="text-xs text-muted-foreground">#{log.entityId}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ID <span className="font-mono">#{log.entityId}</span>
+                        </p>
                       )}
                     </div>
                   </div>
 
-                  <div className="text-sm text-muted-foreground flex items-center gap-1.5">
-                    <Info className="h-3.5 w-3.5 shrink-0" />
-                    {log.entityType}
+                  {/* Entity type */}
+                  <div className="text-sm text-muted-foreground capitalize">
+                    {log.entityType ?? <span className="opacity-40">—</span>}
                   </div>
 
-                  <div className="text-sm text-muted-foreground flex items-center gap-1.5">
-                    <User className="h-3.5 w-3.5 shrink-0" />
-                    {log.userId ? `#${log.userId}` : "—"}
+                  {/* User */}
+                  <div className="flex items-center gap-1.5">
+                    <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-sm text-muted-foreground">
+                      {log.userId ? `#${log.userId}` : <span className="opacity-40">—</span>}
+                    </span>
                   </div>
 
-                  <div className="text-sm text-muted-foreground flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5 shrink-0" />
-                    {new Date(log.createdAt).toLocaleString()}
+                  {/* Timestamp */}
+                  <div className="text-xs text-muted-foreground">
+                    {formatDateTime(log.createdAt)}
                   </div>
 
-                  <div className="text-xs text-muted-foreground font-mono truncate max-w-full">
+                  {/* Details */}
+                  <div>
                     {log.details ? (
-                      <span className="bg-muted px-2 py-1 rounded text-xs block truncate">
+                      <span className="inline-block bg-muted px-2 py-1 rounded text-xs font-mono text-muted-foreground max-w-full truncate">
                         {typeof log.details === "object"
                           ? JSON.stringify(log.details)
                           : String(log.details)}
                       </span>
-                    ) : "—"}
+                    ) : (
+                      <span className="text-muted-foreground/40 text-xs">—</span>
+                    )}
                   </div>
                 </motion.div>
               ))}

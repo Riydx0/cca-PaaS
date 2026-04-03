@@ -2,27 +2,17 @@ import { useI18n } from "@/lib/i18n";
 import { adminFetch } from "@/lib/adminFetch";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
-import { Receipt, CreditCard, Clock, CheckCircle2, XCircle, DollarSign, ArrowRight } from "lucide-react";
+import {
+  Receipt, CreditCard, Clock, CheckCircle2, DollarSign,
+  ArrowRight, TrendingUp,
+} from "lucide-react";
 import { motion } from "framer-motion";
-
-const statusColors: Record<string, string> = {
-  Paid: "bg-emerald-500/10 text-emerald-700 border-emerald-200",
-  Pending: "bg-amber-500/10 text-amber-700 border-amber-200",
-  Issued: "bg-blue-500/10 text-blue-700 border-blue-200",
-  Draft: "bg-secondary text-secondary-foreground border-border",
-  Overdue: "bg-red-500/10 text-red-700 border-red-200",
-  Cancelled: "bg-secondary text-secondary-foreground border-border",
-};
-
-const paymentStatusColors: Record<string, string> = {
-  Completed: "bg-emerald-500/10 text-emerald-700 border-emerald-200",
-  Pending: "bg-amber-500/10 text-amber-700 border-amber-200",
-  Failed: "bg-red-500/10 text-red-700 border-red-200",
-  Refunded: "bg-purple-500/10 text-purple-700 border-purple-200",
-};
+import {
+  KpiCard, InvoiceStatusBadge, PaymentStatusBadge,
+  formatAmount, formatDate, tableHeaderCls, tableRowCls,
+} from "@/components/billing";
 
 export function BillingPage() {
   const { t, dir } = useI18n();
@@ -47,146 +37,163 @@ export function BillingPage() {
       label: t("billing.stat.totalInvoices"),
       value: stats?.total ?? 0,
       icon: Receipt,
-      color: "text-primary",
-      bg: "bg-primary/10",
-      loading: statsLoading,
+      iconColor: "text-primary",
+      iconBg: "bg-primary/10",
+      accentColor: "bg-primary",
     },
     {
       label: t("billing.stat.paid"),
       value: stats?.paid ?? 0,
       icon: CheckCircle2,
-      color: "text-emerald-600",
-      bg: "bg-emerald-500/10",
-      loading: statsLoading,
+      iconColor: "text-emerald-600",
+      iconBg: "bg-emerald-500/10",
+      accentColor: "bg-emerald-500",
     },
     {
       label: t("billing.stat.pending"),
       value: stats?.pending ?? 0,
       icon: Clock,
-      color: "text-amber-600",
-      bg: "bg-amber-500/10",
-      loading: statsLoading,
+      iconColor: "text-amber-600",
+      iconBg: "bg-amber-500/10",
+      accentColor: "bg-amber-500",
     },
     {
       label: t("billing.stat.totalAmount"),
-      value: stats ? `${stats.totalAmount} ${t("billing.currency")}` : "0.00",
+      value: stats ? formatAmount(stats.totalAmount, t("billing.currency")) : "0.00",
       icon: DollarSign,
-      color: "text-blue-600",
-      bg: "bg-blue-500/10",
-      loading: statsLoading,
+      iconColor: "text-blue-600",
+      iconBg: "bg-blue-500/10",
+      accentColor: "bg-blue-500",
     },
   ];
 
   return (
-    <div className="space-y-6" dir={dir}>
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">{t("nav.billing")}</h1>
-        <p className="text-muted-foreground mt-1">{t("billing.page.desc")}</p>
+    <div className="space-y-8" dir={dir}>
+      {/* Page header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{t("nav.billing")}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t("billing.page.desc")}</p>
+        </div>
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+          <TrendingUp className="h-3.5 w-3.5" />
+          {t("billing.currency")}
+        </div>
       </div>
 
+      {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpiCards.map((card, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}>
-            <Card className="border shadow-sm">
-              <CardContent className="p-5 flex items-center gap-4">
-                <div className={`p-2.5 rounded-xl ${card.bg}`}>
-                  <card.icon className={`h-5 w-5 ${card.color}`} />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">{card.label}</p>
-                  {card.loading ? (
-                    <Skeleton className="h-6 w-16 mt-1" />
-                  ) : (
-                    <p className="text-xl font-bold">{card.value}</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <KpiCard key={i} {...card} loading={statsLoading} delay={i * 0.07} />
         ))}
       </div>
 
+      {/* Recent tables */}
       <div className="grid md:grid-cols-2 gap-6">
-        <Card className="border shadow-sm">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-base font-semibold">{t("billing.recentInvoices")}</CardTitle>
-            <Link href="/billing/invoices" className="text-xs text-primary flex items-center gap-1 hover:underline">
+        {/* Recent Invoices */}
+        <Card className="border shadow-sm overflow-hidden">
+          <CardHeader className="px-6 py-4 border-b border-border/60 flex flex-row items-center justify-between bg-muted/20">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-primary/10">
+                <Receipt className="h-4 w-4 text-primary" />
+              </div>
+              <CardTitle className="text-sm font-semibold">{t("billing.recentInvoices")}</CardTitle>
+            </div>
+            <Link
+              href="/billing/invoices"
+              className="text-xs text-primary flex items-center gap-1 hover:underline font-medium"
+            >
               {t("billing.viewAll")}
               <ArrowRight className="h-3 w-3" />
             </Link>
           </CardHeader>
           <CardContent className="p-0">
             {invLoading ? (
-              <div className="p-4 space-y-3">
-                {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 rounded" />)}
+              <div className="p-5 space-y-3">
+                {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
               </div>
             ) : !invoices?.length ? (
-              <div className="py-10 text-center text-muted-foreground text-sm">
-                <Receipt className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                {t("billing.empty.invoices")}
+              <div className="py-12 text-center text-muted-foreground text-sm">
+                <Receipt className="h-10 w-10 mx-auto mb-3 opacity-15" />
+                <p className="font-medium">{t("billing.empty.invoices")}</p>
               </div>
             ) : (
-              <div className="divide-y divide-border">
-                {invoices.slice(0, 5).map((inv) => (
-                  <div key={inv.id} className="flex items-center justify-between px-5 py-3">
-                    <div>
-                      <p className="text-sm font-medium">{inv.invoiceNumber}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(inv.issueDate).toLocaleDateString()}
-                      </p>
+              <div>
+                {invoices.slice(0, 5).map((inv, i) => (
+                  <motion.div
+                    key={inv.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.04 }}
+                    className={tableRowCls + " flex items-center justify-between"}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate">{inv.invoiceNumber}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatDate(inv.issueDate)}</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-semibold">
-                        {inv.amount} {inv.currency}
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-sm font-bold tabular-nums text-foreground">
+                        {formatAmount(inv.amount, inv.currency)}
                       </span>
-                      <Badge variant="outline" className={`text-xs ${statusColors[inv.status] ?? ""}`}>
-                        {inv.status}
-                      </Badge>
+                      <InvoiceStatusBadge status={inv.status} />
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card className="border shadow-sm">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-base font-semibold">{t("billing.recentPayments")}</CardTitle>
-            <Link href="/billing/payments" className="text-xs text-primary flex items-center gap-1 hover:underline">
+        {/* Recent Payments */}
+        <Card className="border shadow-sm overflow-hidden">
+          <CardHeader className="px-6 py-4 border-b border-border/60 flex flex-row items-center justify-between bg-muted/20">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-emerald-500/10">
+                <CreditCard className="h-4 w-4 text-emerald-600" />
+              </div>
+              <CardTitle className="text-sm font-semibold">{t("billing.recentPayments")}</CardTitle>
+            </div>
+            <Link
+              href="/billing/payments"
+              className="text-xs text-primary flex items-center gap-1 hover:underline font-medium"
+            >
               {t("billing.viewAll")}
               <ArrowRight className="h-3 w-3" />
             </Link>
           </CardHeader>
           <CardContent className="p-0">
             {payLoading ? (
-              <div className="p-4 space-y-3">
-                {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 rounded" />)}
+              <div className="p-5 space-y-3">
+                {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
               </div>
             ) : !payments?.length ? (
-              <div className="py-10 text-center text-muted-foreground text-sm">
-                <CreditCard className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                {t("billing.empty.payments")}
+              <div className="py-12 text-center text-muted-foreground text-sm">
+                <CreditCard className="h-10 w-10 mx-auto mb-3 opacity-15" />
+                <p className="font-medium">{t("billing.empty.payments")}</p>
               </div>
             ) : (
-              <div className="divide-y divide-border">
-                {payments.slice(0, 5).map((pay) => (
-                  <div key={pay.id} className="flex items-center justify-between px-5 py-3">
-                    <div>
-                      <p className="text-sm font-medium">{pay.paymentMethod}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {pay.providerName ?? "—"} · {new Date(pay.createdAt).toLocaleDateString()}
+              <div>
+                {payments.slice(0, 5).map((pay, i) => (
+                  <motion.div
+                    key={pay.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.04 }}
+                    className={tableRowCls + " flex items-center justify-between"}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate">{pay.paymentMethod}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {pay.providerName ?? "—"} · {formatDate(pay.createdAt)}
                       </p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-semibold">
-                        {pay.amount} {pay.currency}
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-sm font-bold tabular-nums text-foreground">
+                        {formatAmount(pay.amount, pay.currency)}
                       </span>
-                      <Badge variant="outline" className={`text-xs ${paymentStatusColors[pay.status] ?? ""}`}>
-                        {pay.status}
-                      </Badge>
+                      <PaymentStatusBadge status={pay.status} />
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             )}
