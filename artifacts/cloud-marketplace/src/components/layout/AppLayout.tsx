@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
-import { useClerk, useUser } from "@clerk/react";
+import { useAuth } from "@/contexts/AuthContext";
 import { useRole } from "@/hooks/useRole";
 import { LayoutDashboard, Server, Receipt, Menu, LogOut, Cloud, ShieldCheck } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -10,8 +10,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 export function AppLayout({ children }: { children: ReactNode }) {
   const { t, language, setLanguage } = useI18n();
   const [location] = useLocation();
-  const { signOut } = useClerk();
-  const { user } = useUser();
+  const { user, signOut } = useAuth();
   const { isAdmin } = useRole();
 
   const toggleLanguage = () => {
@@ -67,10 +66,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
     <div className="p-4 border-t border-sidebar-border space-y-3 shrink-0">
       <div className="flex items-center gap-3 px-1">
         <div className="h-8 w-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-sm shrink-0 uppercase">
-          {user?.firstName?.[0] ?? user?.emailAddresses[0]?.emailAddress?.charAt(0) ?? "U"}
+          {user?.name?.[0] ?? user?.email?.[0] ?? "U"}
         </div>
         <div className="text-sm truncate text-sidebar-foreground/70 font-medium flex-1 min-w-0">
-          {user?.emailAddresses[0]?.emailAddress}
+          {user?.email}
         </div>
       </div>
       <Button

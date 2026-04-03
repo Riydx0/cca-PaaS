@@ -1,28 +1,22 @@
 import { randomBytes } from "crypto";
 import { logger } from "./lib/logger";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { settingsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
-async function loadSettingsFromDb(): Promise<void> {
+async function ensureSessionTable(): Promise<void> {
   try {
-    const rows = await db
-      .select()
-      .from(settingsTable)
-      .where(eq(settingsTable.key, "CLERK_SECRET_KEY"));
-
-    if (rows.length > 0 && rows[0].value) {
-      process.env["CLERK_SECRET_KEY"] = rows[0].value;
-      logger.info("Loaded CLERK_SECRET_KEY from database settings");
-    } else {
-      logger.warn(
-        "CLERK_SECRET_KEY not in database — setup wizard not yet completed",
-      );
-    }
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "user_sessions" (
+        "sid" varchar NOT NULL COLLATE "default",
+        "sess" json NOT NULL,
+        "expire" timestamp(6) NOT NULL,
+        CONSTRAINT "session_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE
+      ) WITH (OIDS=FALSE);
+      CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "user_sessions" ("expire");
+    `);
   } catch {
-    logger.warn(
-      "Could not query settings table (first run or table not yet created)",
-    );
+    logger.warn("Could not ensure user_sessions table exists");
   }
 }
 
@@ -66,15 +60,9 @@ async function ensureSetupToken(): Promise<void> {
   }
 }
 
-// Load CLERK_SECRET_KEY from DB BEFORE app.ts is evaluated.
-// Static ESM imports are hoisted and evaluated immediately, so we use a
-// top-level await here to ensure process.env is set before clerkMiddleware()
-// in app.ts has a chance to read it.
-await loadSettingsFromDb();
+await ensureSessionTable();
 await ensureSetupToken();
 
-// Dynamic import defers app.ts evaluation until after the await above.
-// This guarantees clerkMiddleware() initializes with the DB-loaded key.
 const { default: app } = await import("./app.js");
 
 const rawPort = process.env["PORT"];

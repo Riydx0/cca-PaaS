@@ -9,19 +9,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Search, ShieldCheck, User } from "lucide-react";
+import { Users, Search } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
-interface ClerkUser {
+interface AppUser {
   id: string;
   email: string;
-  firstName: string;
-  lastName: string;
-  imageUrl: string;
+  name: string;
   role: string;
   createdAt: string;
-  lastSignInAt: string | null;
 }
 
 const roleColors: Record<string, string> = {
@@ -36,7 +33,7 @@ export function AdminUsers() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
 
-  const { data, isLoading } = useQuery<{ users: ClerkUser[]; totalCount: number }>({
+  const { data, isLoading } = useQuery<{ users: AppUser[]; totalCount: number }>({
     queryKey: ["admin", "users", search],
     queryFn: () =>
       adminFetch(`/api/admin/users?search=${encodeURIComponent(search)}&limit=50`),
@@ -104,12 +101,10 @@ export function AdminUsers() {
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm uppercase shrink-0">
-                      {u.firstName?.[0] ?? u.email?.[0] ?? "?"}
+                      {u.name?.[0] ?? u.email?.[0] ?? "?"}
                     </div>
                     <div className="min-w-0">
-                      <p className="font-semibold truncate">
-                        {u.firstName || u.lastName ? `${u.firstName} ${u.lastName}`.trim() : u.email}
-                      </p>
+                      <p className="font-semibold truncate">{u.name || u.email}</p>
                       <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                     </div>
                   </div>

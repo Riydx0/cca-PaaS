@@ -1,41 +1,12 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { settingsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { settingsTable, usersTable } from "@workspace/db/schema";
+import { eq, count } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 
 const router = Router();
 
-function validateSetupBody(body: unknown): {
-  clerkPublishableKey: string;
-  clerkSecretKey: string;
-  appUrl: string;
-  setupToken: string;
-} | { error: string } {
-  if (!body || typeof body !== "object") return { error: "Request body is required" };
-  const { clerkPublishableKey, clerkSecretKey, appUrl, setupToken } = body as Record<string, unknown>;
-
-  if (typeof clerkPublishableKey !== "string" || !clerkPublishableKey.startsWith("pk_")) {
-    return { error: "clerkPublishableKey must start with pk_live_ or pk_test_" };
-  }
-  if (typeof clerkSecretKey !== "string" || !clerkSecretKey.startsWith("sk_")) {
-    return { error: "clerkSecretKey must start with sk_live_ or sk_test_" };
-  }
-  if (typeof appUrl !== "string") {
-    return { error: "appUrl is required" };
-  }
-  try {
-    new URL(appUrl);
-  } catch {
-    return { error: "appUrl must be a valid URL (e.g. https://example.com)" };
-  }
-  if (typeof setupToken !== "string" || setupToken.trim().length === 0) {
-    return { error: "setupToken is required" };
-  }
-
-  return { clerkPublishableKey, clerkSecretKey, appUrl, setupToken: setupToken.trim() };
-}
-
-router.post("/setup", async (req, res) => {
+router.post("/setup", async (req: any, res) => {
   try {
     const existing = await db
       .select()
@@ -43,34 +14,77 @@ router.post("/setup", async (req, res) => {
       .where(eq(settingsTable.key, "SETUP_COMPLETE"));
 
     if (existing.length > 0 && existing[0].value === "true") {
-      return res.status(403).json({ error: "Setup is already complete" });
+      res.status(403).json({ error: "Setup is already complete" });
+      return;
     }
 
-    const validated = validateSetupBody(req.body);
-    if ("error" in validated) {
-      return res.status(400).json(validated);
+    const { appUrl, setupToken, adminName, adminEmail, adminPassword } = req.body;
+
+    if (!appUrl || typeof appUrl !== "string") {
+      res.status(400).json({ error: "appUrl is required" });
+      return;
+    }
+    try { new URL(appUrl); } catch {
+      res.status(400).json({ error: "appUrl must be a valid URL (e.g. https://example.com)" });
+      return;
     }
 
-    const { clerkPublishableKey, clerkSecretKey, appUrl, setupToken } = validated;
+    if (!setupToken || typeof setupToken !== "string" || setupToken.trim().length === 0) {
+      res.status(400).json({ error: "setupToken is required" });
+      return;
+    }
 
-    // Validate bootstrap token against the one generated on startup
+    if (!adminName || typeof adminName !== "string" || adminName.trim().length < 2) {
+      res.status(400).json({ error: "Admin name must be at least 2 characters" });
+      return;
+    }
+    if (!adminEmail || typeof adminEmail !== "string" || !adminEmail.includes("@")) {
+      res.status(400).json({ error: "Valid admin email is required" });
+      return;
+    }
+    if (!adminPassword || typeof adminPassword !== "string" || adminPassword.length < 8) {
+      res.status(400).json({ error: "Admin password must be at least 8 characters" });
+      return;
+    }
+
     const tokenRows = await db
       .select()
       .from(settingsTable)
       .where(eq(settingsTable.key, "SETUP_TOKEN"));
 
     if (tokenRows.length === 0 || !tokenRows[0].value) {
-      return res.status(500).json({ error: "Setup token not initialized — restart the API server" });
+      res.status(500).json({ error: "Setup token not initialized — restart the API server" });
+      return;
     }
 
-    if (setupToken !== tokenRows[0].value) {
-      return res.status(401).json({ error: "Invalid setup token. Check the API server startup logs." });
+    if (setupToken.trim() !== tokenRows[0].value) {
+      res.status(401).json({ error: "Invalid setup token. Check the API server startup logs." });
+      return;
     }
+
+    const [userCountRow] = await db.select({ count: count() }).from(usersTable);
+    const userCount = Number(userCountRow?.count ?? 0);
+
+    if (userCount > 0) {
+      res.status(403).json({ error: "An admin account already exists." });
+      return;
+    }
+
+    const normalizedEmail = adminEmail.toLowerCase().trim();
+    const passwordHash = await bcrypt.hash(adminPassword, 10);
+
+    const [adminUser] = await db
+      .insert(usersTable)
+      .values({
+        email: normalizedEmail,
+        name: adminName.trim(),
+        passwordHash,
+        role: "super_admin",
+      })
+      .returning({ id: usersTable.id });
 
     const entries = [
-      { key: "CLERK_PUBLISHABLE_KEY", value: clerkPublishableKey },
-      { key: "CLERK_SECRET_KEY", value: clerkSecretKey },
-      { key: "APP_URL", value: appUrl },
+      { key: "APP_URL", value: appUrl.trim().replace(/\/$/, "") },
       { key: "SETUP_COMPLETE", value: "true" },
     ];
 
@@ -84,18 +98,13 @@ router.post("/setup", async (req, res) => {
         });
     }
 
-    process.env["CLERK_SECRET_KEY"] = clerkSecretKey;
+    req.session.userId = adminUser.id;
+    req.session.userRole = "super_admin";
 
-    res.json({ success: true, restarting: true });
-
-    // Restart the API process so clerkMiddleware (initialized at boot) re-reads
-    // the DB-stored secret key correctly. Docker's restart:unless-stopped policy
-    // will bring it back up automatically within a second or two.
-    setTimeout(() => {
-      process.exit(0);
-    }, 500);
-  } catch {
-    return res.status(500).json({ error: "Database error during setup" });
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: "Database error during setup" });
   }
 });
 

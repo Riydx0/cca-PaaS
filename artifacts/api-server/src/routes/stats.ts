@@ -1,24 +1,13 @@
 import { Router, type IRouter } from "express";
-import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
 import { cloudServicesTable, serverOrdersTable } from "@workspace/db/schema";
 import { eq, count, avg, desc } from "drizzle-orm";
+import { requireAuth } from "../middlewares/requireRole";
 
 const router: IRouter = Router();
 
-function requireAuth(req: any, res: any, next: any) {
-  const auth = getAuth(req);
-  const userId = auth?.userId;
-  if (!userId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  req.userId = userId;
-  next();
-}
-
 router.get("/dashboard", requireAuth, async (req: any, res) => {
-  const userId = req.userId as string;
+  const userId = String(req.currentUser.id);
 
   const allOrders = await db
     .select({

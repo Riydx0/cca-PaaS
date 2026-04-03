@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useI18n } from "@/lib/i18n";
-import { useClerk, useUser } from "@clerk/react";
+import { useAuth } from "@/contexts/AuthContext";
 import { useRole } from "@/hooks/useRole";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -13,8 +13,7 @@ import {
 export function AdminLayout({ children }: { children: ReactNode }) {
   const { t, language, setLanguage } = useI18n();
   const [location] = useLocation();
-  const { signOut } = useClerk();
-  const { user } = useUser();
+  const { user, signOut } = useAuth();
   const { isSuperAdmin } = useRole();
 
   const navItems = [
@@ -79,10 +78,10 @@ export function AdminLayout({ children }: { children: ReactNode }) {
       <div className="p-4 border-t border-sidebar-border shrink-0">
         <div className="flex items-center gap-3 mb-3 px-1">
           <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center text-sidebar-foreground font-bold text-sm uppercase shrink-0">
-            {user?.firstName?.[0] ?? user?.emailAddresses[0]?.emailAddress?.[0] ?? "?"}
+            {user?.name?.[0] ?? user?.email?.[0] ?? "?"}
           </div>
           <p className="text-sm text-sidebar-foreground/70 truncate flex-1">
-            {user?.emailAddresses[0]?.emailAddress}
+            {user?.email}
           </p>
         </div>
         <Button

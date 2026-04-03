@@ -1,27 +1,25 @@
-import { useEffect, useRef, useState } from "react";
-import { ClerkProvider, Show, useClerk, useAuth } from '@clerk/react';
+import { useEffect, useState } from "react";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from 'wouter';
-import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { I18nProvider } from "@/lib/i18n";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AdminLayout } from "@/components/layout/AdminLayout";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { useRole } from "@/hooks/useRole";
 import { Loader2, ServerCrash } from "lucide-react";
 
-// User Pages
 import { Landing } from "@/pages/Landing";
 import { SignInPage } from "@/pages/SignInPage";
 import { SignUpPage } from "@/pages/SignUpPage";
+import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
 import { Dashboard } from "@/pages/Dashboard";
 import { Services } from "@/pages/Services";
 import { Orders } from "@/pages/Orders";
-import { Bootstrap } from "@/pages/Bootstrap";
 import { SetupPage } from "@/pages/SetupPage";
 
-// Admin Pages
 import { AdminDashboard } from "@/pages/admin/AdminDashboard";
 import { AdminUsers } from "@/pages/admin/AdminUsers";
 import { AdminOrders } from "@/pages/admin/AdminOrders";
@@ -29,30 +27,7 @@ import { AdminServices } from "@/pages/admin/AdminServices";
 import { AdminSystemUpdates } from "@/pages/admin/AdminSystemUpdates";
 
 const queryClient = new QueryClient();
-
-function normalizeOptionalEnv(value: string | undefined): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-const clerkProxyUrl = normalizeOptionalEnv(import.meta.env.VITE_CLERK_PROXY_URL);
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-const buildTimePK = normalizeOptionalEnv(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
-
-function stripBase(path: string): string {
-  return basePath && path.startsWith(basePath)
-    ? path.slice(basePath.length) || "/"
-    : path;
-}
-
-type AppConfig = {
-  setupComplete: boolean;
-  clerkPublishableKey: string | null;
-  appUrl: string | null;
-  appUrlHint: string | null;
-};
 
 function LoadingScreen() {
   return (
@@ -77,28 +52,6 @@ function ErrorScreen({ message }: { message: string }) {
   );
 }
 
-function ClerkQueryClientCacheInvalidator() {
-  const { addListener } = useClerk();
-  const qc = useQueryClient();
-  const prevUserIdRef = useRef<string | null | undefined>(undefined);
-
-  useEffect(() => {
-    const unsubscribe = addListener(({ user }) => {
-      const userId = user?.id ?? null;
-      if (
-        prevUserIdRef.current !== undefined &&
-        prevUserIdRef.current !== userId
-      ) {
-        qc.clear();
-      }
-      prevUserIdRef.current = userId;
-    });
-    return unsubscribe;
-  }, [addListener, qc]);
-
-  return null;
-}
-
 function HomeRedirect() {
   const { isLoaded, isSignedIn } = useAuth();
   if (!isLoaded) return <Landing />;
@@ -108,8 +61,8 @@ function HomeRedirect() {
 
 function ProtectedRoute({ component: Component }: { component: any }) {
   const { isLoaded, isSignedIn } = useAuth();
-  if (!isLoaded) return null;
-  if (!isSignedIn) return <Redirect to="/" />;
+  if (!isLoaded) return <LoadingScreen />;
+  if (!isSignedIn) return <Redirect to="/sign-in" />;
   return (
     <AppLayout>
       <Component />
@@ -118,151 +71,109 @@ function ProtectedRoute({ component: Component }: { component: any }) {
 }
 
 function AdminRoute({ component: Component, superAdminOnly = false }: { component: any; superAdminOnly?: boolean }) {
-  const { isAdmin, isSuperAdmin, isLoaded } = useRole();
+  const { isLoaded, isSignedIn } = useAuth();
+  const { isAdmin, isSuperAdmin } = useRole();
 
-  if (!isLoaded) return null;
-
-  if (superAdminOnly && !isSuperAdmin) {
-    return (
-      <Show when="signed-in">
-        <Redirect to="/admin/dashboard" />
-      </Show>
-    );
-  }
+  if (!isLoaded) return <LoadingScreen />;
+  if (!isSignedIn) return <Redirect to="/sign-in" />;
+  if (superAdminOnly && !isSuperAdmin) return <Redirect to="/admin/dashboard" />;
+  if (!isAdmin) return <Redirect to="/dashboard" />;
 
   return (
-    <>
-      <Show when="signed-in">
-        {isAdmin ? (
-          <AdminLayout>
-            <Component />
-          </AdminLayout>
-        ) : (
-          <Redirect to="/dashboard" />
-        )}
-      </Show>
-      <Show when="signed-out">
-        <Redirect to="/" />
-      </Show>
-    </>
+    <AdminLayout>
+      <Component />
+    </AdminLayout>
   );
 }
 
-function ClerkProviderWithRoutes({ publishableKey }: { publishableKey: string }) {
-  const [, setLocation] = useLocation();
-
+function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
   return (
-    <ClerkProvider
-      publishableKey={publishableKey}
-      {...(clerkProxyUrl ? { proxyUrl: clerkProxyUrl } : {})}
-      routerPush={(to) => setLocation(stripBase(to))}
-      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
-    >
-      <QueryClientProvider client={queryClient}>
-        <ClerkQueryClientCacheInvalidator />
-        <Switch>
-          <Route path="/" component={HomeRedirect} />
-          <Route path="/sign-in/*?" component={SignInPage} />
-          <Route path="/sign-up/*?" component={SignUpPage} />
-          <Route path="/bootstrap" component={Bootstrap} />
+    <Switch>
+      <Route path="/" component={HomeRedirect} />
+      <Route path="/sign-in" component={SignInPage} />
+      <Route path="/sign-up" component={SignUpPage} />
+      <Route path="/forgot-password" component={ForgotPasswordPage} />
 
-          {/* User Routes */}
-          <Route path="/dashboard">
-            <ProtectedRoute component={Dashboard} />
-          </Route>
-          <Route path="/services">
-            <ProtectedRoute component={Services} />
-          </Route>
-          <Route path="/orders">
-            <ProtectedRoute component={Orders} />
-          </Route>
+      <Route path="/dashboard">
+        <ProtectedRoute component={Dashboard} />
+      </Route>
+      <Route path="/services">
+        <ProtectedRoute component={Services} />
+      </Route>
+      <Route path="/orders">
+        <ProtectedRoute component={Orders} />
+      </Route>
 
-          {/* Admin Routes */}
-          <Route path="/admin">
-            <Redirect to="/admin/dashboard" />
-          </Route>
-          <Route path="/admin/dashboard">
-            <AdminRoute component={AdminDashboard} />
-          </Route>
-          <Route path="/admin/users">
-            <AdminRoute component={AdminUsers} />
-          </Route>
-          <Route path="/admin/orders">
-            <AdminRoute component={AdminOrders} />
-          </Route>
-          <Route path="/admin/services">
-            <AdminRoute component={AdminServices} />
-          </Route>
-          <Route path="/admin/system">
-            <AdminRoute component={AdminSystemUpdates} superAdminOnly />
-          </Route>
+      <Route path="/admin">
+        <Redirect to="/admin/dashboard" />
+      </Route>
+      <Route path="/admin/dashboard">
+        <AdminRoute component={AdminDashboard} />
+      </Route>
+      <Route path="/admin/users">
+        <AdminRoute component={AdminUsers} />
+      </Route>
+      <Route path="/admin/orders">
+        <AdminRoute component={AdminOrders} />
+      </Route>
+      <Route path="/admin/services">
+        <AdminRoute component={AdminServices} />
+      </Route>
+      <Route path="/admin/system">
+        <AdminRoute component={AdminSystemUpdates} superAdminOnly />
+      </Route>
 
-          <Route component={NotFound} />
-        </Switch>
-      </QueryClientProvider>
-    </ClerkProvider>
+      <Route component={NotFound} />
+    </Switch>
   );
 }
 
 function AppRouter() {
-  const [config, setConfig] = useState<AppConfig | null>(null);
-  const [loadingConfig, setLoadingConfig] = useState(!buildTimePK);
+  const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
-  const [runtimePK, setRuntimePK] = useState<string | null>(null);
 
   useEffect(() => {
-    if (buildTimePK) return;
-
-    fetch("/api/config")
+    fetch("/api/config", { credentials: "include" })
       .then((r) => {
-        if (!r.ok) throw new Error(`API /config returned HTTP ${r.status}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
-      .then((data: AppConfig) => {
-        setConfig(data);
-        if (data.clerkPublishableKey) {
-          setRuntimePK(data.clerkPublishableKey);
-        }
+      .then((data) => {
+        setSetupComplete(data.setupComplete === true);
       })
       .catch(() => {
         setConfigError("Cannot connect to the API server. Make sure all Docker containers are running.");
-      })
-      .finally(() => setLoadingConfig(false));
+      });
   }, []);
 
-  if (loadingConfig) return <LoadingScreen />;
+  if (setupComplete === null && !configError) return <LoadingScreen />;
   if (configError) return <ErrorScreen message={configError} />;
 
-  const publishableKey = buildTimePK ?? runtimePK;
-
-  if (!publishableKey || (config && !config.setupComplete)) {
+  if (!setupComplete) {
     return (
       <WouterRouter base={basePath}>
-        <Switch>
-          <Route path="/setup">
-            <SetupPage
-              appUrlHint={config?.appUrlHint ?? null}
-              onSetupComplete={(pk) => {
-                setRuntimePK(pk);
-                setConfig((prev) => ({
-                  ...prev!,
-                  setupComplete: true,
-                  clerkPublishableKey: pk,
-                }));
-              }}
-            />
-          </Route>
-          <Route>
-            <Redirect to="/setup" />
-          </Route>
-        </Switch>
+        <AuthProvider>
+          <Switch>
+            <Route path="/setup">
+              <SetupPage
+                appUrlHint={null}
+                onSetupComplete={() => setSetupComplete(true)}
+              />
+            </Route>
+            <Route>
+              <Redirect to="/setup" />
+            </Route>
+          </Switch>
+        </AuthProvider>
       </WouterRouter>
     );
   }
 
   return (
     <WouterRouter base={basePath}>
-      <ClerkProviderWithRoutes publishableKey={publishableKey} />
+      <AuthProvider>
+        <AppRoutes onSetupNeeded={() => setSetupComplete(false)} />
+      </AuthProvider>
     </WouterRouter>
   );
 }
@@ -270,10 +181,12 @@ function AppRouter() {
 function App() {
   return (
     <I18nProvider>
-      <TooltipProvider>
-        <AppRouter />
-        <Toaster />
-      </TooltipProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <AppRouter />
+          <Toaster />
+        </TooltipProvider>
+      </QueryClientProvider>
     </I18nProvider>
   );
 }

@@ -1,22 +1,11 @@
 import { Router, type IRouter } from "express";
-import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
 import { cloudServicesTable, serverOrdersTable } from "@workspace/db/schema";
 import { CreateOrderBody } from "@workspace/api-zod";
 import { eq, and, desc } from "drizzle-orm";
+import { requireAuth } from "../middlewares/requireRole";
 
 const router: IRouter = Router();
-
-function requireAuth(req: any, res: any, next: any) {
-  const auth = getAuth(req);
-  const userId = auth?.userId;
-  if (!userId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  req.userId = userId;
-  next();
-}
 
 function formatOrder(order: any, service?: any) {
   return {
@@ -32,7 +21,7 @@ function formatOrder(order: any, service?: any) {
 }
 
 router.get("/", requireAuth, async (req: any, res) => {
-  const userId = req.userId as string;
+  const userId = String(req.currentUser.id);
 
   const orders = await db
     .select({
@@ -49,7 +38,7 @@ router.get("/", requireAuth, async (req: any, res) => {
 });
 
 router.post("/", requireAuth, async (req: any, res) => {
-  const userId = req.userId as string;
+  const userId = String(req.currentUser.id);
   const parsed = CreateOrderBody.safeParse(req.body);
 
   if (!parsed.success) {
@@ -69,7 +58,6 @@ router.post("/", requireAuth, async (req: any, res) => {
     return;
   }
 
-  // Mock provisioning
   const externalOrderId = `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const providerResponse = JSON.stringify({
     status: "accepted",
@@ -95,7 +83,7 @@ router.post("/", requireAuth, async (req: any, res) => {
 });
 
 router.get("/:id", requireAuth, async (req: any, res) => {
-  const userId = req.userId as string;
+  const userId = String(req.currentUser.id);
   const id = parseInt(req.params.id, 10);
 
   if (isNaN(id)) {
