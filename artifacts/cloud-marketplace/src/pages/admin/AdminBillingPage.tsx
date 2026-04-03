@@ -98,7 +98,7 @@ export function AdminBillingPage() {
               </div>
               <CardTitle className="text-sm font-semibold">{t("billing.recentInvoices")}</CardTitle>
             </div>
-            <Link href="/admin/billing/invoices" className="flex items-center gap-1 text-xs text-primary hover:underline font-medium">
+            <Link href="/admin/invoices" className="flex items-center gap-1 text-xs text-primary hover:underline font-medium">
               <Link2 className="h-3 w-3" />
               {t("billing.viewAll")}
             </Link>
@@ -151,7 +151,7 @@ export function AdminBillingPage() {
               </div>
               <CardTitle className="text-sm font-semibold">{t("admin.billing.auditTitle")}</CardTitle>
             </div>
-            <Link href="/admin/billing/audit-logs" className="flex items-center gap-1 text-xs text-primary hover:underline font-medium">
+            <Link href="/admin/audit-logs" className="flex items-center gap-1 text-xs text-primary hover:underline font-medium">
               <Link2 className="h-3 w-3" />
               {t("billing.viewAll")}
             </Link>
