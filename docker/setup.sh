@@ -2,7 +2,6 @@
 # ============================================================
 #  cca-PaaS — Interactive Setup Script
 #  Generates .env, configures nginx, and launches Docker.
-#  Clerk keys are configured via the web UI on first visit.
 # ============================================================
 set -e
 
@@ -43,15 +42,6 @@ server {
         proxy_connect_timeout 10s;
     }
 
-    location /api/__clerk/ {
-        proxy_pass http://api:8080/api/__clerk/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
@@ -66,7 +56,7 @@ NGINXEOF
 }
 
 # HTTP with specific server_name — used as fallback when SSL cert is unavailable
-# but a domain was entered. Better than server_name _ which accepts all hosts.
+# but a domain was entered.
 generate_nginx_http_domain() {
   local domain="$1"
   cat > docker/nginx.conf <<NGINXEOF
@@ -88,15 +78,6 @@ server {
         proxy_connect_timeout 10s;
     }
 
-    location /api/__clerk/ {
-        proxy_pass http://api:8080/api/__clerk/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
@@ -111,14 +92,10 @@ NGINXEOF
 }
 
 # Cloudflare: trusted real IP resolution + safe proto detection only from CF IPs
-# Uses: set_real_ip_from (trusted proxy CIDR list) + real_ip_header CF-Connecting-IP
-# Then geo on $realip_remote_addr to detect CF edge connections and trust their
-# X-Forwarded-Proto header only when the TCP connection is from a Cloudflare IP.
 generate_nginx_cloudflare() {
   local domain="$1"
   cat > docker/nginx.conf <<NGINXEOF
-# Cloudflare trusted proxy ranges — nginx replaces \$remote_addr with
-# the real client IP from the CF-Connecting-IP header only for these CIDRs.
+# Cloudflare trusted proxy ranges
 set_real_ip_from 103.21.244.0/22;
 set_real_ip_from 103.22.200.0/22;
 set_real_ip_from 103.31.4.0/22;
@@ -144,9 +121,6 @@ set_real_ip_from 2c0f:f248::/32;
 real_ip_header   CF-Connecting-IP;
 real_ip_recursive on;
 
-# Detect whether the TCP connection came from a Cloudflare edge node.
-# \$realip_remote_addr holds the original connection IP after real-IP substitution.
-# This prevents non-CF clients from spoofing X-Forwarded-Proto.
 geo \$realip_remote_addr \$from_cloudflare {
     default          0;
     103.21.244.0/22  1;
@@ -177,8 +151,6 @@ server {
     listen 80;
     server_name ${domain};
 
-    # Trust X-Forwarded-Proto only when the connection comes from a Cloudflare IP.
-    # Direct (non-CF) connections fall back to the local \$scheme to prevent spoofing.
     set \$real_scheme \$scheme;
     if (\$from_cloudflare = 1) {
         set \$real_scheme \$http_x_forwarded_proto;
@@ -196,15 +168,6 @@ server {
         proxy_set_header X-Forwarded-Proto \$real_scheme;
         proxy_read_timeout 60s;
         proxy_connect_timeout 10s;
-    }
-
-    location /api/__clerk/ {
-        proxy_pass http://api:8080/api/__clerk/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$real_scheme;
     }
 
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
@@ -257,15 +220,6 @@ server {
         proxy_connect_timeout 10s;
     }
 
-    location /api/__clerk/ {
-        proxy_pass http://api:8080/api/__clerk/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
@@ -306,9 +260,6 @@ print_success() {
   echo -e "  Open your browser and finish setup:"
   echo -e "  ${BOLD}${CYAN}${display_url}/setup${RESET}"
   echo ""
-  echo -e "  ${DIM}You will be asked to enter your Clerk API keys${RESET}"
-  echo -e "  ${DIM}and your app URL — this only happens once.${RESET}"
-  echo ""
   echo -e "  Useful commands:"
   echo -e "  ${DIM}docker compose logs -f       # view live logs${RESET}"
   echo -e "  ${DIM}docker compose down          # stop the app${RESET}"
@@ -326,7 +277,6 @@ echo -e "${BOLD}╚════════════════════�
 echo ""
 echo -e "${DIM}  This script will configure your environment and launch${RESET}"
 echo -e "${DIM}  cca-PaaS with Docker. It takes about 2-5 minutes.${RESET}"
-echo -e "${DIM}  Clerk API keys are configured via the web UI after launch.${RESET}"
 echo ""
 
 # ── dependency checks ────────────────────────────────────────
@@ -405,6 +355,7 @@ echo ""
 
 DOMAIN=""
 APP_URL=""
+COOKIE_SECURE="false"
 
 if [ -n "$DOMAIN_INPUT" ]; then
   # Normalize: strip protocol prefix and trailing slashes
@@ -426,9 +377,9 @@ if [ -n "$DOMAIN_INPUT" ]; then
   if $USE_CF; then
     # ── Cloudflare mode ──────────────────────────────────────
     APP_URL="https://${DOMAIN}"
+    COOKIE_SECURE="true"
     info "Generating nginx config for Cloudflare..."
     generate_nginx_cloudflare "$DOMAIN"
-    # Remove stale SSL override from a previous Let's Encrypt run (mode change)
     rm -f docker-compose.override.yml
     success "nginx.conf: Cloudflare proxy mode (HTTP origin, HTTPS at edge)."
     echo ""
@@ -477,8 +428,8 @@ if [ -n "$DOMAIN_INPUT" ]; then
         success "SSL certificate obtained for ${DOMAIN}."
         info "Generating HTTPS nginx config..."
         generate_nginx_ssl "$DOMAIN"
-        # Create override to expose port 443 on the host
         generate_compose_ssl_override
+        COOKIE_SECURE="true"
         success "nginx.conf configured with HTTPS (Let's Encrypt)."
         success "docker-compose.override.yml created (port 443 enabled)."
       else
@@ -489,7 +440,6 @@ if [ -n "$DOMAIN_INPUT" ]; then
         warn "Falling back to HTTP-only mode."
         APP_URL="http://${DOMAIN}"
         generate_nginx_http_domain "$DOMAIN"
-        # Remove stale SSL override if present from a previous run
         rm -f docker-compose.override.yml
       fi
     fi
@@ -521,15 +471,15 @@ info "Writing .env file..."
   echo ""
   echo "SESSION_SECRET=${SESSION_SECRET}"
   echo ""
+  echo "# Set to true when serving over HTTPS (enables secure cookies)"
+  echo "COOKIE_SECURE=${COOKIE_SECURE}"
+  echo ""
   if [ -n "$APP_URL" ]; then
     echo "APP_URL=${APP_URL}"
     echo ""
   fi
   echo "# Optional: port to expose on the host machine (default: 80)"
   echo "# LISTEN_PORT=80"
-  echo ""
-  echo "# Optional: custom domain Clerk proxy (requires DNS setup)"
-  echo "# VITE_CLERK_PROXY_URL=https://yourdomain.com/api/__clerk"
 } > .env
 
 success ".env file created."

@@ -5,7 +5,7 @@ A premium B2B cloud infrastructure marketplace that lets enterprises browse, com
 ## Features
 
 - **Multi-provider Catalog** — Contabo, Google Cloud, Alibaba Cloud, Huawei Cloud
-- **Authentication** — Secure sign-in / sign-up with role-based access control
+- **Authentication** — Secure sign-in / sign-up with role-based access control (custom auth, no third-party)
 - **Dashboard** — Real-time stats: active services, pending deployments, failed provisioning
 - **Order Management** — Full lifecycle tracking (Pending → Provisioning → Active / Failed / Cancelled)
 - **Admin Panel** — User management, order control, service CRUD, system updates
@@ -18,10 +18,9 @@ A premium B2B cloud infrastructure marketplace that lets enterprises browse, com
 |---|---|
 | Frontend | React 19 + Vite + TypeScript |
 | UI | Tailwind CSS + shadcn/ui |
-| Auth | Clerk |
+| Auth | Custom (express-session + bcrypt + PostgreSQL) |
 | Backend | Express 5 + TypeScript |
 | Database | PostgreSQL + Drizzle ORM |
-| API Spec | OpenAPI 3.1 + Orval codegen |
 | Monorepo | pnpm workspaces |
 
 ## Project Structure
@@ -32,11 +31,8 @@ cca-PaaS/
 │   ├── api-server/          # Express REST API
 │   └── cloud-marketplace/   # React + Vite frontend
 ├── lib/
-│   ├── api-spec/            # OpenAPI specification
-│   ├── api-client-react/    # Auto-generated React Query hooks
-│   ├── api-zod/             # Auto-generated Zod schemas
 │   └── db/                  # Drizzle schema + DB connection
-└── scripts/                 # Utility scripts
+└── docker/                  # Docker + nginx configs
 ```
 
 ## System Requirements
@@ -119,14 +115,14 @@ git clone https://github.com/Riydx0/cca-PaaS && cd cca-PaaS
 # 2. Install Docker (if not already installed)
 sudo bash docker/install-docker.sh
 
-# 3. Run the setup script — it asks for a DB password (optional), then starts Docker automatically
+# 3. Run the setup script — configures DB password, domain, SSL, then starts Docker automatically
 bash docker/setup.sh
 
 # 4. Open the setup wizard in your browser
 #    http://your-server-ip/setup
 ```
 
-The setup script asks for one optional input (a custom DB password — press Enter to auto-generate one), then builds and starts the app with Docker Compose. **No manual file editing required.**
+The setup script asks for one optional input (a custom DB password — press Enter to auto-generate one), then optionally a domain name, then builds and starts the app with Docker Compose. **No manual file editing required.**
 
 Once the containers are running, open **http://your-server-ip/setup** in your browser to complete the first-run configuration.
 
@@ -136,10 +132,11 @@ Once the containers are running, open **http://your-server-ip/setup** in your br
 
 When you open `/setup` for the first time, you will be prompted for:
 
-- **Clerk Publishable Key** (`pk_...`)
-- **Clerk Secret Key** (`sk_...`)
+- **Setup Token** — a one-time security token generated at API startup (see below)
 - **App URL** — the public URL or IP your app is served from (e.g. `http://your-server-ip`)
-- **Setup Token** — a one-time security token generated at startup (see below)
+- **Admin Name** — your name
+- **Admin Email** — the email address for the super admin account
+- **Admin Password** — a strong password (minimum 8 characters)
 
 ### What is the Setup Token?
 
@@ -165,11 +162,10 @@ Copy that value and paste it into the Setup Token field on the `/setup` page.
 
 ## Admin Setup
 
-After completing the setup wizard:
+After completing the setup wizard, the account you created becomes the **super admin** automatically. You can:
 
-1. Open `http://your-server-ip` and sign up for an account
-2. Navigate to `http://your-server-ip/bootstrap` and click **"Grant Super Admin Access"**
-3. Sign out and back in — the **Admin Panel** link will appear in the sidebar
+1. Sign in at `http://your-server-ip/sign-in` using the admin credentials you set during setup
+2. The **Admin Panel** link will appear in the sidebar
 
 ---
 
@@ -187,9 +183,7 @@ Create a `.env` file at the root:
 
 ```env
 DATABASE_URL=postgresql://user:password@localhost:5432/cca_paas
-CLERK_SECRET_KEY=sk_...
-VITE_CLERK_PUBLISHABLE_KEY=pk_...
-SESSION_SECRET=your-secret-here
+SESSION_SECRET=your-random-32-char-secret-here
 ```
 
 ### Install & Run
@@ -200,9 +194,6 @@ pnpm install
 
 # Push DB schema
 pnpm --filter @workspace/db run db:push
-
-# Seed database
-pnpm --filter @workspace/db run seed
 
 # Start API server
 pnpm --filter @workspace/api-server run dev

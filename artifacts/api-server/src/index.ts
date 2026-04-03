@@ -8,15 +8,17 @@ async function ensureSessionTable(): Promise<void> {
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "user_sessions" (
-        "sid" varchar NOT NULL COLLATE "default",
+        "sid" varchar NOT NULL,
         "sess" json NOT NULL,
         "expire" timestamp(6) NOT NULL,
-        CONSTRAINT "session_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE
-      ) WITH (OIDS=FALSE);
-      CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "user_sessions" ("expire");
+        PRIMARY KEY ("sid")
+      )
     `);
-  } catch {
-    logger.warn("Could not ensure user_sessions table exists");
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "user_sessions" ("expire")
+    `);
+  } catch (err: any) {
+    logger.warn({ err: err?.message }, "Could not ensure user_sessions table exists");
   }
 }
 
