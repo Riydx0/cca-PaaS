@@ -90,7 +90,13 @@ router.post("/auth/register", async (req: any, res) => {
     req.session.userId = user.id;
     req.session.userRole = user.role;
 
-    res.status(201).json(user);
+    req.session.save((err: Error | null) => {
+      if (err) {
+        res.status(500).json({ error: "Registration failed. Please try again." });
+        return;
+      }
+      res.status(201).json(user);
+    });
   } catch (err: any) {
     if (err?.code === "23505") {
       res.status(409).json({ error: "An account with this email already exists" });
@@ -128,20 +134,27 @@ router.post("/auth/login", async (req: any, res) => {
     req.session.userId = user.id;
     req.session.userRole = user.role;
 
-    AuditService.logEvent({
-      userId: user.id,
-      action: "auth.login",
-      entityType: "user",
-      entityId: user.id,
-      details: { email: user.email },
-      ipAddress: req.ip,
-    }).catch(() => {});
+    req.session.save((err: Error | null) => {
+      if (err) {
+        res.status(500).json({ error: "Login failed. Please try again." });
+        return;
+      }
 
-    res.json({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
+      AuditService.logEvent({
+        userId: user.id,
+        action: "auth.login",
+        entityType: "user",
+        entityId: user.id,
+        details: { email: user.email },
+        ipAddress: req.ip,
+      }).catch(() => {});
+
+      res.json({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      });
     });
   } catch {
     res.status(500).json({ error: "Login failed. Please try again." });
