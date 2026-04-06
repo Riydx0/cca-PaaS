@@ -66,6 +66,13 @@ app.use(
 
 app.use("/api", configRouter);
 app.use("/api", setupRouter);
+
+app.use("/api/auth", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.setHeader("Pragma", "no-cache");
+  next();
+});
+
 app.use("/api", authRouter);
 
 app.use("/api", router);
