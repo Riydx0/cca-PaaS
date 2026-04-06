@@ -67,6 +67,9 @@ app.use(
 app.use("/api", configRouter);
 app.use("/api", setupRouter);
 
+// Prevent Cloudflare (and any CDN/proxy) from caching auth responses or
+// stripping Set-Cookie headers. Without these headers Cloudflare may drop
+// the session cookie before it reaches the browser, breaking login flows.
 app.use("/api/auth", (_req, res, next) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
   res.setHeader("Pragma", "no-cache");
