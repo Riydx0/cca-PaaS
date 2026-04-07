@@ -113,38 +113,56 @@ router.post("/run-update", requireSuperAdmin, async (req: any, res) => {
     });
 
     const newVersion = readLocalVersion();
-
-    const composeOutput = execSync(
-      "docker compose up -d --build",
-      {
-        cwd: WORKSPACE_ROOT,
-        timeout: 300000,
-        encoding: "utf-8",
-        env: {
-          ...process.env,
-          DOCKER_HOST: "unix:///var/run/docker.sock",
-        },
-      }
-    );
-
-    const fullMessage = `Git:\n${gitOutput}\n\nDocker:\n${composeOutput}\n\nContainers rebuilt and restarted successfully.`;
+    const gitMessage = `Git pull output:\n${gitOutput}\n\nContainers rebuilding in background — this takes 1-3 minutes.`;
 
     await db
       .update(systemUpdateLogsTable)
       .set({
-        status: "completed",
+        status: "rebuilding",
         targetVersion: newVersion,
-        message: fullMessage,
-        completedAt: new Date(),
+        message: gitMessage,
       })
       .where(eq(systemUpdateLogsTable.id, logRow.id));
 
+    // Send the response BEFORE triggering docker compose.
+    // The rebuild will restart this container, ending this process — so the
+    // client must receive a response now, not after the rebuild completes.
     res.json({
       success: true,
-      status: "completed",
+      status: "rebuilding",
       newVersion,
-      message: "Update completed. Containers are restarting.",
+      message:
+        "Code pulled from GitHub. Containers are rebuilding and restarting — this may take 1-3 minutes. Refresh the page once the app is back.",
     });
+
+    // Give Express time to flush the response socket before we start the rebuild
+    setTimeout(() => {
+      try {
+        execSync("docker compose up -d --build", {
+          cwd: WORKSPACE_ROOT,
+          timeout: 300000,
+          encoding: "utf-8",
+          env: {
+            ...process.env,
+            DOCKER_HOST: "unix:///var/run/docker.sock",
+          },
+        });
+        // If we're somehow still alive after rebuild (e.g. only other containers rebuilt)
+        db.update(systemUpdateLogsTable)
+          .set({ status: "completed", message: gitMessage.replace("rebuilding in background", "rebuilt successfully"), completedAt: new Date() })
+          .where(eq(systemUpdateLogsTable.id, logRow.id))
+          .catch(() => {});
+      } catch (err: any) {
+        db.update(systemUpdateLogsTable)
+          .set({
+            status: "failed",
+            message: `docker compose failed: ${err?.message}`,
+            completedAt: new Date(),
+          })
+          .where(eq(systemUpdateLogsTable.id, logRow.id))
+          .catch(() => {});
+      }
+    }, 500);
   } catch (error: any) {
     const errMsg = error?.message ?? String(error);
     await db
