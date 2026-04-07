@@ -11,7 +11,7 @@ router.get("/config", async (_req, res) => {
       .select()
       .from(settingsTable)
       .where(
-        inArray(settingsTable.key, ["APP_URL", "SETUP_COMPLETE"]),
+        inArray(settingsTable.key, ["APP_URL", "SETUP_COMPLETE", "SITE_NAME", "SITE_LOGO_DATA"]),
       );
 
     const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
@@ -19,11 +19,15 @@ router.get("/config", async (_req, res) => {
     res.json({
       setupComplete: map["SETUP_COMPLETE"] === "true",
       appUrl: map["APP_URL"] ?? null,
+      siteName: map["SITE_NAME"] ?? null,
+      siteLogoData: map["SITE_LOGO_DATA"] ?? null,
     });
   } catch {
     res.status(500).json({
       setupComplete: false,
       appUrl: null,
+      siteName: null,
+      siteLogoData: null,
       error: "Database unavailable",
     });
   }

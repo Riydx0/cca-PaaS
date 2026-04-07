@@ -4,6 +4,7 @@ import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRole } from "@/hooks/useRole";
+import { useSiteConfig } from "@/contexts/SiteConfigContext";
 import { LayoutDashboard, Server, Receipt, Menu, LogOut, Cloud, ShieldCheck, CreditCard } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
@@ -12,6 +13,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { user, signOut } = useAuth();
   const { isAdmin } = useRole();
+  const { config } = useSiteConfig();
+
+  const siteName = config.siteName || "CloudMarket";
+  const siteLogoData = config.siteLogoData;
 
   const toggleLanguage = () => {
     setLanguage(language === "en" ? "ar" : "en");
@@ -23,6 +28,26 @@ export function AppLayout({ children }: { children: ReactNode }) {
     { href: "/orders", label: t("nav.orders"), icon: Receipt },
     { href: "/billing", label: t("nav.billing"), icon: CreditCard },
   ];
+
+  const LogoMark = ({ size = "md" }: { size?: "sm" | "md" }) => {
+    const wrapClass = size === "sm"
+      ? "p-1 rounded-sm"
+      : "p-1.5 rounded-md shadow-sm";
+    const imgClass = size === "sm" ? "h-4 w-4" : "h-5 w-5";
+
+    if (siteLogoData) {
+      return (
+        <div className={`bg-gradient-to-br from-blue-500 to-blue-700 ${wrapClass} flex items-center justify-center overflow-hidden`}>
+          <img src={siteLogoData} alt={siteName} className={`${imgClass} object-contain`} />
+        </div>
+      );
+    }
+    return (
+      <div className={`bg-gradient-to-br from-blue-500 to-blue-700 text-white ${wrapClass}`}>
+        <Cloud className={imgClass} />
+      </div>
+    );
+  };
 
   const NavLinks = ({ onClick }: { onClick?: () => void }) => (
     <>
@@ -89,10 +114,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-background flex w-full">
       <aside className="hidden md:flex w-64 flex-col border-e border-sidebar-border bg-sidebar text-sidebar-foreground shrink-0">
         <div className="px-5 border-b border-sidebar-border h-[70px] flex items-center gap-3">
-          <div className="bg-gradient-to-br from-blue-500 to-blue-700 text-white p-1.5 rounded-md shadow-sm">
-            <Cloud className="h-5 w-5" />
-          </div>
-          <span className="font-bold text-white text-lg tracking-tight">CloudMarket</span>
+          <LogoMark />
+          <span className="font-bold text-white text-lg tracking-tight truncate">{siteName}</span>
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <NavLinks />
@@ -114,10 +137,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 className="w-72 p-0 flex flex-col bg-sidebar text-sidebar-foreground border-sidebar-border"
               >
                 <div className="px-5 border-b border-sidebar-border h-[70px] flex items-center gap-3">
-                  <div className="bg-gradient-to-br from-blue-500 to-blue-700 text-white p-1.5 rounded-md shadow-sm">
-                    <Cloud className="h-5 w-5" />
-                  </div>
-                  <span className="font-bold text-white text-lg tracking-tight">CloudMarket</span>
+                  <LogoMark />
+                  <span className="font-bold text-white text-lg tracking-tight truncate">{siteName}</span>
                 </div>
                 <nav className="p-4 space-y-1 flex-1 overflow-y-auto">
                   <NavLinks />
@@ -126,10 +147,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </SheetContent>
             </Sheet>
             <div className="md:hidden flex items-center gap-2 px-2">
-              <div className="bg-gradient-to-br from-blue-500 to-blue-700 text-white p-1 rounded-sm">
-                <Cloud className="h-4 w-4" />
-              </div>
-              <span className="font-bold text-lg tracking-tight">CloudMarket</span>
+              <LogoMark size="sm" />
+              <span className="font-bold text-lg tracking-tight">{siteName}</span>
             </div>
           </div>
 

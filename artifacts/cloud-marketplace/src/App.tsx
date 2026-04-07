@@ -9,6 +9,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { useRole } from "@/hooks/useRole";
+import { SiteConfigContext, SiteConfig } from "@/contexts/SiteConfigContext";
 import { Loader2, ServerCrash } from "lucide-react";
 
 import { Landing } from "@/pages/Landing";
@@ -32,6 +33,7 @@ import { AdminBillingPage } from "@/pages/admin/AdminBillingPage";
 import { AdminInvoicesPage } from "@/pages/admin/AdminInvoicesPage";
 import { AdminPaymentsPage } from "@/pages/admin/AdminPaymentsPage";
 import { AuditLogsPage } from "@/pages/admin/AuditLogsPage";
+import { AdminSiteSettings } from "@/pages/admin/AdminSiteSettings";
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -138,6 +140,9 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
       <Route path="/admin/system">
         <AdminRoute component={AdminSystemUpdates} superAdminOnly />
       </Route>
+      <Route path="/admin/settings">
+        <AdminRoute component={AdminSiteSettings} superAdminOnly />
+      </Route>
       <Route path="/admin/billing">
         <AdminRoute component={AdminBillingPage} />
       </Route>
@@ -159,6 +164,10 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
 function AppRouter() {
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  const [siteConfig, setSiteConfig] = useState<SiteConfig>({
+    siteName: "CloudMarket",
+    siteLogoData: null,
+  });
 
   useEffect(() => {
     fetch("/api/config", { credentials: "include" })
@@ -168,6 +177,10 @@ function AppRouter() {
       })
       .then((data) => {
         setSetupComplete(data.setupComplete === true);
+        setSiteConfig({
+          siteName: data.siteName || "CloudMarket",
+          siteLogoData: data.siteLogoData || null,
+        });
       })
       .catch(() => {
         setConfigError("Cannot connect to the API server. Make sure all Docker containers are running.");
@@ -179,30 +192,34 @@ function AppRouter() {
 
   if (!setupComplete) {
     return (
-      <WouterRouter base={basePath}>
-        <AuthProvider>
-          <Switch>
-            <Route path="/setup">
-              <SetupPage
-                appUrlHint={null}
-                onSetupComplete={() => setSetupComplete(true)}
-              />
-            </Route>
-            <Route>
-              <Redirect to="/setup" />
-            </Route>
-          </Switch>
-        </AuthProvider>
-      </WouterRouter>
+      <SiteConfigContext.Provider value={{ config: siteConfig, setConfig: setSiteConfig }}>
+        <WouterRouter base={basePath}>
+          <AuthProvider>
+            <Switch>
+              <Route path="/setup">
+                <SetupPage
+                  appUrlHint={null}
+                  onSetupComplete={() => setSetupComplete(true)}
+                />
+              </Route>
+              <Route>
+                <Redirect to="/setup" />
+              </Route>
+            </Switch>
+          </AuthProvider>
+        </WouterRouter>
+      </SiteConfigContext.Provider>
     );
   }
 
   return (
-    <WouterRouter base={basePath}>
-      <AuthProvider>
-        <AppRoutes onSetupNeeded={() => setSetupComplete(false)} />
-      </AuthProvider>
-    </WouterRouter>
+    <SiteConfigContext.Provider value={{ config: siteConfig, setConfig: setSiteConfig }}>
+      <WouterRouter base={basePath}>
+        <AuthProvider>
+          <AppRoutes onSetupNeeded={() => setSetupComplete(false)} />
+        </AuthProvider>
+      </WouterRouter>
+    </SiteConfigContext.Provider>
   );
 }
 

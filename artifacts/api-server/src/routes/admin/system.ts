@@ -56,7 +56,7 @@ router.get("/version", requireSuperAdmin, async (_req, res) => {
 router.post("/check-updates", requireSuperAdmin, async (req: any, res) => {
   const currentVersion = readLocalVersion();
   const remoteVersion = await fetchRemoteVersion();
-  const userId = req.userId as string;
+  const userId = (req as any)?.session?.userId as string ?? "system";
 
   let status: string;
   let message: string;
@@ -89,7 +89,7 @@ router.post("/check-updates", requireSuperAdmin, async (req: any, res) => {
 });
 
 router.post("/run-update", requireSuperAdmin, async (req: any, res) => {
-  const userId = req.userId as string;
+  const userId = (req as any)?.session?.userId as string ?? "system";
   const currentVersion = readLocalVersion();
   const remoteVersion = await fetchRemoteVersion();
 

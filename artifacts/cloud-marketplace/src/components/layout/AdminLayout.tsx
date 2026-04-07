@@ -3,11 +3,12 @@ import { Link, useLocation } from "wouter";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRole } from "@/hooks/useRole";
+import { useSiteConfig } from "@/contexts/SiteConfigContext";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   LayoutDashboard, Users, Receipt, Server, Settings, Menu, LogOut,
-  ShieldCheck, ArrowLeft, Cloud, CreditCard, Activity, FileText,
+  ShieldCheck, ArrowLeft, Cloud, CreditCard, Activity, FileText, Palette,
 } from "lucide-react";
 
 export function AdminLayout({ children }: { children: ReactNode }) {
@@ -15,6 +16,10 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { user, signOut } = useAuth();
   const { isSuperAdmin } = useRole();
+  const { config } = useSiteConfig();
+
+  const siteName = config.siteName || "CloudMarket";
+  const siteLogoData = config.siteLogoData;
 
   const navItems = [
     { href: "/admin/dashboard", label: t("admin.nav.dashboard"), icon: LayoutDashboard },
@@ -26,9 +31,27 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     { href: "/admin/payments", label: t("admin.nav.payments"), icon: CreditCard },
     { href: "/admin/audit-logs", label: t("admin.nav.auditLogs"), icon: Activity },
     ...(isSuperAdmin
-      ? [{ href: "/admin/system", label: t("admin.nav.system"), icon: Settings }]
+      ? [
+          { href: "/admin/settings", label: t("admin.nav.siteSettings"), icon: Palette },
+          { href: "/admin/system", label: t("admin.nav.system"), icon: Settings },
+        ]
       : []),
   ];
+
+  const LogoMark = () => {
+    if (siteLogoData) {
+      return (
+        <div className="bg-gradient-to-br from-amber-500 to-orange-600 p-1.5 rounded-md shadow-sm flex items-center justify-center overflow-hidden">
+          <img src={siteLogoData} alt={siteName} className="h-5 w-5 object-contain" />
+        </div>
+      );
+    }
+    return (
+      <div className="bg-gradient-to-br from-amber-500 to-orange-600 text-white p-1.5 rounded-md shadow-sm">
+        <ShieldCheck className="h-5 w-5" />
+      </div>
+    );
+  };
 
   const NavLinks = ({ onClick }: { onClick?: () => void }) => (
     <>
@@ -56,9 +79,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const SidebarContent = ({ onClick }: { onClick?: () => void }) => (
     <>
       <div className="h-[70px] flex items-center gap-3 px-5 border-b border-sidebar-border shrink-0">
-        <div className="bg-gradient-to-br from-amber-500 to-orange-600 text-white p-1.5 rounded-md shadow-sm">
-          <ShieldCheck className="h-5 w-5" />
-        </div>
+        <LogoMark />
         <div>
           <span className="font-bold text-white text-base block leading-tight">Admin Panel</span>
           <span className="text-sidebar-foreground/50 text-xs">{isSuperAdmin ? "Super Admin" : "Admin"}</span>
