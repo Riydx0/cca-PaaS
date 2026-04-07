@@ -146,8 +146,8 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             </Sheet>
 
             <div className="flex items-center gap-2 md:hidden">
-              <ShieldCheck className="h-5 w-5 text-amber-500" />
-              <span className="font-bold text-base">Admin Panel</span>
+              <LogoIcon />
+              <span className="font-bold text-base">{siteName}</span>
             </div>
 
             <div className="hidden md:flex items-center gap-2">

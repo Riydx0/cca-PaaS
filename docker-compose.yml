@@ -33,7 +33,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - .:/workspace
-      - uploads_data:/app/public/uploads
+      - uploads_data:/app/artifacts/api-server/public/uploads
     depends_on:
       db:
         condition: service_healthy

@@ -11,7 +11,7 @@ import { fileURLToPath } from "url";
 const router = Router();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UPLOADS_DIR = path.join(__dirname, "..", "..", "..", "public", "uploads");
+const UPLOADS_DIR = path.join(__dirname, "..", "public", "uploads");
 
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -21,7 +21,7 @@ const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase() || ".png";
-    cb(null, `logo${ext}`);
+    cb(null, `logo-${Date.now()}${ext}`);
   },
 });
 
@@ -80,6 +80,12 @@ router.post(
     if (!req.file) {
       res.status(400).json({ error: "No file uploaded." });
       return;
+    }
+    const oldFiles = fs.readdirSync(UPLOADS_DIR).filter(
+      (f) => f.startsWith("logo-") && f !== req.file!.filename,
+    );
+    for (const f of oldFiles) {
+      try { fs.unlinkSync(path.join(UPLOADS_DIR, f)); } catch {}
     }
     const logoUrl = `/api/uploads/${req.file.filename}`;
     await upsertSetting("SITE_LOGO_URL", logoUrl);
