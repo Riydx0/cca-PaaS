@@ -9,6 +9,10 @@ import configRouter from "./routes/config";
 import setupRouter from "./routes/setup";
 import authRouter from "./routes/auth";
 import { logger } from "./lib/logger";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PgSession = connectPg(session);
 
@@ -66,6 +70,8 @@ app.use(
 
 app.use("/api", configRouter);
 app.use("/api", setupRouter);
+
+app.use("/api/uploads", express.static(path.join(__dirname, "..", "public", "uploads")));
 
 // Prevent Cloudflare (and any CDN/proxy) from caching auth responses or
 // stripping Set-Cookie headers. Without these headers Cloudflare may drop

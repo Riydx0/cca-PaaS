@@ -33,6 +33,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - .:/workspace
+      - uploads_data:/app/public/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -56,6 +57,7 @@ services:
 
 volumes:
   pgdata:
+  uploads_data:
 
 networks:
   app-net:

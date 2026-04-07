@@ -16,7 +16,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { config } = useSiteConfig();
 
   const siteName = config.siteName || "CloudMarket";
-  const siteLogoData = config.siteLogoData;
+  const siteLogoUrl = config.siteLogoUrl;
 
   const toggleLanguage = () => {
     setLanguage(language === "en" ? "ar" : "en");
@@ -35,10 +35,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
       : "p-1.5 rounded-md shadow-sm";
     const imgClass = size === "sm" ? "h-4 w-4" : "h-5 w-5";
 
-    if (siteLogoData) {
+    if (siteLogoUrl) {
       return (
         <div className={`bg-gradient-to-br from-blue-500 to-blue-700 ${wrapClass} flex items-center justify-center overflow-hidden`}>
-          <img src={siteLogoData} alt={siteName} className={`${imgClass} object-contain`} />
+          <img src={siteLogoUrl} alt={siteName} className={`${imgClass} object-contain`} />
         </div>
       );
     }

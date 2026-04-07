@@ -19,7 +19,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const { config } = useSiteConfig();
 
   const siteName = config.siteName || "CloudMarket";
-  const siteLogoData = config.siteLogoData;
+  const siteLogoUrl = config.siteLogoUrl;
 
   const navItems = [
     { href: "/admin/dashboard", label: t("admin.nav.dashboard"), icon: LayoutDashboard },
@@ -39,10 +39,10 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   ];
 
   const LogoMark = () => {
-    if (siteLogoData) {
+    if (siteLogoUrl) {
       return (
         <div className="bg-gradient-to-br from-amber-500 to-orange-600 p-1.5 rounded-md shadow-sm flex items-center justify-center overflow-hidden">
-          <img src={siteLogoData} alt={siteName} className="h-5 w-5 object-contain" />
+          <img src={siteLogoUrl} alt={siteName} className="h-5 w-5 object-contain" />
         </div>
       );
     }

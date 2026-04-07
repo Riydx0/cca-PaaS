@@ -166,7 +166,7 @@ function AppRouter() {
   const [configError, setConfigError] = useState<string | null>(null);
   const [siteConfig, setSiteConfig] = useState<SiteConfig>({
     siteName: "CloudMarket",
-    siteLogoData: null,
+    siteLogoUrl: null,
   });
 
   useEffect(() => {
@@ -179,7 +179,7 @@ function AppRouter() {
         setSetupComplete(data.setupComplete === true);
         setSiteConfig({
           siteName: data.siteName || "CloudMarket",
-          siteLogoData: data.siteLogoData || null,
+          siteLogoUrl: data.siteLogoUrl || null,
         });
       })
       .catch(() => {

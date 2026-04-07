@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { useI18n } from "@/lib/i18n";
 import { useSiteConfig } from "@/contexts/SiteConfigContext";
 import { useToast } from "@/hooks/use-toast";
-import { adminFetch } from "@/lib/adminFetch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +10,16 @@ import { Cloud, Palette, Upload, X, Loader2, Save, RefreshCw } from "lucide-reac
 
 interface SettingsData {
   siteName: string;
-  siteLogoData: string;
+  siteLogoUrl: string;
+}
+
+async function apiFetch(path: string, init?: RequestInit) {
+  const res = await fetch(path, { ...init, credentials: "include" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error ?? `HTTP ${res.status}`);
+  }
+  return res.json();
 }
 
 export function AdminSiteSettings() {
@@ -21,15 +29,17 @@ export function AdminSiteSettings() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [siteName, setSiteName] = useState(config.siteName || "");
-  const [previewLogo, setPreviewLogo] = useState<string | null>(config.siteLogoData);
+  const [currentLogoUrl, setCurrentLogoUrl] = useState<string | null>(config.siteLogoUrl);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    adminFetch<SettingsData>("/api/admin/settings")
-      .then((data) => {
+    apiFetch("/api/admin/settings")
+      .then((data: SettingsData) => {
         setSiteName(data.siteName || "");
-        setPreviewLogo(data.siteLogoData || null);
+        setCurrentLogoUrl(data.siteLogoUrl || null);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -44,42 +54,68 @@ export function AdminSiteSettings() {
       return;
     }
 
+    setPendingFile(file);
     const reader = new FileReader();
-    reader.onload = () => {
-      setPreviewLogo(reader.result as string);
-    };
+    reader.onload = () => setPreviewDataUrl(reader.result as string);
     reader.readAsDataURL(file);
   };
 
-  const handleRemoveLogo = () => {
-    setPreviewLogo(null);
+  const handleRemoveLogo = async () => {
+    setPendingFile(null);
+    setPreviewDataUrl(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+
+    if (currentLogoUrl) {
+      try {
+        await apiFetch("/api/admin/settings/logo", { method: "DELETE" });
+        setCurrentLogoUrl(null);
+        setConfig({ ...config, siteLogoUrl: null });
+        toast({ title: "Logo removed" });
+      } catch {
+        toast({ title: "Error", description: "Failed to remove logo.", variant: "destructive" });
+      }
+    }
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await adminFetch<{ success: boolean }>("/api/admin/settings", {
+      await apiFetch("/api/admin/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          siteName: siteName.trim() || "CloudMarket",
-          siteLogoData: previewLogo ?? "",
-        }),
+        body: JSON.stringify({ siteName: siteName.trim() || "CloudMarket" }),
       });
+
+      let newLogoUrl = currentLogoUrl;
+
+      if (pendingFile) {
+        const formData = new FormData();
+        formData.append("logo", pendingFile);
+        const result = await apiFetch("/api/admin/settings/logo", {
+          method: "POST",
+          body: formData,
+        });
+        newLogoUrl = result.logoUrl;
+        setCurrentLogoUrl(newLogoUrl);
+        setPendingFile(null);
+        setPreviewDataUrl(null);
+      }
 
       setConfig({
         siteName: siteName.trim() || "CloudMarket",
-        siteLogoData: previewLogo,
+        siteLogoUrl: newLogoUrl,
       });
 
       toast({ title: "Settings saved", description: "Site name and logo updated successfully." });
-    } catch {
-      toast({ title: "Error", description: "Failed to save settings. Please try again.", variant: "destructive" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Failed to save settings.", variant: "destructive" });
     } finally {
       setSaving(false);
     }
   };
+
+  const effectiveLogoSrc = previewDataUrl ?? (currentLogoUrl ? `${currentLogoUrl}?v=${Date.now()}` : null);
+  const hasLogo = Boolean(effectiveLogoSrc);
 
   if (loading) {
     return (
@@ -128,10 +164,10 @@ export function AdminSiteSettings() {
             <CardDescription>Upload a logo image (PNG, JPG, SVG — max 512KB).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {previewLogo ? (
+            {hasLogo ? (
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-lg border border-border bg-muted flex items-center justify-center overflow-hidden shrink-0">
-                  <img src={previewLogo} alt="Logo preview" className="w-full h-full object-contain p-1" />
+                  <img src={effectiveLogoSrc!} alt="Logo preview" className="w-full h-full object-contain p-1" />
                 </div>
                 <div className="flex flex-col gap-2">
                   <Button
@@ -172,10 +208,11 @@ export function AdminSiteSettings() {
               className="hidden"
               onChange={handleFileChange}
             />
-            {!previewLogo && (
-              <p className="text-xs text-muted-foreground">
-                No logo set — the default icon will be shown.
-              </p>
+            {!hasLogo && (
+              <p className="text-xs text-muted-foreground">No logo set — the default icon will be shown.</p>
+            )}
+            {pendingFile && (
+              <p className="text-xs text-amber-600 font-medium">New logo selected — click "Save Settings" to upload.</p>
             )}
           </CardContent>
         </Card>
@@ -189,8 +226,8 @@ export function AdminSiteSettings() {
         <CardContent>
           <div className="bg-sidebar rounded-lg p-4 flex items-center gap-3 w-fit">
             <div className="bg-gradient-to-br from-blue-500 to-blue-700 p-1.5 rounded-md shadow-sm flex items-center justify-center overflow-hidden">
-              {previewLogo ? (
-                <img src={previewLogo} alt="preview" className="h-5 w-5 object-contain" />
+              {effectiveLogoSrc ? (
+                <img src={effectiveLogoSrc} alt="preview" className="h-5 w-5 object-contain" />
               ) : (
                 <Cloud className="h-5 w-5 text-white" />
               )}
