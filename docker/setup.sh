@@ -121,40 +121,9 @@ set_real_ip_from 2c0f:f248::/32;
 real_ip_header   CF-Connecting-IP;
 real_ip_recursive on;
 
-geo \$realip_remote_addr \$from_cloudflare {
-    default          0;
-    103.21.244.0/22  1;
-    103.22.200.0/22  1;
-    103.31.4.0/22    1;
-    104.16.0.0/13    1;
-    104.24.0.0/14    1;
-    108.162.192.0/18 1;
-    131.0.72.0/22    1;
-    141.101.64.0/18  1;
-    162.158.0.0/15   1;
-    172.64.0.0/13    1;
-    173.245.48.0/20  1;
-    188.114.96.0/20  1;
-    190.93.240.0/20  1;
-    197.234.240.0/22 1;
-    198.41.128.0/17  1;
-    2400:cb00::/32   1;
-    2606:4700::/32   1;
-    2803:f800::/32   1;
-    2405:b500::/32   1;
-    2405:8100::/32   1;
-    2a06:98c0::/29   1;
-    2c0f:f248::/32   1;
-}
-
 server {
     listen 80;
     server_name ${domain};
-
-    set \$real_scheme \$scheme;
-    if (\$from_cloudflare = 1) {
-        set \$real_scheme \$http_x_forwarded_proto;
-    }
 
     root /usr/share/nginx/html;
     index index.html;
@@ -165,7 +134,8 @@ server {
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$real_scheme;
+        # Cloudflare always terminates HTTPS — tell the API it came in over https
+        proxy_set_header X-Forwarded-Proto https;
         proxy_read_timeout 60s;
         proxy_connect_timeout 10s;
     }
@@ -377,7 +347,10 @@ if [ -n "$DOMAIN_INPUT" ]; then
   if $USE_CF; then
     # ── Cloudflare mode ──────────────────────────────────────
     APP_URL="https://${DOMAIN}"
-    COOKIE_SECURE="true"
+    # COOKIE_SECURE stays false: Cloudflare terminates HTTPS at the edge.
+    # nginx → API communication is HTTP internally, so express-session must
+    # NOT require a secure connection before setting the session cookie.
+    COOKIE_SECURE="false"
     info "Generating nginx config for Cloudflare..."
     generate_nginx_cloudflare "$DOMAIN"
     rm -f docker-compose.override.yml
@@ -478,6 +451,9 @@ info "Writing .env file..."
     echo "APP_URL=${APP_URL}"
     echo ""
   fi
+  echo "# URL to the raw VERSION file on GitHub — enables update checks from Admin Panel"
+  echo "GITHUB_RAW_VERSION_URL=https://raw.githubusercontent.com/Riydx0/cca-PaaS/main/VERSION"
+  echo ""
   echo "# Optional: port to expose on the host machine (default: 80)"
   echo "# LISTEN_PORT=80"
 } > .env

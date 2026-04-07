@@ -38,10 +38,14 @@ RUN if [ -n "$VITE_CLERK_PROXY_URL" ]; then \
 # ================================================
 FROM node:20-alpine AS api
 RUN npm install -g pnpm@9 --quiet
+RUN apk add --no-cache git docker-cli
 WORKDIR /app
 
 # Copy the full built workspace (pnpm needs it for filter commands)
 COPY --from=builder /app .
+
+# Copy VERSION file so the running container can report the current version
+COPY VERSION ./
 
 ENV NODE_ENV=production PORT=8080
 

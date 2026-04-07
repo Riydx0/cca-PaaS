@@ -9,18 +9,21 @@ import { join } from "path";
 
 const router = Router();
 
+const WORKSPACE_ROOT = "/workspace";
+
 function readLocalVersion(): string {
-  try {
-    const versionPath = join(process.cwd(), "VERSION");
-    return readFileSync(versionPath, "utf-8").trim();
-  } catch {
+  const candidates = [
+    join(WORKSPACE_ROOT, "VERSION"),
+    join(process.cwd(), "VERSION"),
+    join(process.cwd(), "..", "..", "VERSION"),
+  ];
+  for (const p of candidates) {
     try {
-      const rootPath = join(process.cwd(), "..", "..", "VERSION");
-      return readFileSync(rootPath, "utf-8").trim();
+      return readFileSync(p, "utf-8").trim();
     } catch {
-      return "unknown";
     }
   }
+  return "unknown";
 }
 
 async function fetchRemoteVersion(): Promise<string | null> {
@@ -102,21 +105,29 @@ router.post("/run-update", requireSuperAdmin, async (req: any, res) => {
     .returning();
 
   try {
-    const workspaceRoot = join(process.cwd(), "..", "..");
-    const output = execSync("git fetch origin && git pull origin main", {
-      cwd: workspaceRoot,
+    const gitOutput = execSync("git fetch origin && git pull origin main", {
+      cwd: WORKSPACE_ROOT,
       timeout: 60000,
       encoding: "utf-8",
-    });
-
-    const installOutput = execSync("pnpm install --frozen-lockfile", {
-      cwd: workspaceRoot,
-      timeout: 120000,
-      encoding: "utf-8",
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
     });
 
     const newVersion = readLocalVersion();
-    const fullMessage = `Git output:\n${output}\n\nInstall output:\n${installOutput}\n\nNote: Application restart is required to apply changes.`;
+
+    const composeOutput = execSync(
+      "docker compose up -d --build",
+      {
+        cwd: WORKSPACE_ROOT,
+        timeout: 300000,
+        encoding: "utf-8",
+        env: {
+          ...process.env,
+          DOCKER_HOST: "unix:///var/run/docker.sock",
+        },
+      }
+    );
+
+    const fullMessage = `Git:\n${gitOutput}\n\nDocker:\n${composeOutput}\n\nContainers rebuilt and restarted successfully.`;
 
     await db
       .update(systemUpdateLogsTable)
@@ -132,7 +143,7 @@ router.post("/run-update", requireSuperAdmin, async (req: any, res) => {
       success: true,
       status: "completed",
       newVersion,
-      message: "Update completed. Restart the application to apply changes.",
+      message: "Update completed. Containers are restarting.",
     });
   } catch (error: any) {
     const errMsg = error?.message ?? String(error);
