@@ -196,15 +196,13 @@ function AppRouter() {
   }, [siteConfig.metaTitle, siteConfig.siteName]);
 
   useEffect(() => {
-    if (siteConfig.faviconUrl) {
-      let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
-      if (!link) {
-        link = document.createElement("link");
-        link.rel = "icon";
-        document.head.appendChild(link);
-      }
-      link.href = siteConfig.faviconUrl;
+    let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
     }
+    link.href = siteConfig.faviconUrl || "/favicon.svg";
   }, [siteConfig.faviconUrl]);
 
   if (setupComplete === null && !configError) return <LoadingScreen />;
