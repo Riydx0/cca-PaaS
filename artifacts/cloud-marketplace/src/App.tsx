@@ -167,6 +167,8 @@ function AppRouter() {
   const [siteConfig, setSiteConfig] = useState<SiteConfig>({
     siteName: "CloudMarket",
     siteLogoUrl: null,
+    faviconUrl: null,
+    metaTitle: null,
   });
 
   useEffect(() => {
@@ -180,12 +182,30 @@ function AppRouter() {
         setSiteConfig({
           siteName: data.siteName || "CloudMarket",
           siteLogoUrl: data.siteLogoUrl || null,
+          faviconUrl: data.faviconUrl || null,
+          metaTitle: data.metaTitle || null,
         });
       })
       .catch(() => {
         setConfigError("Cannot connect to the API server. Make sure all Docker containers are running.");
       });
   }, []);
+
+  useEffect(() => {
+    document.title = siteConfig.metaTitle || siteConfig.siteName || "Cloud Services Marketplace";
+  }, [siteConfig.metaTitle, siteConfig.siteName]);
+
+  useEffect(() => {
+    if (siteConfig.faviconUrl) {
+      let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = "icon";
+        document.head.appendChild(link);
+      }
+      link.href = siteConfig.faviconUrl;
+    }
+  }, [siteConfig.faviconUrl]);
 
   if (setupComplete === null && !configError) return <LoadingScreen />;
   if (configError) return <ErrorScreen message={configError} />;

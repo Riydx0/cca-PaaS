@@ -17,7 +17,10 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-const storage = multer.diskStorage({
+const LOGO_ALLOWED = ["image/png", "image/jpeg", "image/jpg", "image/svg+xml", "image/webp"];
+const FAVICON_ALLOWED = [...LOGO_ALLOWED, "image/x-icon", "image/vnd.microsoft.icon"];
+
+const logoStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase() || ".png";
@@ -25,24 +28,39 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 512 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const allowed = ["image/png", "image/jpeg", "image/jpg", "image/svg+xml", "image/webp"];
-    if (allowed.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only PNG, JPG, SVG, and WebP files are allowed."));
-    }
+const faviconStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || ".png";
+    cb(null, `favicon-${Date.now()}${ext}`);
   },
 });
+
+const uploadLogo = multer({
+  storage: logoStorage,
+  limits: { fileSize: 512 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (LOGO_ALLOWED.includes(file.mimetype)) cb(null, true);
+    else cb(new Error("Only PNG, JPG, SVG, and WebP files are allowed."));
+  },
+});
+
+const uploadFavicon = multer({
+  storage: faviconStorage,
+  limits: { fileSize: 256 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (FAVICON_ALLOWED.includes(file.mimetype)) cb(null, true);
+    else cb(new Error("Only PNG, JPG, SVG, ICO, and WebP files are allowed."));
+  },
+});
+
+const ALL_SETTING_KEYS = ["SITE_NAME", "SITE_LOGO_URL", "SITE_FAVICON_URL", "SITE_META_TITLE"];
 
 async function getSettings() {
   const rows = await db
     .select()
     .from(settingsTable)
-    .where(inArray(settingsTable.key, ["SITE_NAME", "SITE_LOGO_URL"]));
+    .where(inArray(settingsTable.key, ALL_SETTING_KEYS));
   return Object.fromEntries(rows.map((r) => [r.key, r.value]));
 }
 
@@ -61,13 +79,18 @@ router.get("/settings", requireSuperAdmin, async (_req, res) => {
   res.json({
     siteName: map["SITE_NAME"] ?? "",
     siteLogoUrl: map["SITE_LOGO_URL"] ?? "",
+    faviconUrl: map["SITE_FAVICON_URL"] ?? "",
+    metaTitle: map["SITE_META_TITLE"] ?? "",
   });
 });
 
 router.put("/settings", requireSuperAdmin, async (req, res) => {
-  const { siteName } = req.body as { siteName?: string };
+  const { siteName, metaTitle } = req.body as { siteName?: string; metaTitle?: string };
   if (typeof siteName === "string") {
     await upsertSetting("SITE_NAME", siteName.trim());
+  }
+  if (typeof metaTitle === "string") {
+    await upsertSetting("SITE_META_TITLE", metaTitle.trim());
   }
   res.json({ success: true });
 });
@@ -75,7 +98,7 @@ router.put("/settings", requireSuperAdmin, async (req, res) => {
 router.post(
   "/settings/logo",
   requireSuperAdmin,
-  upload.single("logo"),
+  uploadLogo.single("logo"),
   async (req, res) => {
     if (!req.file) {
       res.status(400).json({ error: "No file uploaded." });
@@ -95,7 +118,37 @@ router.post(
 
 router.delete("/settings/logo", requireSuperAdmin, async (_req, res) => {
   await upsertSetting("SITE_LOGO_URL", "");
-  const files = fs.readdirSync(UPLOADS_DIR).filter((f) => f.startsWith("logo."));
+  const files = fs.readdirSync(UPLOADS_DIR).filter((f) => f.startsWith("logo-"));
+  for (const f of files) {
+    try { fs.unlinkSync(path.join(UPLOADS_DIR, f)); } catch {}
+  }
+  res.json({ success: true });
+});
+
+router.post(
+  "/settings/favicon",
+  requireSuperAdmin,
+  uploadFavicon.single("favicon"),
+  async (req, res) => {
+    if (!req.file) {
+      res.status(400).json({ error: "No file uploaded." });
+      return;
+    }
+    const oldFiles = fs.readdirSync(UPLOADS_DIR).filter(
+      (f) => f.startsWith("favicon-") && f !== req.file!.filename,
+    );
+    for (const f of oldFiles) {
+      try { fs.unlinkSync(path.join(UPLOADS_DIR, f)); } catch {}
+    }
+    const faviconUrl = `/api/uploads/${req.file.filename}`;
+    await upsertSetting("SITE_FAVICON_URL", faviconUrl);
+    res.json({ success: true, faviconUrl });
+  },
+);
+
+router.delete("/settings/favicon", requireSuperAdmin, async (_req, res) => {
+  await upsertSetting("SITE_FAVICON_URL", "");
+  const files = fs.readdirSync(UPLOADS_DIR).filter((f) => f.startsWith("favicon-"));
   for (const f of files) {
     try { fs.unlinkSync(path.join(UPLOADS_DIR, f)); } catch {}
   }

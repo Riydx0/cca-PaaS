@@ -11,7 +11,7 @@ router.get("/config", async (_req, res) => {
       .select()
       .from(settingsTable)
       .where(
-        inArray(settingsTable.key, ["APP_URL", "SETUP_COMPLETE", "SITE_NAME", "SITE_LOGO_URL"]),
+        inArray(settingsTable.key, ["APP_URL", "SETUP_COMPLETE", "SITE_NAME", "SITE_LOGO_URL", "SITE_FAVICON_URL", "SITE_META_TITLE"]),
       );
 
     const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
@@ -21,6 +21,8 @@ router.get("/config", async (_req, res) => {
       appUrl: map["APP_URL"] ?? null,
       siteName: map["SITE_NAME"] ?? null,
       siteLogoUrl: map["SITE_LOGO_URL"] ?? null,
+      faviconUrl: map["SITE_FAVICON_URL"] ?? null,
+      metaTitle: map["SITE_META_TITLE"] ?? null,
     });
   } catch {
     res.status(500).json({
@@ -28,6 +30,8 @@ router.get("/config", async (_req, res) => {
       appUrl: null,
       siteName: null,
       siteLogoUrl: null,
+      faviconUrl: null,
+      metaTitle: null,
       error: "Database unavailable",
     });
   }
