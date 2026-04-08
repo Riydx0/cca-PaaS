@@ -11,6 +11,7 @@ import authRouter from "./routes/auth";
 import { logger } from "./lib/logger";
 import path from "path";
 import { fileURLToPath } from "url";
+import { readFileSync } from "fs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -70,6 +71,19 @@ app.use(
 
 app.use("/api", configRouter);
 app.use("/api", setupRouter);
+
+app.get("/api/health", (_req, res) => {
+  const candidates = [
+    path.join("/workspace", "VERSION"),
+    path.join(process.cwd(), "VERSION"),
+    path.join(process.cwd(), "..", "..", "VERSION"),
+  ];
+  let version = "unknown";
+  for (const p of candidates) {
+    try { version = readFileSync(p, "utf-8").trim(); break; } catch {}
+  }
+  res.json({ status: "ok", version });
+});
 
 app.use("/api/uploads", express.static(path.join(__dirname, "..", "public", "uploads")));
 
