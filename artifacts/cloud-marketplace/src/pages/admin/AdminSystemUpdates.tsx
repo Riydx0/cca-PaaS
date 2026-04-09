@@ -135,10 +135,10 @@ export function AdminSystemUpdates() {
       qc.invalidateQueries({ queryKey: ["admin", "system"] });
     } catch (err: unknown) {
       setCheckStatus("check_failed");
-      const message = err instanceof Error ? err.message : "Failed to check updates";
+      const message = err instanceof Error ? err.message : t("admin.system.checkError");
       setCheckResult({ currentVersion: "", remoteVersion: null, status: "check_failed", message });
     }
-  }, [qc]);
+  }, [qc, t]);
 
   useEffect(() => {
     autoCheck();
@@ -260,7 +260,7 @@ export function AdminSystemUpdates() {
       clearTimeout(step1Timer);
       setSteps((prev) => prev.map((s) => ({ ...s, status: "failed" })));
       setUpdatePhase("failed");
-      setUpdateError(err instanceof Error ? err.message : "Unknown error");
+      setUpdateError(err instanceof Error ? err.message : t("admin.system.unknownError"));
     }
   }, [startPolling, stepLabels]);
 

@@ -190,6 +190,8 @@ const translations = {
     "admin.system.reloadIn": "Reloading in {n}s...",
     "admin.system.reloadNow": "Reload Now",
     "admin.system.pollTimeout": "Server did not respond within 3 minutes. It may still be rebuilding — try refreshing manually.",
+    "admin.system.checkError": "Failed to check updates",
+    "admin.system.unknownError": "Unknown error",
 
     // ---- Billing ----
     "nav.billing": "Billing",
@@ -472,6 +474,8 @@ const translations = {
     "admin.system.reloadIn": "جارٍ إعادة التحميل خلال {n}ث...",
     "admin.system.reloadNow": "أعد التحميل الآن",
     "admin.system.pollTimeout": "لم يستجب السيرفر خلال 3 دقائق. قد يكون لا يزال يُعاد بناؤه — حاول إعادة التحميل يدوياً.",
+    "admin.system.checkError": "فشل التحقق من التحديثات",
+    "admin.system.unknownError": "خطأ غير معروف",
 
     // ---- الفوترة ----
     "nav.billing": "الفوترة",
