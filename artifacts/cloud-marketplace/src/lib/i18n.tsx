@@ -189,7 +189,7 @@ const translations = {
     "admin.system.serverRestarting": "Server is restarting, this takes 1–3 minutes",
     "admin.system.reloadIn": "Reloading in {n}s...",
     "admin.system.reloadNow": "Reload Now",
-    "admin.system.pollTimeout": "Server did not respond within 5 minutes. It may still be rebuilding — try refreshing manually.",
+    "admin.system.pollTimeout": "Server did not respond within 3 minutes. It may still be rebuilding — try refreshing manually.",
 
     // ---- Billing ----
     "nav.billing": "Billing",
@@ -471,7 +471,7 @@ const translations = {
     "admin.system.serverRestarting": "السيرفر يُعاد تشغيله، يستغرق ذلك 1–3 دقائق",
     "admin.system.reloadIn": "جارٍ إعادة التحميل خلال {n}ث...",
     "admin.system.reloadNow": "أعد التحميل الآن",
-    "admin.system.pollTimeout": "لم يستجب السيرفر خلال 5 دقائق. قد يكون لا يزال يُعاد بناؤه — حاول إعادة التحميل يدوياً.",
+    "admin.system.pollTimeout": "لم يستجب السيرفر خلال 3 دقائق. قد يكون لا يزال يُعاد بناؤه — حاول إعادة التحميل يدوياً.",
 
     // ---- الفوترة ----
     "nav.billing": "الفوترة",

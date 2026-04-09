@@ -2,12 +2,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useI18n } from "@/lib/i18n";
 import { adminFetch } from "@/lib/adminFetch";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  RefreshCw, Download, CheckCircle2, AlertCircle, Clock, FileText,
+  RefreshCw, Download, CheckCircle2, AlertCircle, FileText,
   Loader2, ArrowRight, Rocket, ServerCrash, RotateCcw,
 } from "lucide-react";
 
@@ -44,7 +44,8 @@ interface StepState {
 }
 
 const POLL_INTERVAL_MS = 3000;
-const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+const POLL_TIMEOUT_MS = 3 * 60 * 1000;
+const RELOAD_COUNTDOWN_S = 3;
 
 const logStatusColors: Record<string, string> = {
   up_to_date: "bg-emerald-500/10 text-emerald-700 border-emerald-200",
@@ -110,9 +111,6 @@ export function AdminSystemUpdates() {
     refetchInterval: 15000,
   });
 
-  const makeSteps = useCallback((labels: string[]) =>
-    labels.map((label) => ({ label, status: "pending" as const })), []);
-
   const stepLabels = [
     t("admin.system.step1"),
     t("admin.system.step2"),
@@ -126,13 +124,20 @@ export function AdminSystemUpdates() {
     try {
       const res = await adminFetch<CheckResult>("/api/admin/system/check-updates", { method: "POST" });
       setCheckResult(res);
-      setCheckStatus(res.status === "update_available" ? "update_available" : "up_to_date");
+      if (res.status === "update_available") {
+        setCheckStatus("update_available");
+      } else if (res.status === "up_to_date") {
+        setCheckStatus("up_to_date");
+      } else {
+        setCheckStatus("check_failed");
+      }
       qc.invalidateQueries({ queryKey: ["admin", "system"] });
-    } catch (e: any) {
+    } catch (err: unknown) {
       setCheckStatus("check_failed");
-      setCheckResult({ currentVersion: "", remoteVersion: null, status: "check_failed", message: e?.message ?? "Failed to check updates" });
+      const message = err instanceof Error ? err.message : "Failed to check updates";
+      setCheckResult({ currentVersion: "", remoteVersion: null, status: "check_failed", message });
     }
-  }, [qc, t]);
+  }, [qc]);
 
   useEffect(() => {
     autoCheck();
@@ -142,8 +147,8 @@ export function AdminSystemUpdates() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }, []);
 
-  const startCountdown = useCallback((version: string) => {
-    let n = 5;
+  const startCountdown = useCallback(() => {
+    let n = RELOAD_COUNTDOWN_S;
     setCountdown(n);
     countdownRef.current = setInterval(() => {
       n--;
@@ -186,9 +191,11 @@ export function AdminSystemUpdates() {
           );
           setUpdatePhase("completed");
           qc.invalidateQueries({ queryKey: ["admin", "system"] });
-          startCountdown(finalVersion);
+          startCountdown();
         }
-      } catch {}
+      } catch {
+        // server not yet up — will retry on next poll tick
+      }
     }, POLL_INTERVAL_MS);
   }, [stopPoll, startCountdown, t, data, qc]);
 
@@ -237,11 +244,11 @@ export function AdminSystemUpdates() {
 
       setUpdatePhase("polling");
       startPolling(res.newVersion ?? null);
-    } catch (e: any) {
+    } catch (err: unknown) {
       clearTimeout(step1Timer);
       setSteps((prev) => prev.map((s) => ({ ...s, status: "failed" })));
       setUpdatePhase("failed");
-      setUpdateError(e?.message ?? "Unknown error");
+      setUpdateError(err instanceof Error ? err.message : "Unknown error");
     }
   }, [startPolling, stepLabels]);
 
@@ -312,14 +319,7 @@ export function AdminSystemUpdates() {
             : ""
         }>
           <CardContent className="pt-5">
-            {checkStatus === "idle" && (
-              <div className="flex items-center gap-3 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                <span className="text-sm">{t("admin.system.checking")}</span>
-              </div>
-            )}
-
-            {checkStatus === "checking" && (
+            {(checkStatus === "idle" || checkStatus === "checking") && (
               <div className="flex items-center gap-3 text-blue-600">
                 <Loader2 className="h-5 w-5 animate-spin" />
                 <span className="text-sm font-medium">{t("admin.system.checking")}</span>
@@ -335,7 +335,7 @@ export function AdminSystemUpdates() {
                     <p className="text-sm text-emerald-600">v{checkResult?.currentVersion}</p>
                   </div>
                 </div>
-                <Button variant="outline" size="sm" className="gap-2 shrink-0" onClick={autoCheck} disabled={checkStatus === "checking"}>
+                <Button variant="outline" size="sm" className="gap-2 shrink-0" onClick={autoCheck}>
                   <RefreshCw className="h-4 w-4" />
                   {t("admin.btn.checkUpdates")}
                 </Button>
