@@ -72,6 +72,8 @@ app.use(
 app.use("/api", configRouter);
 app.use("/api", setupRouter);
 
+const SERVER_BOOT_TIME = Date.now();
+
 app.get("/api/health", (_req, res) => {
   const candidates = [
     path.join("/workspace", "VERSION"),
@@ -82,7 +84,7 @@ app.get("/api/health", (_req, res) => {
   for (const p of candidates) {
     try { version = readFileSync(p, "utf-8").trim(); break; } catch {}
   }
-  res.json({ status: "ok", version });
+  res.json({ status: "ok", version, bootTime: SERVER_BOOT_TIME });
 });
 
 app.use("/api/uploads", express.static(path.join(__dirname, "..", "public", "uploads")));

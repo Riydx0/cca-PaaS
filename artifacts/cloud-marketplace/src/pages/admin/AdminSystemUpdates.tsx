@@ -104,6 +104,7 @@ export function AdminSystemUpdates() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartRef = useRef<number>(0);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const preUpdateBootTimeRef = useRef<number | null>(null);
 
   const { data, isLoading } = useQuery<VersionInfo>({
     queryKey: ["admin", "system", "version"],
@@ -177,10 +178,14 @@ export function AdminSystemUpdates() {
       }
 
       try {
-        const health = await fetch("/api/health").then((r) => r.json()).catch(() => null);
-        if (health?.status === "ok") {
+        const health: { status: string; version: string; bootTime: number } | null =
+          await fetch("/api/health").then((r) => r.json()).catch(() => null);
+        const isNewInstance =
+          health?.status === "ok" &&
+          (preUpdateBootTimeRef.current === null || health.bootTime !== preUpdateBootTimeRef.current);
+        if (isNewInstance) {
           stopPoll();
-          const finalVersion = health.version ?? expectedNewVersion ?? data?.currentVersion ?? "?";
+          const finalVersion = health!.version ?? expectedNewVersion ?? data?.currentVersion ?? "?";
           setNewVersion(finalVersion);
           setSteps((prev) =>
             prev.map((s, i) =>
@@ -204,6 +209,13 @@ export function AdminSystemUpdates() {
     setUpdateError(null);
     setNewVersion(null);
     setCountdown(null);
+
+    try {
+      const pre = await fetch("/api/health").then((r) => r.json()).catch(() => null);
+      preUpdateBootTimeRef.current = pre?.bootTime ?? null;
+    } catch {
+      preUpdateBootTimeRef.current = null;
+    }
 
     const initialSteps = stepLabels.map((label, i) => ({
       label,
