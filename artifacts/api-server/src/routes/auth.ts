@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { usersTable, passwordResetTokensTable } from "@workspace/db/schema";
-import { eq, count, and, gt } from "drizzle-orm";
+import { eq, count, and, gt, isNull, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { AuditService } from "../services/audit_service";
@@ -273,8 +273,9 @@ router.post("/auth/set-password", async (req, res) => {
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
     const now = new Date();
 
-    const [record] = await db
-      .select()
+    // First verify the token exists at all (for better error messages)
+    const [tokenRecord] = await db
+      .select({ id: passwordResetTokensTable.id, usedAt: passwordResetTokensTable.usedAt, expiresAt: passwordResetTokensTable.expiresAt, userId: passwordResetTokensTable.userId })
       .from(passwordResetTokensTable)
       .where(
         and(
@@ -284,36 +285,51 @@ router.post("/auth/set-password", async (req, res) => {
       )
       .limit(1);
 
-    if (!record) {
+    if (!tokenRecord) {
       res.status(404).json({ error: "Invalid or expired token" });
       return;
     }
-    if (record.usedAt) {
+    if (tokenRecord.usedAt) {
       res.status(410).json({ error: "This link has already been used" });
       return;
     }
-    if (record.expiresAt < now) {
+    if (tokenRecord.expiresAt < now) {
       res.status(410).json({ error: "This link has expired. Please ask your admin to send a new one." });
       return;
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
 
+    // Atomically consume token: only mark used if it hasn't been used yet and isn't expired.
+    // This prevents race conditions where two concurrent requests could both pass the checks above.
+    const [consumed] = await db
+      .update(passwordResetTokensTable)
+      .set({ usedAt: now })
+      .where(
+        and(
+          eq(passwordResetTokensTable.id, tokenRecord.id),
+          isNull(passwordResetTokensTable.usedAt),
+          gt(passwordResetTokensTable.expiresAt, now)
+        )
+      )
+      .returning({ id: passwordResetTokensTable.id });
+
+    if (!consumed) {
+      // Another concurrent request consumed the token first
+      res.status(410).json({ error: "This link has already been used" });
+      return;
+    }
+
     await db
       .update(usersTable)
       .set({ passwordHash, status: "active" })
-      .where(eq(usersTable.id, record.userId));
-
-    await db
-      .update(passwordResetTokensTable)
-      .set({ usedAt: now })
-      .where(eq(passwordResetTokensTable.id, record.id));
+      .where(eq(usersTable.id, tokenRecord.userId));
 
     AuditService.logEvent({
-      userId: record.userId,
+      userId: tokenRecord.userId,
       action: type === "setup" ? "auth.password_setup" : "auth.password_reset",
       entityType: "user",
-      entityId: record.userId,
+      entityId: tokenRecord.userId,
       details: { type },
     }).catch(() => {});
 
