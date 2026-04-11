@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   LayoutDashboard, Users, Receipt, Server, Settings, Menu, LogOut,
-  ShieldCheck, ArrowLeft, Cloud, CreditCard, Activity, FileText, Palette,
+  ShieldCheck, ArrowLeft, CreditCard, Activity, FileText, Palette,
 } from "lucide-react";
 
 export function AdminLayout({ children }: { children: ReactNode }) {
@@ -146,7 +146,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             </Sheet>
 
             <div className="flex items-center gap-2 md:hidden">
-              <LogoIcon />
+              <LogoMark />
               <span className="font-bold text-base">{siteName}</span>
             </div>
 
