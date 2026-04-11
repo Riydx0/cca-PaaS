@@ -13,8 +13,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import type { LucideIcon } from "lucide-react";
 import {
-  User, Mail, Shield, Clock, FileText, Link2, CheckCircle2, Ban,
+  User, Mail, Shield, Clock, FileText, CheckCircle2, Ban,
   Copy, Check, KeyRound, ShoppingCart, AlertCircle
 } from "lucide-react";
 
@@ -52,12 +53,18 @@ interface UserDetailDrawerProps {
 
 export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
   const { t } = useI18n();
-  const { isSuperAdmin } = useRole();
+  const { isAdmin, isSuperAdmin } = useRole();
   const qc = useQueryClient();
   const [notes, setNotes] = useState<string | null>(null);
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
-  const [linkType, setLinkType] = useState<"setup" | "reset" | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const statusLabels: Record<string, string> = {
+    active: t("admin.user.status.active"),
+    suspended: t("admin.user.status.suspended"),
+    pending: t("admin.user.status.pending"),
+    disabled: t("admin.user.status.disabled"),
+  };
 
   const { data: user, isLoading } = useQuery<UserDetail>({
     queryKey: ["admin", "user", userId],
@@ -115,14 +122,13 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
   });
 
   const sendLink = useMutation({
-    mutationFn: () =>
+    mutationFn: (): Promise<{ type: "setup" | "reset"; plainLink: string }> =>
       adminFetch(`/api/admin/users/${userId}/send-password-link`, {
         method: "POST",
       }),
-    onSuccess: (data: { type: "setup" | "reset"; plainLink: string }) => {
+    onSuccess: (data) => {
       toast.success(t("admin.toast.linkSent"));
       setGeneratedLink(data.plainLink);
-      setLinkType(data.type);
       qc.invalidateQueries({ queryKey: ["admin", "user", userId] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -136,14 +142,13 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
     });
   };
 
-  const statusLabel = (status: string) => t(`admin.user.status.${status}` as any) || status;
   const roleLabel = (role: string) => {
     if (role === "super_admin") return t("admin.role.superAdmin");
     if (role === "admin") return t("admin.role.admin");
     return t("admin.role.user");
   };
 
-  const InfoRow = ({ icon: Icon, label, value }: { icon: any; label: string; value: React.ReactNode }) => (
+  const InfoRow = ({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: React.ReactNode }) => (
     <div className="flex items-start gap-3 py-2.5">
       <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center shrink-0 mt-0.5">
         <Icon className="h-4 w-4 text-muted-foreground" />
@@ -169,7 +174,7 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
         ) : !user ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
             <AlertCircle className="h-10 w-10 opacity-30" />
-            <p>User not found</p>
+            <p>{t("admin.user.notFound")}</p>
           </div>
         ) : (
           <>
@@ -185,7 +190,7 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
               </div>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <Badge variant="outline" className={`text-xs ${statusColors[user.status] ?? statusColors.active}`}>
-                  {statusLabel(user.status)}
+                  {statusLabels[user.status] ?? user.status}
                 </Badge>
                 <Badge variant="outline" className={`text-xs ${roleColors[user.role] ?? roleColors.user}`}>
                   {roleLabel(user.role)}
@@ -200,8 +205,8 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
                 {t("admin.user.basicInfo")}
               </p>
-              <InfoRow icon={Mail} label="Email" value={<span className="truncate block">{user.email}</span>} />
-              <InfoRow icon={User} label="ID" value={`#${user.id}`} />
+              <InfoRow icon={Mail} label={t("admin.user.emailLabel")} value={<span className="truncate block">{user.email}</span>} />
+              <InfoRow icon={User} label={t("admin.user.idLabel")} value={`#${user.id}`} />
               <InfoRow
                 icon={Clock}
                 label={t("admin.user.joined")}
@@ -226,7 +231,7 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
               </p>
               <InfoRow
                 icon={Shield}
-                label="Password"
+                label={t("admin.user.passwordLabel")}
                 value={
                   user.hasPassword
                     ? <span className="text-emerald-600 flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" />{t("admin.user.hasPassword")}</span>
@@ -235,8 +240,8 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
               />
             </div>
 
-            {/* Password Link Generation */}
-            {isSuperAdmin && (
+            {/* Password Link Generation (admin+) */}
+            {isAdmin && (
               <div className="mb-4">
                 {generatedLink ? (
                   <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-2">
@@ -254,9 +259,9 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
                       variant="ghost"
                       size="sm"
                       className="w-full text-xs h-7"
-                      onClick={() => { setGeneratedLink(null); setLinkType(null); }}
+                      onClick={() => setGeneratedLink(null)}
                     >
-                      Dismiss
+                      {t("admin.user.dismiss")}
                     </Button>
                   </div>
                 ) : (
@@ -282,23 +287,25 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
 
             <Separator className="my-3" />
 
-            {/* Role & Status Controls */}
-            {isSuperAdmin && (
+            {/* Role & Status Controls (super_admin only for role changes; admin+ for status) */}
+            {isAdmin && (
               <div className="space-y-3 mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">{t("admin.col.role")}</p>
-                    <Select value={user.role} onValueChange={(r) => updateRole.mutate(r)} disabled={updateRole.isPending}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="user">{t("admin.role.user")}</SelectItem>
-                        <SelectItem value="admin">{t("admin.role.admin")}</SelectItem>
-                        <SelectItem value="super_admin">{t("admin.role.superAdmin")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {isSuperAdmin && (
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">{t("admin.col.role")}</p>
+                      <Select value={user.role} onValueChange={(r) => updateRole.mutate(r)} disabled={updateRole.isPending}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="user">{t("admin.role.user")}</SelectItem>
+                          <SelectItem value="admin">{t("admin.role.admin")}</SelectItem>
+                          <SelectItem value="super_admin">{t("admin.role.superAdmin")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="flex-1">
                     <p className="text-xs font-medium text-muted-foreground mb-1">{t("admin.user.accountStatus")}</p>
                     {user.status !== "suspended" ? (
@@ -333,7 +340,8 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
 
             {/* Admin Notes */}
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5" />
                 {t("admin.user.adminNotes")}
               </p>
               <Textarea

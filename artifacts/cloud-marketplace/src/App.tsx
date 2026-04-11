@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from 'wouter';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { I18nProvider } from "@/lib/i18n";
@@ -250,6 +251,7 @@ function App() {
         <TooltipProvider>
           <AppRouter />
           <Toaster />
+          <SonnerToaster richColors position="top-right" />
         </TooltipProvider>
       </QueryClientProvider>
     </I18nProvider>

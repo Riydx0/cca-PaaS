@@ -2,11 +2,10 @@ import { Router } from "express";
 import { requireAdmin, requireSuperAdmin } from "../../middlewares/requireRole";
 import { db } from "@workspace/db";
 import { usersTable, passwordResetTokensTable, serverOrdersTable } from "@workspace/db/schema";
-import { eq, ilike, or, desc, count, sql } from "drizzle-orm";
+import { eq, ilike, or, desc, count, sql, and, gt } from "drizzle-orm";
 import { AuditService } from "../../services/audit_service";
 import { EmailService } from "../../services/email_service";
 import crypto from "crypto";
-import bcrypt from "bcryptjs";
 
 const router = Router();
 
@@ -50,7 +49,10 @@ router.get("/", requireAdmin, async (req, res) => {
         .offset(offset);
     }
 
-    const [countRow] = await db.select({ count: count() }).from(usersTable);
+    const countQuery = db.select({ count: count() }).from(usersTable);
+    const [countRow] = search
+      ? await countQuery.where(or(ilike(usersTable.email, `%${search}%`), ilike(usersTable.name, `%${search}%`)))
+      : await countQuery;
 
     const users = rows.map((u) => ({
       id: String(u.id),
@@ -103,19 +105,21 @@ router.get("/:userId", requireAdmin, async (req, res) => {
       .from(serverOrdersTable)
       .where(eq(serverOrdersTable.userId, String(userId)));
 
+    const now = new Date();
     const [pendingToken] = await db
-      .select({ id: passwordResetTokensTable.id, type: passwordResetTokensTable.type, expiresAt: passwordResetTokensTable.expiresAt })
+      .select({ id: passwordResetTokensTable.id })
       .from(passwordResetTokensTable)
       .where(
-        eq(passwordResetTokensTable.userId, userId)
+        and(
+          eq(passwordResetTokensTable.userId, userId),
+          gt(passwordResetTokensTable.expiresAt, now),
+          sql`${passwordResetTokensTable.usedAt} IS NULL`
+        )
       )
       .orderBy(desc(passwordResetTokensTable.createdAt))
       .limit(1);
 
-    const hasPendingLink =
-      pendingToken && !pendingToken.expiresAt || (pendingToken && pendingToken.expiresAt > new Date())
-        ? true
-        : false;
+    const hasPendingLink = !!pendingToken;
 
     res.json({
       id: String(user.id),
@@ -179,7 +183,7 @@ router.patch("/:userId/role", requireSuperAdmin, async (req, res) => {
   }
 });
 
-router.patch("/:userId/status", requireSuperAdmin, async (req, res) => {
+router.patch("/:userId/status", requireAdmin, async (req, res) => {
   const userId = parseInt(req.params.userId, 10);
   const { status } = req.body;
 
@@ -263,7 +267,7 @@ router.patch("/:userId/notes", requireAdmin, async (req, res) => {
   }
 });
 
-router.post("/:userId/send-password-link", requireSuperAdmin, async (req, res) => {
+router.post("/:userId/send-password-link", requireAdmin, async (req, res) => {
   const userId = parseInt(req.params.userId, 10);
 
   if (isNaN(userId)) {

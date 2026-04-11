@@ -42,7 +42,7 @@ const statusColors: Record<string, string> = {
 
 export function AdminUsers() {
   const { t } = useI18n();
-  const { isSuperAdmin } = useRole();
+  const { isAdmin, isSuperAdmin } = useRole();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -160,7 +160,7 @@ export function AdminUsers() {
                           <Eye className="h-4 w-4 me-2" />
                           {t("admin.user.viewDetails")}
                         </DropdownMenuItem>
-                        {isSuperAdmin && (
+                        {isAdmin && (
                           <>
                             <DropdownMenuSeparator />
                             {u.status !== "suspended" ? (

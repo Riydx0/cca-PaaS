@@ -182,7 +182,9 @@ export function SetPasswordPage() {
               >
                 {userName && (
                   <p className="text-sm text-muted-foreground text-center -mt-1">
-                    Hi, <span className="font-medium text-foreground">{userName}</span>{userEmail ? ` (${userEmail})` : ""}
+                    {t("admin.user.greeting")
+                      .replace("{name}", userName)
+                      .replace("{email}", userEmail)}
                   </p>
                 )}
 

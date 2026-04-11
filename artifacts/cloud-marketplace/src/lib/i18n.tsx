@@ -325,6 +325,12 @@ const translations = {
     "admin.user.accountStatus": "Account Status",
     "admin.user.joined": "Joined",
     "admin.user.ordersCount": "orders",
+    "admin.user.emailLabel": "Email",
+    "admin.user.idLabel": "User ID",
+    "admin.user.passwordLabel": "Password",
+    "admin.user.dismiss": "Dismiss",
+    "admin.user.notFound": "User not found",
+    "admin.user.greeting": "Hello, {name} ({email})",
 
     // ---- Set Password Page ----
     "setPassword.titleSetup": "Set Your Password",
@@ -669,6 +675,12 @@ const translations = {
     "admin.user.accountStatus": "حالة الحساب",
     "admin.user.joined": "تاريخ الانضمام",
     "admin.user.ordersCount": "طلبات",
+    "admin.user.emailLabel": "البريد الإلكتروني",
+    "admin.user.idLabel": "معرّف المستخدم",
+    "admin.user.passwordLabel": "كلمة المرور",
+    "admin.user.dismiss": "إخفاء",
+    "admin.user.notFound": "المستخدم غير موجود",
+    "admin.user.greeting": "مرحباً، {name} ({email})",
 
     // ---- صفحة تعيين كلمة المرور ----
     "setPassword.titleSetup": "تعيين كلمة المرور",
