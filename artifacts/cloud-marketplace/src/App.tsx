@@ -23,6 +23,7 @@ import { BillingPage } from "@/pages/BillingPage";
 import { InvoicesPage } from "@/pages/InvoicesPage";
 import { PaymentsPage } from "@/pages/PaymentsPage";
 import { SetupPage } from "@/pages/SetupPage";
+import { SetPasswordPage } from "@/pages/SetPasswordPage";
 
 import { AdminDashboard } from "@/pages/admin/AdminDashboard";
 import { AdminUsers } from "@/pages/admin/AdminUsers";
@@ -102,6 +103,7 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
       <Route path="/sign-in" component={SignInPage} />
       <Route path="/sign-up" component={SignUpPage} />
       <Route path="/forgot-password" component={ForgotPasswordPage} />
+      <Route path="/set-password" component={SetPasswordPage} />
 
       <Route path="/dashboard">
         <ProtectedRoute component={Dashboard} />

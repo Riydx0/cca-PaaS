@@ -7,17 +7,23 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Search } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import { Users, Search, MoreHorizontal, Eye, KeyRound, Ban, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { UserDetailDrawer } from "./UserDetailDrawer";
 
-interface AppUser {
+export interface AppUser {
   id: string;
   email: string;
   name: string;
   role: string;
+  status: string;
+  lastLoginAt: string | null;
   createdAt: string;
 }
 
@@ -27,11 +33,19 @@ const roleColors: Record<string, string> = {
   user: "bg-secondary text-secondary-foreground border-border",
 };
 
+const statusColors: Record<string, string> = {
+  active: "bg-emerald-500/10 text-emerald-700 border-emerald-200",
+  suspended: "bg-red-500/10 text-red-700 border-red-200",
+  pending: "bg-amber-500/10 text-amber-600 border-amber-200",
+  disabled: "bg-gray-500/10 text-gray-500 border-gray-200",
+};
+
 export function AdminUsers() {
   const { t } = useI18n();
   const { isSuperAdmin } = useRole();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<{ users: AppUser[]; totalCount: number }>({
     queryKey: ["admin", "users", search],
@@ -40,18 +54,29 @@ export function AdminUsers() {
     placeholderData: (prev) => prev,
   });
 
-  const updateRole = useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: string }) =>
-      adminFetch(`/api/admin/users/${userId}/role`, {
+  const updateStatus = useMutation({
+    mutationFn: ({ userId, status }: { userId: string; status: string }) =>
+      adminFetch(`/api/admin/users/${userId}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ status }),
       }),
-    onSuccess: () => {
-      toast.success(t("admin.toast.roleUpdated"));
+    onSuccess: (_data, vars) => {
+      toast.success(vars.status === "suspended" ? t("admin.toast.userSuspended") : t("admin.toast.userActivated"));
       qc.invalidateQueries({ queryKey: ["admin", "users"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const statusLabel = (status: string) => {
+    const key = `admin.user.status.${status}` as any;
+    return t(key) || status;
+  };
+
+  const roleLabel = (role: string) => {
+    if (role === "super_admin") return t("admin.role.superAdmin");
+    if (role === "admin") return t("admin.role.admin");
+    return t("admin.role.user");
+  };
 
   return (
     <div className="space-y-6">
@@ -84,11 +109,12 @@ export function AdminUsers() {
           </div>
         ) : (
           <>
-            <div className="hidden md:grid grid-cols-[1fr_auto_auto_auto] gap-4 px-5 py-3 bg-muted/40 border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="hidden md:grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-5 py-3 bg-muted/40 border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <span>{t("admin.col.user")}</span>
+              <span>{t("admin.col.status")}</span>
               <span>{t("admin.col.role")}</span>
               <span>{t("admin.col.joined")}</span>
-              {isSuperAdmin && <span>{t("admin.col.actions")}</span>}
+              <span>{t("admin.col.actions")}</span>
             </div>
             <div className="divide-y divide-border">
               {data.users.map((u, i) => (
@@ -97,7 +123,8 @@ export function AdminUsers() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: i * 0.03 }}
-                  className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto] gap-3 md:gap-4 items-center px-5 py-4 hover:bg-muted/30 transition-colors"
+                  className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto_auto] gap-3 md:gap-4 items-center px-5 py-4 hover:bg-muted/30 transition-colors cursor-pointer"
+                  onClick={() => setSelectedUserId(u.id)}
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm uppercase shrink-0">
@@ -109,30 +136,54 @@ export function AdminUsers() {
                     </div>
                   </div>
 
+                  <Badge variant="outline" className={`text-xs px-2.5 py-0.5 font-medium ${statusColors[u.status] ?? statusColors.active}`}>
+                    {statusLabel(u.status)}
+                  </Badge>
+
                   <Badge variant="outline" className={`text-xs px-2.5 py-0.5 font-medium ${roleColors[u.role] ?? roleColors.user}`}>
-                    {u.role === "super_admin" ? "Super Admin" : u.role === "admin" ? "Admin" : t("admin.role.user")}
+                    {roleLabel(u.role)}
                   </Badge>
 
                   <span className="text-sm text-muted-foreground hidden md:block">
                     {new Date(u.createdAt).toLocaleDateString()}
                   </span>
 
-                  {isSuperAdmin && (
-                    <Select
-                      value={u.role}
-                      onValueChange={(role) => updateRole.mutate({ userId: u.id, role })}
-                      disabled={updateRole.isPending}
-                    >
-                      <SelectTrigger className="w-36 h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="user">{t("admin.role.user")}</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="super_admin">Super Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setSelectedUserId(u.id)}>
+                          <Eye className="h-4 w-4 me-2" />
+                          {t("admin.user.viewDetails")}
+                        </DropdownMenuItem>
+                        {isSuperAdmin && (
+                          <>
+                            <DropdownMenuSeparator />
+                            {u.status !== "suspended" ? (
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => updateStatus.mutate({ userId: u.id, status: "suspended" })}
+                              >
+                                <Ban className="h-4 w-4 me-2" />
+                                {t("admin.user.suspend")}
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                onClick={() => updateStatus.mutate({ userId: u.id, status: "active" })}
+                              >
+                                <CheckCircle2 className="h-4 w-4 me-2" />
+                                {t("admin.user.activate")}
+                              </DropdownMenuItem>
+                            )}
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </motion.div>
               ))}
             </div>
@@ -142,6 +193,13 @@ export function AdminUsers() {
           </>
         )}
       </Card>
+
+      {selectedUserId && (
+        <UserDetailDrawer
+          userId={selectedUserId}
+          onClose={() => setSelectedUserId(null)}
+        />
+      )}
     </div>
   );
 }
