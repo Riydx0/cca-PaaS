@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { cloudServicesTable, serverOrdersTable, providersTable } from "@workspace/db/schema";
+import { cloudServicesTable, serverOrdersTable, providersTable, serviceInstancesTable } from "@workspace/db/schema";
 import { CreateOrderBody } from "@workspace/api-zod";
 import { eq, and, desc, ilike } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireRole";
@@ -169,6 +169,33 @@ router.post("/:id/action", requireAuth, async (req: any, res) => {
     console.error(err);
     res.status(500).json({ error: "Failed to perform server action" });
   }
+});
+
+/**
+ * GET /api/orders/:id/service-instance
+ * Resolver for legacy deep-links: maps an order ID to its service instance ID.
+ * Returns { instanceId } so the frontend can redirect to /my-services/:instanceId.
+ */
+router.get("/:id/service-instance", requireAuth, async (req: any, res) => {
+  const userId = String(req.currentUser.id);
+  const orderId = parseInt(req.params.id, 10);
+
+  if (isNaN(orderId)) {
+    res.status(400).json({ error: "Invalid order ID" });
+    return;
+  }
+
+  const [row] = await db
+    .select({ id: serviceInstancesTable.id })
+    .from(serviceInstancesTable)
+    .where(and(eq(serviceInstancesTable.orderId, orderId), eq(serviceInstancesTable.userId, userId)));
+
+  if (!row) {
+    res.status(404).json({ error: "No service instance found for this order" });
+    return;
+  }
+
+  res.json({ instanceId: row.id });
 });
 
 export default router;

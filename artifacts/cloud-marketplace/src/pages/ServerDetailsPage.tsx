@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useRoute, Link } from "wouter";
+import { useState, useEffect } from "react";
+import { useRoute, Link, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -124,6 +124,7 @@ export function ServerDetailsPage() {
   const [, params] = useRoute("/my-services/:id");
   const { t } = useI18n();
   const id = params?.id ?? "";
+  const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -131,7 +132,19 @@ export function ServerDetailsPage() {
     queryKey: ["service-instance", id],
     queryFn: () => fetchServiceInstance(id),
     enabled: !!id,
+    retry: false,
   });
+
+  /** Legacy deep-link resolver: if the ID is an order ID (not instance ID), redirect. */
+  useEffect(() => {
+    if (!error || !id) return;
+    fetch(`/api/orders/${id}/service-instance`, { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.instanceId) navigate(`/my-services/${data.instanceId}`, { replace: true });
+      })
+      .catch(() => {});
+  }, [error, id, navigate]);
 
   const doAction = async (action: "start" | "stop" | "reboot") => {
     setActionLoading(action);
