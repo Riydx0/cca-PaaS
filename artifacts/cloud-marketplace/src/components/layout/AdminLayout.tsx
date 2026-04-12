@@ -103,8 +103,8 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             <span>{t("admin.nav.invoices")}</span>
           </Link>
           <Link href="/admin/payments" onClick={onClick} className={subItemClass(location === "/admin/payments")}>
-            <Receipt className="h-4 w-4 shrink-0" />
-            <span>{t("admin.nav.payments")}</span>
+            <CreditCard className="h-4 w-4 shrink-0" />
+            <span>{t("admin.nav.paymentRecords")}</span>
           </Link>
         </SubList>
       )}
