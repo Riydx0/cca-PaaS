@@ -125,7 +125,7 @@ router.post("/subscribe", async (req: any, res) => {
       })
       .returning();
 
-    await AuditService.log({
+    await AuditService.logEvent({
       userId,
       action: "subscription.created",
       entityType: "user_subscription",
@@ -161,7 +161,7 @@ router.post("/cancel", async (req: any, res) => {
       .where(eq(userSubscriptionsTable.id, existing.id))
       .returning();
 
-    await AuditService.log({
+    await AuditService.logEvent({
       userId,
       action: "subscription.cancelled",
       entityType: "user_subscription",

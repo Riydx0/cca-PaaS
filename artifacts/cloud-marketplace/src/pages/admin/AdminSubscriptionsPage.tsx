@@ -2,13 +2,14 @@ import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { adminFetch } from "@/lib/adminFetch";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { BadgeCheck, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { BadgeCheck, Search, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface Sub {
   id: number;
@@ -40,14 +41,18 @@ function fmt(iso: string | null) {
 export function AdminSubscriptionsPage() {
   const { t } = useI18n();
   const [status, setStatus] = useState("all");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const LIMIT = 20;
 
+  const debouncedSearch = useDebounce(search, 350);
+
   const params = new URLSearchParams({ page: String(page), limit: String(LIMIT) });
   if (status !== "all") params.set("status", status);
+  if (debouncedSearch) params.set("search", debouncedSearch);
 
   const { data, isLoading } = useQuery<{ data: Sub[]; total: number; page: number; limit: number }>({
-    queryKey: ["admin", "subscriptions", status, page],
+    queryKey: ["admin", "subscriptions", status, debouncedSearch, page],
     queryFn: () => adminFetch(`/api/admin/subscriptions?${params}`),
     placeholderData: (prev) => prev,
   });
@@ -55,6 +60,8 @@ export function AdminSubscriptionsPage() {
   const rows = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / LIMIT);
+
+  const clearSearch = () => { setSearch(""); setPage(1); };
 
   return (
     <div className="space-y-6">
@@ -67,7 +74,22 @@ export function AdminSubscriptionsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder={t("admin.subscriptions.search")}
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="ps-9 pe-8"
+          />
+          {search && (
+            <button onClick={clearSearch} className="absolute end-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
         <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
           <SelectTrigger className="w-[160px]">
             <SelectValue placeholder={t("admin.subscriptions.allStatuses")} />
@@ -81,7 +103,8 @@ export function AdminSubscriptionsPage() {
             <SelectItem value="expired">{t("subscription.status.expired")}</SelectItem>
           </SelectContent>
         </Select>
-        <div className="text-sm text-muted-foreground flex items-center">
+
+        <div className="text-sm text-muted-foreground">
           {t("admin.subscriptions.total").replace("{n}", String(total))}
         </div>
       </div>

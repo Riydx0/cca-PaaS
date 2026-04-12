@@ -310,6 +310,7 @@ const translations = {
     "admin.subscriptions.cycle": "Billing",
     "admin.subscriptions.startedAt": "Started",
     "admin.subscriptions.expiresAt": "Expires",
+    "admin.subscriptions.search": "Search by name, email or plan...",
     "admin.subscriptions.empty": "No subscriptions found.",
 
     // ---- Admin Plans ----
@@ -810,6 +811,7 @@ const translations = {
     "admin.subscriptions.cycle": "الفوترة",
     "admin.subscriptions.startedAt": "بدأ في",
     "admin.subscriptions.expiresAt": "ينتهي في",
+    "admin.subscriptions.search": "ابحث بالاسم أو البريد أو الخطة...",
     "admin.subscriptions.empty": "لا توجد اشتراكات.",
 
     // ---- لوحة الخطط (سوبر أدمن) ----

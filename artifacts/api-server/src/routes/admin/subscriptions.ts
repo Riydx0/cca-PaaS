@@ -16,6 +16,18 @@ router.get("/", async (req, res) => {
 
     const conditions = [];
     if (status) conditions.push(eq(userSubscriptionsTable.status, status));
+    if (search && search.trim()) {
+      const q = `%${search.trim()}%`;
+      conditions.push(
+        or(
+          ilike(usersTable.name, q),
+          ilike(usersTable.email, q),
+          ilike(subscriptionPlansTable.name, q)
+        )!
+      );
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const rows = await db
       .select({
@@ -37,11 +49,7 @@ router.get("/", async (req, res) => {
       .from(userSubscriptionsTable)
       .innerJoin(usersTable, eq(userSubscriptionsTable.userId, usersTable.id))
       .innerJoin(subscriptionPlansTable, eq(userSubscriptionsTable.planId, subscriptionPlansTable.id))
-      .where(
-        conditions.length > 0
-          ? and(...conditions)
-          : undefined
-      )
+      .where(whereClause)
       .orderBy(desc(userSubscriptionsTable.createdAt))
       .limit(limitNum)
       .offset(offset);
@@ -50,7 +58,8 @@ router.get("/", async (req, res) => {
       .select({ total: count() })
       .from(userSubscriptionsTable)
       .innerJoin(usersTable, eq(userSubscriptionsTable.userId, usersTable.id))
-      .where(conditions.length > 0 ? and(...conditions) : undefined);
+      .innerJoin(subscriptionPlansTable, eq(userSubscriptionsTable.planId, subscriptionPlansTable.id))
+      .where(whereClause);
 
     res.json({ data: rows, total: Number(total), page: pageNum, limit: limitNum });
   } catch (err) {

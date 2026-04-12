@@ -64,7 +64,7 @@ router.post("/", async (req: any, res) => {
       })
       .returning();
 
-    await AuditService.log({
+    await AuditService.logEvent({
       userId,
       action: "plan.created",
       entityType: "subscription_plan",
@@ -121,7 +121,7 @@ router.patch("/:id", async (req: any, res) => {
       return;
     }
 
-    await AuditService.log({
+    await AuditService.logEvent({
       userId,
       action: "plan.updated",
       entityType: "subscription_plan",
@@ -154,7 +154,7 @@ router.patch("/:id/toggle", async (req: any, res) => {
       .where(eq(subscriptionPlansTable.id, planId))
       .returning();
 
-    await AuditService.log({
+    await AuditService.logEvent({
       userId,
       action: "plan.toggled",
       entityType: "subscription_plan",
@@ -195,7 +195,7 @@ router.delete("/:id", async (req: any, res) => {
       return;
     }
 
-    await AuditService.log({
+    await AuditService.logEvent({
       userId,
       action: "plan.deleted",
       entityType: "subscription_plan",
