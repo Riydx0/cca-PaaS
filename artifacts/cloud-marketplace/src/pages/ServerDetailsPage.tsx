@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useRoute, Link } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useI18n } from "@/lib/i18n";
-import { adminFetch } from "@/lib/adminFetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,20 +20,26 @@ import {
   RotateCcw,
   Loader2,
   Cloud,
+  Wifi,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
-interface OrderDetail {
+interface ServiceInstance {
   id: number;
+  orderId?: number;
   userId: string;
-  cloudServiceId: number;
-  status: string;
-  requestedRegion: string;
-  notes?: string;
-  externalOrderId?: string;
-  provisioningStatus?: string;
   externalId?: string;
+  serviceType?: string;
+  provisioningStatus: string;
+  runningStatus: string;
+  ipAddress?: string;
+  region?: string;
+  osType?: string;
+  cpu?: number;
+  ramGb?: number;
+  storageGb?: number;
+  bandwidthTb?: string;
   createdAt: string;
   cloudService?: {
     id: number;
@@ -49,20 +54,19 @@ interface OrderDetail {
     priceMonthly: number;
     region: string;
   } | null;
+  provider?: { id: number; name: string; code: string } | null;
 }
 
-async function fetchOrder(id: string): Promise<OrderDetail> {
-  const res = await fetch(`/api/orders/${id}`, { credentials: "include" });
-  if (!res.ok) throw new Error("Order not found");
+async function fetchServiceInstance(id: string): Promise<ServiceInstance> {
+  const res = await fetch(`/api/my-services/${id}`, { credentials: "include" });
+  if (!res.ok) throw new Error("Service instance not found");
   return res.json();
 }
 
 async function performAction(id: string, action: "start" | "stop" | "reboot"): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`/api/orders/${id}/action`, {
+  const res = await fetch(`/api/my-services/${id}/${action}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ action }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Request failed" }));
@@ -71,35 +75,42 @@ async function performAction(id: string, action: "start" | "stop" | "reboot"): P
   return res.json();
 }
 
-function getStatusColor(status: string) {
+function getRunningStatusColor(status: string) {
   switch (status) {
-    case "Active": return "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-800";
-    case "Pending": return "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-800";
-    case "Failed": return "bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-800";
-    case "Provisioning": return "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-800";
-    case "Cancelled": return "bg-secondary text-secondary-foreground border-border";
-    default: return "bg-secondary text-secondary-foreground border-border";
+    case "running":
+      return "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-800";
+    case "stopped":
+      return "bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-800";
+    case "rebooting":
+      return "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-800";
+    default:
+      return "bg-secondary text-secondary-foreground border-border";
   }
 }
 
-function getProvisioningStatusColor(status?: string) {
+function getProvisioningStatusColor(status: string) {
   switch (status) {
-    case "active": return "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400";
-    case "provisioning": return "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400";
-    case "failed": return "bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-400";
-    default: return "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400";
+    case "active":
+      return "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400";
+    case "provisioning":
+      return "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400";
+    case "failed":
+      return "bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-400";
+    default:
+      return "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400";
   }
 }
 
 export function ServerDetailsPage() {
-  const [, params] = useRoute("/dashboard/services/:id");
+  const [, params] = useRoute("/my-services/:id");
   const { t } = useI18n();
   const id = params?.id ?? "";
+  const queryClient = useQueryClient();
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const { data: order, isLoading, error } = useQuery<OrderDetail>({
-    queryKey: ["order", id],
-    queryFn: () => fetchOrder(id),
+  const { data: instance, isLoading, error } = useQuery<ServiceInstance>({
+    queryKey: ["service-instance", id],
+    queryFn: () => fetchServiceInstance(id),
     enabled: !!id,
   });
 
@@ -107,7 +118,9 @@ export function ServerDetailsPage() {
     setActionLoading(action);
     try {
       const result = await performAction(id, action);
-      toast.success(result.message || t(`server.action.${action}.success`));
+      toast.success(result.message || t(`server.action.${action}.success` as any));
+      queryClient.invalidateQueries({ queryKey: ["service-instance", id] });
+      queryClient.invalidateQueries({ queryKey: ["my-services"] });
     } catch (err: any) {
       toast.error(err.message || t("server.action.failed"));
     } finally {
@@ -127,13 +140,13 @@ export function ServerDetailsPage() {
     );
   }
 
-  if (error || !order) {
+  if (error || !instance) {
     return (
       <div className="space-y-4">
-        <Link href="/orders">
+        <Link href="/my-services">
           <Button variant="ghost" className="gap-2 pl-0">
             <ArrowLeft className="h-4 w-4" />
-            {t("server.backToOrders")}
+            {t("server.backToMyServices")}
           </Button>
         </Link>
         <Card className="border-destructive/30 bg-destructive/5">
@@ -145,7 +158,14 @@ export function ServerDetailsPage() {
     );
   }
 
-  const svc = order.cloudService;
+  const svc = instance.cloudService;
+  const cpu = instance.cpu ?? svc?.cpu;
+  const ramGb = instance.ramGb ?? svc?.ramGb;
+  const storageGb = instance.storageGb ?? svc?.storageGb;
+  const bandwidthTb = instance.bandwidthTb ?? (svc?.bandwidthTb != null ? String(svc.bandwidthTb) : null);
+  const providerName = instance.provider?.name || svc?.provider || "—";
+  const region = instance.region || svc?.region || "—";
+  const osType = instance.osType || "Linux (Ubuntu 22.04)";
 
   return (
     <motion.div
@@ -155,7 +175,7 @@ export function ServerDetailsPage() {
       transition={{ duration: 0.3 }}
     >
       <div className="flex items-center gap-3">
-        <Link href="/orders">
+        <Link href="/my-services">
           <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0">
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -166,16 +186,14 @@ export function ServerDetailsPage() {
           </h1>
           <p className="text-muted-foreground text-sm">{t("server.detailsDesc")}</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 border font-semibold ${getStatusColor(order.status)}`}>
-            <span className="mr-1.5 text-[10px]">●</span>
-            {order.status}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 border font-semibold text-xs ${getRunningStatusColor(instance.runningStatus)}`}>
+            <span className="me-1.5 text-[10px]">●</span>
+            {t(`service.runningStatus.${instance.runningStatus}` as any)}
           </Badge>
-          {order.provisioningStatus && (
-            <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 border font-medium text-xs ${getProvisioningStatusColor(order.provisioningStatus)}`}>
-              {order.provisioningStatus}
-            </Badge>
-          )}
+          <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 border font-medium text-xs ${getProvisioningStatusColor(instance.provisioningStatus)}`}>
+            {t(`service.provisioningStatus.${instance.provisioningStatus}` as any)}
+          </Badge>
         </div>
       </div>
 
@@ -195,30 +213,39 @@ export function ServerDetailsPage() {
               <div className="text-muted-foreground font-medium">{t("label.provider")}</div>
               <div className="flex items-center gap-1.5">
                 <Cloud className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="font-semibold">{svc?.provider || "—"}</span>
+                <span className="font-semibold">{providerName}</span>
               </div>
 
               <div className="text-muted-foreground font-medium">{t("label.region")}</div>
               <div className="flex items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="font-semibold">{order.requestedRegion}</span>
+                <span className="font-semibold">{region}</span>
               </div>
 
               <div className="text-muted-foreground font-medium">{t("server.field.os")}</div>
-              <div className="font-semibold">Linux (Ubuntu 22.04)</div>
+              <div className="font-semibold">{osType}</div>
 
               <div className="text-muted-foreground font-medium">{t("server.field.ip")}</div>
-              <div className="font-mono font-semibold text-muted-foreground">—</div>
+              <div className="flex items-center gap-1.5">
+                <Wifi className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="font-mono font-semibold">
+                  {instance.ipAddress || <span className="text-muted-foreground">—</span>}
+                </span>
+              </div>
 
-              <div className="text-muted-foreground font-medium">{t("server.field.orderId")}</div>
-              <div className="font-mono text-xs text-muted-foreground">#{order.id}</div>
+              {instance.externalId && (
+                <>
+                  <div className="text-muted-foreground font-medium">External ID</div>
+                  <div className="font-mono text-xs text-muted-foreground truncate">{instance.externalId}</div>
+                </>
+              )}
             </div>
 
             <Separator />
 
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Calendar className="h-3.5 w-3.5" />
-              <span>{t("server.field.createdAt")}: {new Date(order.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
+              <span>{t("server.field.createdAt")}: {new Date(instance.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
             </div>
           </CardContent>
         </Card>
@@ -236,7 +263,7 @@ export function ServerDetailsPage() {
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-semibold uppercase tracking-wider">
                   <Cpu className="h-3 w-3" /> CPU
                 </div>
-                <div className="text-xl font-bold">{svc?.cpu ?? "—"}</div>
+                <div className="text-xl font-bold">{cpu ?? "—"}</div>
                 <div className="text-xs text-muted-foreground">vCPU Cores</div>
               </div>
 
@@ -244,7 +271,7 @@ export function ServerDetailsPage() {
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-semibold uppercase tracking-wider">
                   <Server className="h-3 w-3" /> RAM
                 </div>
-                <div className="text-xl font-bold">{svc?.ramGb ?? "—"} GB</div>
+                <div className="text-xl font-bold">{ramGb ?? "—"} GB</div>
                 <div className="text-xs text-muted-foreground">Memory</div>
               </div>
 
@@ -252,7 +279,7 @@ export function ServerDetailsPage() {
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-semibold uppercase tracking-wider">
                   <HardDrive className="h-3 w-3" /> Storage
                 </div>
-                <div className="text-xl font-bold">{svc?.storageGb ?? "—"} GB</div>
+                <div className="text-xl font-bold">{storageGb ?? "—"} GB</div>
                 <div className="text-xs text-muted-foreground">{svc?.storageType ?? "SSD"}</div>
               </div>
 
@@ -260,7 +287,7 @@ export function ServerDetailsPage() {
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-semibold uppercase tracking-wider">
                   <Network className="h-3 w-3" /> Bandwidth
                 </div>
-                <div className="text-xl font-bold">{svc?.bandwidthTb ?? "—"} TB</div>
+                <div className="text-xl font-bold">{bandwidthTb ?? "—"} TB</div>
                 <div className="text-xs text-muted-foreground">Per month</div>
               </div>
             </div>
@@ -288,11 +315,7 @@ export function ServerDetailsPage() {
               onClick={() => doAction("start")}
               disabled={actionLoading !== null}
             >
-              {actionLoading === "start" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
+              {actionLoading === "start" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               {t("server.action.start")}
             </Button>
 
@@ -302,11 +325,7 @@ export function ServerDetailsPage() {
               onClick={() => doAction("stop")}
               disabled={actionLoading !== null}
             >
-              {actionLoading === "stop" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Square className="h-4 w-4" />
-              )}
+              {actionLoading === "stop" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
               {t("server.action.stop")}
             </Button>
 
@@ -316,11 +335,7 @@ export function ServerDetailsPage() {
               onClick={() => doAction("reboot")}
               disabled={actionLoading !== null}
             >
-              {actionLoading === "reboot" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RotateCcw className="h-4 w-4" />
-              )}
+              {actionLoading === "reboot" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
               {t("server.action.reboot")}
             </Button>
           </div>

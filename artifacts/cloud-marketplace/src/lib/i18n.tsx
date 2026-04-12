@@ -7,6 +7,7 @@ const translations = {
     // Nav
     "nav.dashboard": "Dashboard",
     "nav.services": "Services",
+    "nav.myServices": "My Services",
     "nav.orders": "My Orders",
     "nav.signOut": "Sign Out",
     "nav.signIn": "Sign In",
@@ -16,6 +17,9 @@ const translations = {
     "page.dashboard.title": "Dashboard Overview",
     "page.services.title": "Cloud Services Catalog",
     "page.orders.title": "Order History",
+    "page.myServices.title": "My Services",
+    "page.myServices.subtitle": "View and manage your active server instances.",
+    "page.myServices.empty": "No active services yet. Your servers will appear here after provisioning.",
     // Buttons
     "btn.requestServer": "Request Server",
     "btn.submit": "Submit Order",
@@ -530,16 +534,44 @@ const translations = {
     "server.action.start.success": "Server started.",
     "server.action.stop.success": "Server stopped.",
     "server.action.reboot.success": "Server rebooted.",
+    "server.backToMyServices": "Back to My Services",
+
+    // ---- Service Instance Running Status ----
+    "service.runningStatus.running": "Running",
+    "service.runningStatus.stopped": "Stopped",
+    "service.runningStatus.rebooting": "Rebooting",
+    "service.runningStatus.unknown": "Unknown",
+
+    // ---- Service Instance Provisioning Status ----
+    "service.provisioningStatus.pending": "Pending",
+    "service.provisioningStatus.provisioning": "Provisioning",
+    "service.provisioningStatus.active": "Active",
+    "service.provisioningStatus.failed": "Failed",
 
     // ---- Admin Service Type ----
     "admin.field.serviceType": "Service Type",
     "admin.field.selectProvider": "Select provider...",
     "admin.serviceType.server": "Server (VPS / Dedicated)",
+
+    // ---- Admin Service Instances ----
+    "admin.nav.serviceInstances": "Service Instances",
+    "admin.serviceInstances.title": "Service Instances",
+    "admin.serviceInstances.subtitle": "All provisioned server instances across the platform.",
+    "admin.serviceInstances.col.instance": "Instance",
+    "admin.serviceInstances.col.user": "User",
+    "admin.serviceInstances.col.provider": "Provider",
+    "admin.serviceInstances.col.region": "Region",
+    "admin.serviceInstances.col.ip": "IP Address",
+    "admin.serviceInstances.col.runningStatus": "Running",
+    "admin.serviceInstances.col.provisioningStatus": "Provisioning",
+    "admin.serviceInstances.col.actions": "Actions",
+    "admin.serviceInstances.empty": "No service instances found.",
   },
   ar: {
     // Nav
     "nav.dashboard": "لوحة القيادة",
     "nav.services": "الخدمات",
+    "nav.myServices": "خدماتي",
     "nav.orders": "طلباتي",
     "nav.signOut": "تسجيل خروج",
     "nav.signIn": "تسجيل دخول",
@@ -549,6 +581,9 @@ const translations = {
     "page.dashboard.title": "نظرة عامة على لوحة القيادة",
     "page.services.title": "كتالوج الخدمات السحابية",
     "page.orders.title": "تاريخ الطلبات",
+    "page.myServices.title": "خدماتي",
+    "page.myServices.subtitle": "عرض وإدارة خوادمك النشطة.",
+    "page.myServices.empty": "لا توجد خدمات نشطة بعد. ستظهر خوادمك هنا بعد التوفير.",
     // Buttons
     "btn.requestServer": "طلب خادم",
     "btn.submit": "تأكيد الطلب",
@@ -1063,11 +1098,38 @@ const translations = {
     "server.action.start.success": "تم تشغيل الخادم.",
     "server.action.stop.success": "تم إيقاف الخادم.",
     "server.action.reboot.success": "تمت إعادة تشغيل الخادم.",
+    "server.backToMyServices": "العودة لخدماتي",
+
+    // ---- حالة تشغيل الخدمة ----
+    "service.runningStatus.running": "يعمل",
+    "service.runningStatus.stopped": "متوقف",
+    "service.runningStatus.rebooting": "يُعاد تشغيله",
+    "service.runningStatus.unknown": "غير معروف",
+
+    // ---- حالة توفير الخدمة ----
+    "service.provisioningStatus.pending": "في الانتظار",
+    "service.provisioningStatus.provisioning": "جارٍ التوفير",
+    "service.provisioningStatus.active": "نشط",
+    "service.provisioningStatus.failed": "فشل",
 
     // ---- نوع الخدمة (Admin) ----
     "admin.field.serviceType": "نوع الخدمة",
     "admin.field.selectProvider": "اختر مزوداً...",
     "admin.serviceType.server": "خادم (VPS / مخصص)",
+
+    // ---- Admin Service Instances ----
+    "admin.nav.serviceInstances": "نسخ الخدمات",
+    "admin.serviceInstances.title": "نسخ الخدمات",
+    "admin.serviceInstances.subtitle": "جميع الخوادم المُفعّلة عبر المنصة.",
+    "admin.serviceInstances.col.instance": "النسخة",
+    "admin.serviceInstances.col.user": "المستخدم",
+    "admin.serviceInstances.col.provider": "المزود",
+    "admin.serviceInstances.col.region": "المنطقة",
+    "admin.serviceInstances.col.ip": "عنوان IP",
+    "admin.serviceInstances.col.runningStatus": "التشغيل",
+    "admin.serviceInstances.col.provisioningStatus": "التوفير",
+    "admin.serviceInstances.col.actions": "الإجراءات",
+    "admin.serviceInstances.empty": "لا توجد نسخ خدمات.",
   },
 };
 

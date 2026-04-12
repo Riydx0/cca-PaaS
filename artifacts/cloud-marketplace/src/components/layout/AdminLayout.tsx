@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   LayoutDashboard, Users, Receipt, Server, Settings, Menu, LogOut,
   ShieldCheck, ArrowLeft, CreditCard, Activity, FileText, Palette,
-  Sparkles, BadgeCheck, ChevronDown, ChevronRight,
+  Sparkles, BadgeCheck, ChevronDown, ChevronRight, Layers,
 } from "lucide-react";
 
 export function AdminLayout({ children }: { children: ReactNode }) {
@@ -38,11 +38,12 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(isInSettingsGroup);
 
   const navItems = [
-    { href: "/admin/dashboard", label: t("admin.nav.dashboard"), icon: LayoutDashboard },
-    { href: "/admin/users",     label: t("admin.nav.users"),     icon: Users },
-    { href: "/admin/orders",    label: t("admin.nav.orders"),    icon: Receipt },
-    { href: "/admin/services",  label: t("admin.nav.services"),  icon: Server },
-    { href: "/admin/audit-logs", label: t("admin.nav.auditLogs"), icon: Activity },
+    { href: "/admin/dashboard",         label: t("admin.nav.dashboard"),         icon: LayoutDashboard },
+    { href: "/admin/users",             label: t("admin.nav.users"),             icon: Users },
+    { href: "/admin/orders",            label: t("admin.nav.orders"),            icon: Receipt },
+    { href: "/admin/services",          label: t("admin.nav.services"),          icon: Server },
+    { href: "/admin/service-instances", label: t("admin.nav.serviceInstances"),  icon: Layers },
+    { href: "/admin/audit-logs",        label: t("admin.nav.auditLogs"),         icon: Activity },
   ];
 
   const LogoMark = () => {

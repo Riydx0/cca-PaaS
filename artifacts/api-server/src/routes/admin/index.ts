@@ -10,6 +10,7 @@ import plansRouter from "./plans";
 import subscriptionsRouter from "./subscriptions";
 import providersRouter from "./providers";
 import seedRouter from "./seed";
+import serviceInstancesRouter from "./service-instances";
 
 const router = Router();
 
@@ -21,6 +22,7 @@ router.use("/system", systemRouter);
 router.use("/plans", plansRouter);
 router.use("/subscriptions", subscriptionsRouter);
 router.use("/providers", providersRouter);
+router.use("/service-instances", serviceInstancesRouter);
 router.use("/", seedRouter);
 router.use("/", settingsRouter);
 router.use("/", billingRouter);

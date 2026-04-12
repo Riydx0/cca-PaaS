@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { serverOrdersTable, providersTable } from "@workspace/db/schema";
+import { serverOrdersTable, providersTable, serviceInstancesTable, cloudServicesTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { contaboProvider, ContaboProvider } from "../providers/ContaboProvider";
 
@@ -15,18 +15,23 @@ function getProvider(code: string): ContaboProvider | null {
 
 export class ServerProvisioningService {
   async provision(orderId: number): Promise<void> {
-    const [order] = await db
-      .select({ order: serverOrdersTable, provider: providersTable })
+    const [orderRow] = await db
+      .select({
+        order: serverOrdersTable,
+        provider: providersTable,
+        service: cloudServicesTable,
+      })
       .from(serverOrdersTable)
       .leftJoin(providersTable, eq(serverOrdersTable.providerId, providersTable.id))
+      .leftJoin(cloudServicesTable, eq(serverOrdersTable.cloudServiceId, cloudServicesTable.id))
       .where(eq(serverOrdersTable.id, orderId));
 
-    if (!order) {
+    if (!orderRow) {
       console.error(`[ServerProvisioningService] Order ${orderId} not found`);
       return;
     }
 
-    const providerCode = order.provider?.code ?? "contabo";
+    const providerCode = orderRow.provider?.code ?? "contabo";
     const provider = getProvider(providerCode);
 
     if (!provider) {
@@ -44,22 +49,45 @@ export class ServerProvisioningService {
       .where(eq(serverOrdersTable.id, orderId));
 
     try {
+      const svc = orderRow.service;
       const instance = await provider.createServer(orderId, {
         name: `Server #${orderId}`,
-        cpu: 2,
-        ramGb: 4,
-        storageGb: 100,
-        storageType: "SSD",
-        region: order.order.requestedRegion,
+        cpu: svc?.cpu ?? 2,
+        ramGb: svc?.ramGb ?? 4,
+        storageGb: svc?.storageGb ?? 100,
+        storageType: svc?.storageType ?? "SSD",
+        region: orderRow.order.requestedRegion,
       });
 
       await db
         .update(serverOrdersTable)
-        .set({
-          externalId: instance.externalId,
-          provisioningStatus: "active",
-        })
+        .set({ externalId: instance.externalId, provisioningStatus: "active" })
         .where(eq(serverOrdersTable.id, orderId));
+
+      const [existing] = await db
+        .select({ id: serviceInstancesTable.id })
+        .from(serviceInstancesTable)
+        .where(eq(serviceInstancesTable.orderId, orderId))
+        .limit(1);
+
+      if (!existing) {
+        await db.insert(serviceInstancesTable).values({
+          orderId,
+          userId: orderRow.order.userId,
+          cloudServiceId: orderRow.order.cloudServiceId,
+          providerId: orderRow.order.providerId ?? orderRow.provider?.id ?? null,
+          externalId: instance.externalId,
+          serviceType: svc?.serviceType ?? "server",
+          provisioningStatus: "active",
+          runningStatus: "running",
+          region: orderRow.order.requestedRegion,
+          cpu: svc?.cpu ?? null,
+          ramGb: svc?.ramGb ?? null,
+          storageGb: svc?.storageGb ?? null,
+          bandwidthTb: svc?.bandwidthTb ? String(svc.bandwidthTb) : null,
+        });
+        console.log(`[ServerProvisioningService] Service instance created for order ${orderId}`);
+      }
     } catch (err) {
       console.error(`[ServerProvisioningService] Failed to provision order ${orderId}:`, err);
       await db
@@ -69,29 +97,38 @@ export class ServerProvisioningService {
     }
   }
 
+  // TODO: Deprecated — use ServiceInstanceService.performAction() via POST /api/my-services/:id/start|stop|reboot
   async performAction(
     orderId: number,
     action: "start" | "stop" | "reboot",
     userId: string
   ): Promise<{ success: boolean; message: string }> {
     const [row] = await db
+      .select({ instance: serviceInstancesTable, provider: providersTable })
+      .from(serviceInstancesTable)
+      .leftJoin(providersTable, eq(serviceInstancesTable.providerId, providersTable.id))
+      .where(eq(serviceInstancesTable.orderId, orderId));
+
+    if (row && row.instance.userId === userId) {
+      const { serviceInstanceService } = await import("../ServiceInstanceService");
+      return serviceInstanceService.performAction(row.instance.id, action, userId);
+    }
+
+    const [orderRow] = await db
       .select({ order: serverOrdersTable, provider: providersTable })
       .from(serverOrdersTable)
       .leftJoin(providersTable, eq(serverOrdersTable.providerId, providersTable.id))
       .where(eq(serverOrdersTable.id, orderId));
 
-    if (!row || row.order.userId !== userId) {
+    if (!orderRow || orderRow.order.userId !== userId) {
       return { success: false, message: "Order not found" };
     }
 
-    const providerCode = row.provider?.code ?? "contabo";
+    const providerCode = orderRow.provider?.code ?? "contabo";
     const provider = getProvider(providerCode);
+    if (!provider) return { success: false, message: "Provider not found" };
 
-    if (!provider) {
-      return { success: false, message: "Provider not found" };
-    }
-
-    const externalId = row.order.externalId ?? `mock-${orderId}`;
+    const externalId = orderRow.order.externalId ?? `mock-${orderId}`;
 
     let result;
     switch (action) {

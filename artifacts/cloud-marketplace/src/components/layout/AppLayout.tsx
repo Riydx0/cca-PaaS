@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRole } from "@/hooks/useRole";
 import { useSiteConfig } from "@/contexts/SiteConfigContext";
-import { LayoutDashboard, Server, Receipt, Menu, LogOut, Cloud, ShieldCheck, CreditCard, Sparkles, BadgeCheck } from "lucide-react";
+import { LayoutDashboard, Server, Receipt, Menu, LogOut, Cloud, ShieldCheck, CreditCard, Sparkles, BadgeCheck, Layers } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -25,6 +25,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const navItems = [
     { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
     { href: "/services", label: t("nav.services"), icon: Server },
+    { href: "/my-services", label: t("nav.myServices"), icon: Layers },
     { href: "/orders", label: t("nav.orders"), icon: Receipt },
     { href: "/billing", label: t("nav.billing"), icon: CreditCard },
     { href: "/pricing", label: t("nav.pricing"), icon: Sparkles },
