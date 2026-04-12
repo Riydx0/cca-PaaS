@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from 'wouter';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -52,17 +52,32 @@ function LoadingScreen() {
   );
 }
 
-function ErrorScreen({ message }: { message: string }) {
+function ErrorScreen({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3 p-4">
       <ServerCrash className="w-10 h-10 text-destructive" />
       <p className="text-destructive font-medium text-center">{message}</p>
       <button
-        onClick={() => window.location.reload()}
+        onClick={onRetry ?? (() => window.location.reload())}
         className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
       >
         Retry
       </button>
+    </div>
+  );
+}
+
+function WaitingForServer({ elapsed }: { elapsed: number }) {
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4 p-4">
+      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="text-center space-y-1">
+        <p className="font-medium text-foreground">Waiting for server to start...</p>
+        <p className="text-sm text-muted-foreground">Docker rebuild in progress · {timeStr}</p>
+      </div>
     </div>
   );
 }
@@ -199,9 +214,15 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
   );
 }
 
+const CONFIG_RETRY_INTERVAL_MS = 5000;
+const CONFIG_WAITING_AFTER_MS = 8000;
+const CONFIG_GIVE_UP_MS = 12 * 60 * 1000;
+
 function AppRouter() {
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  const [waitingElapsed, setWaitingElapsed] = useState(0);
+  const [isWaiting, setIsWaiting] = useState(false);
   const [siteConfig, setSiteConfig] = useState<SiteConfig>({
     siteName: "CloudMarket",
     siteLogoUrl: null,
@@ -209,13 +230,27 @@ function AppRouter() {
     metaTitle: null,
   });
 
-  useEffect(() => {
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startTimeRef = useRef<number>(Date.now());
+  const mountedRef = useRef(true);
+
+  const stopTimers = useCallback(() => {
+    if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+    if (elapsedTimerRef.current) { clearInterval(elapsedTimerRef.current); elapsedTimerRef.current = null; }
+  }, []);
+
+  const attemptFetch = useCallback(() => {
     fetch("/api/config", { credentials: "include" })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
       .then((data) => {
+        if (!mountedRef.current) return;
+        stopTimers();
+        setIsWaiting(false);
+        setConfigError(null);
         setSetupComplete(data.setupComplete === true);
         setSiteConfig({
           siteName: data.siteName || "CloudMarket",
@@ -225,8 +260,34 @@ function AppRouter() {
         });
       })
       .catch(() => {
-        setConfigError("Cannot connect to the API server. Make sure all Docker containers are running.");
+        if (!mountedRef.current) return;
+        const elapsed = Date.now() - startTimeRef.current;
+        if (elapsed > CONFIG_GIVE_UP_MS) {
+          stopTimers();
+          setIsWaiting(false);
+          setConfigError("Cannot connect to the API server. Make sure all Docker containers are running.");
+          return;
+        }
+        if (elapsed > CONFIG_WAITING_AFTER_MS) {
+          setIsWaiting(true);
+          if (!elapsedTimerRef.current) {
+            elapsedTimerRef.current = setInterval(() => {
+              if (mountedRef.current) setWaitingElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
+            }, 1000);
+          }
+        }
+        retryTimerRef.current = setTimeout(attemptFetch, CONFIG_RETRY_INTERVAL_MS);
       });
+  }, [stopTimers]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    startTimeRef.current = Date.now();
+    attemptFetch();
+    return () => {
+      mountedRef.current = false;
+      stopTimers();
+    };
   }, []);
 
   useEffect(() => {
@@ -243,8 +304,9 @@ function AppRouter() {
     link.href = siteConfig.faviconUrl || "/favicon.svg";
   }, [siteConfig.faviconUrl]);
 
+  if (isWaiting) return <WaitingForServer elapsed={waitingElapsed} />;
   if (setupComplete === null && !configError) return <LoadingScreen />;
-  if (configError) return <ErrorScreen message={configError} />;
+  if (configError) return <ErrorScreen message={configError} onRetry={() => { startTimeRef.current = Date.now(); setConfigError(null); setWaitingElapsed(0); attemptFetch(); }} />;
 
   if (!setupComplete) {
     return (

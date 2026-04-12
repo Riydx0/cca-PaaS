@@ -45,7 +45,7 @@ interface StepState {
 }
 
 const POLL_INTERVAL_MS = 3000;
-const POLL_TIMEOUT_MS = 3 * 60 * 1000;
+const POLL_TIMEOUT_MS = 10 * 60 * 1000;
 const RELOAD_COUNTDOWN_S = 3;
 
 const logStatusColors: Record<string, string> = {
