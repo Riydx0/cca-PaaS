@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAdmin, requireSuperAdmin } from "../../middlewares/requireRole";
 import { db } from "@workspace/db";
-import { usersTable, passwordResetTokensTable, serverOrdersTable } from "@workspace/db/schema";
+import { usersTable, passwordResetTokensTable, serverOrdersTable, paymentRecordsTable, auditLogsTable } from "@workspace/db/schema";
 import { eq, ilike, or, desc, count, sql, and, gt } from "drizzle-orm";
 import { AuditService } from "../../services/audit_service";
 import { EmailService } from "../../services/email_service";
@@ -105,6 +105,18 @@ router.get("/:userId", requireAdmin, async (req, res) => {
       .from(serverOrdersTable)
       .where(eq(serverOrdersTable.userId, String(userId)));
 
+    const [paymentCountRow] = await db
+      .select({ count: count() })
+      .from(paymentRecordsTable)
+      .where(eq(paymentRecordsTable.userId, userId));
+
+    const [lastOrderRow] = await db
+      .select({ createdAt: serverOrdersTable.createdAt })
+      .from(serverOrdersTable)
+      .where(eq(serverOrdersTable.userId, String(userId)))
+      .orderBy(desc(serverOrdersTable.createdAt))
+      .limit(1);
+
     const now = new Date();
     const [pendingToken] = await db
       .select({ id: passwordResetTokensTable.id })
@@ -121,6 +133,19 @@ router.get("/:userId", requireAdmin, async (req, res) => {
 
     const hasPendingLink = !!pendingToken;
 
+    const recentAuditEvents = await db
+      .select({
+        id: auditLogsTable.id,
+        action: auditLogsTable.action,
+        details: auditLogsTable.details,
+        ipAddress: auditLogsTable.ipAddress,
+        createdAt: auditLogsTable.createdAt,
+      })
+      .from(auditLogsTable)
+      .where(eq(auditLogsTable.userId, userId))
+      .orderBy(desc(auditLogsTable.createdAt))
+      .limit(8);
+
     res.json({
       id: String(user.id),
       email: user.email,
@@ -132,7 +157,16 @@ router.get("/:userId", requireAdmin, async (req, res) => {
       createdAt: user.createdAt.toISOString(),
       hasPassword: user.hasPassword,
       orderCount: Number(orderCountRow?.count ?? 0),
+      paymentCount: Number(paymentCountRow?.count ?? 0),
+      lastOrderAt: lastOrderRow?.createdAt ? lastOrderRow.createdAt.toISOString() : null,
       hasPendingLink,
+      recentAuditEvents: recentAuditEvents.map((e) => ({
+        id: e.id,
+        action: e.action,
+        details: e.details,
+        ipAddress: e.ipAddress,
+        createdAt: e.createdAt.toISOString(),
+      })),
     });
   } catch (err) {
     console.error(err);
