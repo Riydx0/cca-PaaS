@@ -85,10 +85,31 @@ function WaitingForServer({ elapsed }: { elapsed: number }) {
   );
 }
 
-/** Preserves the :id param when redirecting legacy /dashboard/services/:id deep-links. */
+/**
+ * Legacy deep-link handler for /dashboard/services/:id.
+ * Always resolves via the backend (orderId → instanceId) to avoid numeric ID collisions.
+ * Falls back to treating :id as a direct instance ID only if the resolver returns 404.
+ */
 function ServiceDetailsRedirect() {
   const [, params] = useRoute<{ id: string }>("/dashboard/services/:id");
-  return <Redirect to={`/my-services/${params?.id ?? ""}`} />;
+  const [, navigate] = useLocation();
+  const rawId = params?.id ?? "";
+
+  useEffect(() => {
+    if (!rawId) return;
+    fetch(`/api/orders/${rawId}/service-instance`, { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.instanceId) {
+          navigate(`/my-services/${data.instanceId}`, { replace: true });
+        } else {
+          navigate(`/my-services/${rawId}`, { replace: true });
+        }
+      })
+      .catch(() => navigate(`/my-services/${rawId}`, { replace: true }));
+  }, [rawId, navigate]);
+
+  return null;
 }
 
 function HomeRedirect() {
