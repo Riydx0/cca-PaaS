@@ -5,6 +5,7 @@ import { CreateOrderBody } from "@workspace/api-zod";
 import { eq, and, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireRole";
 import { AuditService } from "../services/audit_service";
+import { serverProvisioningService } from "../services/provisioning/ServerProvisioningService";
 
 const router: IRouter = Router();
 
@@ -116,6 +117,42 @@ router.get("/:id", requireAuth, async (req: any, res) => {
   }
 
   res.json(formatOrder(row.order, row.service));
+});
+
+router.post("/:id/action", requireAuth, async (req: any, res) => {
+  const userId = String(req.currentUser.id);
+  const id = parseInt(req.params.id, 10);
+
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid ID" });
+    return;
+  }
+
+  const { action } = req.body;
+  if (!["start", "stop", "reboot"].includes(action)) {
+    res.status(400).json({ error: "Invalid action. Must be start, stop, or reboot." });
+    return;
+  }
+
+  try {
+    const result = await serverProvisioningService.performAction(id, action as "start" | "stop" | "reboot", userId);
+    if (!result.success) {
+      res.status(404).json({ error: result.message });
+      return;
+    }
+    AuditService.logEvent({
+      userId: parseInt(userId, 10),
+      action: `server.${action}`,
+      entityType: "order",
+      entityId: id,
+      details: { action },
+      ipAddress: (req as any).ip,
+    }).catch(() => {});
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to perform server action" });
+  }
 });
 
 export default router;

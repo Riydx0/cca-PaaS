@@ -3,7 +3,7 @@ import { useListMyOrders } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Server, Calendar, MapPin, Receipt, Cloud } from "lucide-react";
+import { Server, Calendar, MapPin, Receipt, Cloud, Settings } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -88,6 +88,12 @@ export function Orders() {
                     </div>
                   </div>
                 </div>
+                <Link href={`/dashboard/services/${order.id}`}>
+                  <Button variant="outline" size="sm" className="w-full gap-2">
+                    <Settings className="h-3.5 w-3.5" />
+                    {t("server.manage")}
+                  </Button>
+                </Link>
               </motion.div>
             ))}
           </div>
@@ -102,7 +108,8 @@ export function Orders() {
                     <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">{t("label.provider")}</TableHead>
                     <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">{t("label.region")}</TableHead>
                     <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">Date</TableHead>
-                    <TableHead className="text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">{t("label.status")}</TableHead>
+                    <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">{t("label.status")}</TableHead>
+                    <TableHead className="text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">{t("admin.col.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -136,11 +143,19 @@ export function Orders() {
                           <span>{new Date(order.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right py-4">
+                      <TableCell className="py-4">
                         <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 border font-semibold ${getStatusColor(order.status)}`}>
                           <span className="mr-1.5 text-[10px]">●</span>
                           {getStatusText(order.status)}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-right py-4">
+                        <Link href={`/dashboard/services/${order.id}`}>
+                          <Button variant="outline" size="sm" className="gap-1.5 h-8">
+                            <Settings className="h-3.5 w-3.5" />
+                            {t("server.manage")}
+                          </Button>
+                        </Link>
                       </TableCell>
                     </TableRow>
                   ))}

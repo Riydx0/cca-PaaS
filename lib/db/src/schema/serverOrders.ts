@@ -2,6 +2,7 @@ import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { cloudServicesTable } from "./cloudServices";
+import { providersTable } from "./providers";
 import { relations } from "drizzle-orm";
 
 export const serverOrdersTable = pgTable("server_orders", {
@@ -13,6 +14,9 @@ export const serverOrdersTable = pgTable("server_orders", {
   notes: text("notes"),
   externalOrderId: text("external_order_id"),
   providerResponse: text("provider_response"),
+  providerId: integer("provider_id").references(() => providersTable.id),
+  externalId: text("external_id"),
+  provisioningStatus: text("provisioning_status").default("pending"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

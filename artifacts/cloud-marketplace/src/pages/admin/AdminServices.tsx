@@ -18,6 +18,7 @@ import { motion } from "framer-motion";
 
 interface Service {
   id: number;
+  serviceType: string;
   provider: string;
   name: string;
   cpu: number;
@@ -31,7 +32,15 @@ interface Service {
   createdAt: string;
 }
 
+interface Provider {
+  id: number;
+  name: string;
+  code: string;
+  active: boolean;
+}
+
 const emptyForm = {
+  serviceType: "server",
   provider: "",
   name: "",
   cpu: "",
@@ -56,6 +65,11 @@ export function AdminServices() {
   const { data: services, isLoading } = useQuery<Service[]>({
     queryKey: ["admin", "services"],
     queryFn: () => adminFetch("/api/admin/services"),
+  });
+
+  const { data: providers } = useQuery<Provider[]>({
+    queryKey: ["admin", "providers"],
+    queryFn: () => adminFetch("/api/admin/providers"),
   });
 
   const saveService = useMutation({
@@ -100,6 +114,7 @@ export function AdminServices() {
   const openEdit = (s: Service) => {
     setEditTarget(s);
     setForm({
+      serviceType: s.serviceType || "server",
       provider: s.provider,
       name: s.name,
       cpu: String(s.cpu),
@@ -116,6 +131,7 @@ export function AdminServices() {
 
   const handleSubmit = () => {
     const data = {
+      serviceType: form.serviceType,
       provider: form.provider,
       name: form.name,
       cpu: parseInt(form.cpu),
@@ -232,9 +248,17 @@ export function AdminServices() {
             <DialogTitle>{editTarget ? t("admin.btn.editService") : t("admin.btn.addService")}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-2">
+            <div className="col-span-2 grid gap-1.5">
+              <Label>{t("admin.field.serviceType")}</Label>
+              <Select value={form.serviceType} onValueChange={(v) => f("serviceType", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="server">{t("admin.serviceType.server")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             {[
               { key: "name", label: t("admin.field.name"), span: 2 },
-              { key: "provider", label: t("label.provider") },
               { key: "region", label: t("label.region") },
               { key: "cpu", label: t("label.cpu"), type: "number" },
               { key: "ramGb", label: t("label.ram"), type: "number" },
@@ -252,6 +276,20 @@ export function AdminServices() {
               </div>
             ))}
             <div className="grid gap-1.5">
+              <Label>{t("label.provider")}</Label>
+              <Select value={form.provider} onValueChange={(v) => f("provider", v)}>
+                <SelectTrigger><SelectValue placeholder={t("admin.field.selectProvider")} /></SelectTrigger>
+                <SelectContent>
+                  {providers && providers.filter(p => p.active).map((p) => (
+                    <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
+                  ))}
+                  {(!providers || providers.length === 0) && (
+                    <SelectItem value={form.provider || "Contabo"}>Contabo</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
               <Label>{t("admin.field.storageType")}</Label>
               <Select value={form.storageType} onValueChange={(v) => f("storageType", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -262,7 +300,7 @@ export function AdminServices() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center gap-3 pt-1">
+            <div className="col-span-2 flex items-center gap-3 pt-1">
               <Switch
                 id="isActive"
                 checked={form.isActive}

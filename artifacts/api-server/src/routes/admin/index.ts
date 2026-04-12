@@ -8,6 +8,7 @@ import billingRouter from "./billing";
 import settingsRouter from "./settings";
 import plansRouter from "./plans";
 import subscriptionsRouter from "./subscriptions";
+import providersRouter from "./providers";
 
 const router = Router();
 
@@ -18,6 +19,7 @@ router.use("/services", servicesRouter);
 router.use("/system", systemRouter);
 router.use("/plans", plansRouter);
 router.use("/subscriptions", subscriptionsRouter);
+router.use("/providers", providersRouter);
 router.use("/", settingsRouter);
 router.use("/", billingRouter);
 

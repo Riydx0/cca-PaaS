@@ -506,6 +506,35 @@ const translations = {
     "setPassword.strength.fair": "Fair",
     "setPassword.strength.good": "Good",
     "setPassword.strength.strong": "Strong",
+
+    // ---- Server Management ----
+    "server.manage": "Manage",
+    "server.details": "Server Details",
+    "server.detailsDesc": "View server information and perform actions.",
+    "server.backToOrders": "Back to Orders",
+    "server.notFound": "Server not found.",
+    "server.serverInfo": "Server Information",
+    "server.specs": "Hardware Specs",
+    "server.actions": "Server Actions",
+    "server.actionsDesc": "Control your server power state.",
+    "server.actionsMockNote": "Actions are simulated in this demo environment.",
+    "server.field.plan": "Plan",
+    "server.field.os": "Operating System",
+    "server.field.ip": "IP Address",
+    "server.field.orderId": "Order ID",
+    "server.field.createdAt": "Created",
+    "server.action.start": "Start",
+    "server.action.stop": "Stop",
+    "server.action.reboot": "Reboot",
+    "server.action.failed": "Action failed.",
+    "server.action.start.success": "Server started.",
+    "server.action.stop.success": "Server stopped.",
+    "server.action.reboot.success": "Server rebooted.",
+
+    // ---- Admin Service Type ----
+    "admin.field.serviceType": "Service Type",
+    "admin.field.selectProvider": "Select provider...",
+    "admin.serviceType.server": "Server (VPS / Dedicated)",
   },
   ar: {
     // Nav
@@ -1010,6 +1039,35 @@ const translations = {
     "setPassword.strength.fair": "مقبولة",
     "setPassword.strength.good": "جيدة",
     "setPassword.strength.strong": "قوية",
+
+    // ---- إدارة الخوادم ----
+    "server.manage": "إدارة",
+    "server.details": "تفاصيل الخادم",
+    "server.detailsDesc": "عرض معلومات الخادم وتنفيذ الإجراءات.",
+    "server.backToOrders": "العودة إلى الطلبات",
+    "server.notFound": "الخادم غير موجود.",
+    "server.serverInfo": "معلومات الخادم",
+    "server.specs": "المواصفات التقنية",
+    "server.actions": "إجراءات الخادم",
+    "server.actionsDesc": "التحكم في حالة تشغيل الخادم.",
+    "server.actionsMockNote": "الإجراءات محاكاة في هذه البيئة التجريبية.",
+    "server.field.plan": "الخطة",
+    "server.field.os": "نظام التشغيل",
+    "server.field.ip": "عنوان IP",
+    "server.field.orderId": "رقم الطلب",
+    "server.field.createdAt": "تاريخ الإنشاء",
+    "server.action.start": "تشغيل",
+    "server.action.stop": "إيقاف",
+    "server.action.reboot": "إعادة تشغيل",
+    "server.action.failed": "فشل تنفيذ الإجراء.",
+    "server.action.start.success": "تم تشغيل الخادم.",
+    "server.action.stop.success": "تم إيقاف الخادم.",
+    "server.action.reboot.success": "تمت إعادة تشغيل الخادم.",
+
+    // ---- نوع الخدمة (Admin) ----
+    "admin.field.serviceType": "نوع الخدمة",
+    "admin.field.selectProvider": "اختر مزوداً...",
+    "admin.serviceType.server": "خادم (VPS / مخصص)",
   },
 };
 

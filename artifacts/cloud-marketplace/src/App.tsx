@@ -40,6 +40,7 @@ import { AdminSubscriptionsPage } from "@/pages/admin/AdminSubscriptionsPage";
 import { AdminPlansPage } from "@/pages/admin/AdminPlansPage";
 import { PricingPage } from "@/pages/PricingPage";
 import { SubscriptionPage } from "@/pages/SubscriptionPage";
+import { ServerDetailsPage } from "@/pages/ServerDetailsPage";
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -167,6 +168,9 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
       </Route>
       <Route path="/subscription">
         <ProtectedRoute component={SubscriptionPage} />
+      </Route>
+      <Route path="/dashboard/services/:id">
+        <ProtectedRoute component={ServerDetailsPage} />
       </Route>
 
       <Route path="/admin">

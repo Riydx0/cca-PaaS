@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const cloudServicesTable = pgTable("cloud_services", {
   id: serial("id").primaryKey(),
+  serviceType: text("service_type").notNull().default("server"),
   provider: text("provider").notNull(),
   name: text("name").notNull(),
   cpu: integer("cpu").notNull(),
