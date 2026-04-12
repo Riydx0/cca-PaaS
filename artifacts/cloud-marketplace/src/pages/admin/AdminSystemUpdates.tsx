@@ -6,9 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import {
   RefreshCw, Download, CheckCircle2, AlertCircle, FileText,
-  Loader2, ArrowRight, Rocket, ServerCrash, RotateCcw,
+  Loader2, ArrowRight, Rocket, ServerCrash, RotateCcw, Timer,
 } from "lucide-react";
 
 interface VersionInfo {
@@ -101,10 +102,14 @@ export function AdminSystemUpdates() {
   const [steps, setSteps] = useState<StepState[]>([]);
   const [pollElapsed, setPollElapsed] = useState(0);
 
+  const [updateElapsed, setUpdateElapsed] = useState(0);
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartRef = useRef<number>(0);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const preUpdateBootTimeRef = useRef<number | null>(null);
+  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const updateStartRef = useRef<number>(0);
 
   const { data, isLoading } = useQuery<VersionInfo>({
     queryKey: ["admin", "system", "version"],
@@ -144,6 +149,33 @@ export function AdminSystemUpdates() {
     autoCheck();
   }, []);
 
+  const formatElapsed = (s: number) => {
+    if (s < 60) return `${s}s`;
+    return `${Math.floor(s / 60)}m ${s % 60}s`;
+  };
+
+  const calcProgress = useCallback((stepsArr: StepState[]) => {
+    const done = stepsArr.filter((s) => s.status === "done").length;
+    const activeIdx = stepsArr.findIndex((s) => s.status === "active");
+    const base = done * 20;
+    if (activeIdx === -1) return base;
+    // step 4 (index 3) takes longest — animate with pollElapsed capped to 3min
+    if (activeIdx === 3) return base + Math.min(15, Math.floor((pollElapsed / 180) * 15));
+    return base + 8;
+  }, [pollElapsed]);
+
+  const stopElapsed = useCallback(() => {
+    if (elapsedRef.current) { clearInterval(elapsedRef.current); elapsedRef.current = null; }
+  }, []);
+
+  const startElapsed = useCallback(() => {
+    updateStartRef.current = Date.now();
+    setUpdateElapsed(0);
+    elapsedRef.current = setInterval(() => {
+      setUpdateElapsed(Math.floor((Date.now() - updateStartRef.current) / 1000));
+    }, 1000);
+  }, []);
+
   const stopPoll = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }, []);
@@ -171,6 +203,7 @@ export function AdminSystemUpdates() {
 
       if (elapsed > POLL_TIMEOUT_MS) {
         stopPoll();
+        stopElapsed();
         setSteps((prev) => prev.map((s, i) => i === 3 ? { ...s, status: "failed" } : s));
         setUpdatePhase("failed");
         setUpdateError(t("admin.system.pollTimeout"));
@@ -185,6 +218,7 @@ export function AdminSystemUpdates() {
           (preUpdateBootTimeRef.current === null || health.bootTime !== preUpdateBootTimeRef.current);
         if (isNewInstance) {
           stopPoll();
+          stopElapsed();
           const finalVersion = health!.version ?? expectedNewVersion ?? data?.currentVersion ?? "?";
           setNewVersion(finalVersion);
           setSteps((prev) =>
@@ -202,13 +236,14 @@ export function AdminSystemUpdates() {
         // server not yet up — will retry on next poll tick
       }
     }, POLL_INTERVAL_MS);
-  }, [stopPoll, startCountdown, t, data, qc]);
+  }, [stopPoll, stopElapsed, startCountdown, t, data, qc]);
 
   const runUpdate = useCallback(async () => {
     setUpdatePhase("running");
     setUpdateError(null);
     setNewVersion(null);
     setCountdown(null);
+    startElapsed();
 
     try {
       const pre = await fetch("/api/health").then((r) => r.json()).catch(() => null);
@@ -239,6 +274,7 @@ export function AdminSystemUpdates() {
       clearTimeout(step1Timer);
 
       if (!res.success) {
+        stopElapsed();
         setSteps((prev) => prev.map((s, i) => i <= 1 ? { ...s, status: "failed" } : s));
         setUpdatePhase("failed");
         setUpdateError(res.message);
@@ -258,18 +294,20 @@ export function AdminSystemUpdates() {
       startPolling(res.newVersion ?? null);
     } catch (err: unknown) {
       clearTimeout(step1Timer);
+      stopElapsed();
       setSteps((prev) => prev.map((s) => ({ ...s, status: "failed" })));
       setUpdatePhase("failed");
       setUpdateError(err instanceof Error ? err.message : t("admin.system.unknownError"));
     }
-  }, [startPolling, stepLabels]);
+  }, [startPolling, stepLabels, startElapsed, stopElapsed]);
 
   useEffect(() => {
     return () => {
       stopPoll();
+      stopElapsed();
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
-  }, [stopPoll]);
+  }, [stopPoll, stopElapsed]);
 
   const isUpdating = updatePhase === "running" || updatePhase === "polling";
 
@@ -405,15 +443,34 @@ export function AdminSystemUpdates() {
             ? "border-red-300 bg-red-50 dark:bg-red-950/20"
             : "border-blue-200 bg-blue-50/50 dark:bg-blue-950/10"
         }>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              {updatePhase === "completed" && <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
-              {updatePhase === "failed" && <ServerCrash className="h-5 w-5 text-destructive" />}
-              {isUpdating && <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />}
-              {updatePhase === "completed" && t("admin.system.updateSuccess").replace("{v}", `v${newVersion}`)}
-              {updatePhase === "failed" && t("admin.system.updateFailed")}
-              {isUpdating && t("admin.system.updating")}
-            </CardTitle>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                {updatePhase === "completed" && <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
+                {updatePhase === "failed" && <ServerCrash className="h-5 w-5 text-destructive" />}
+                {isUpdating && <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />}
+                {updatePhase === "completed" && t("admin.system.updateSuccess").replace("{v}", `v${newVersion}`)}
+                {updatePhase === "failed" && t("admin.system.updateFailed")}
+                {isUpdating && t("admin.system.updating")}
+              </CardTitle>
+              {(isUpdating || updatePhase === "completed") && (
+                <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground bg-background/70 border border-border/50 rounded-full px-2.5 py-1 shrink-0">
+                  <Timer className="h-3 w-3" />
+                  {formatElapsed(updateElapsed)}
+                </div>
+              )}
+            </div>
+            {(isUpdating || updatePhase === "completed") && (
+              <div className="space-y-1 mt-2">
+                <Progress
+                  value={updatePhase === "completed" ? 100 : calcProgress(steps)}
+                  className="h-2"
+                />
+                <p className="text-xs text-muted-foreground text-end font-mono">
+                  {updatePhase === "completed" ? 100 : calcProgress(steps)}%
+                </p>
+              </div>
+            )}
           </CardHeader>
           <CardContent className="space-y-1">
             {steps.map((step, i) => (
@@ -422,7 +479,7 @@ export function AdminSystemUpdates() {
 
             {updatePhase === "polling" && (
               <p className="text-xs text-muted-foreground mt-3 pl-10">
-                {t("admin.system.serverRestarting")} ({pollElapsed}s)
+                {t("admin.system.serverRestarting")}
               </p>
             )}
 
@@ -450,9 +507,11 @@ export function AdminSystemUpdates() {
                   variant="outline"
                   className="gap-2"
                   onClick={() => {
+                    stopElapsed();
                     setUpdatePhase("idle");
                     setUpdateError(null);
                     setSteps([]);
+                    setUpdateElapsed(0);
                   }}
                 >
                   <RotateCcw className="h-4 w-4" />
