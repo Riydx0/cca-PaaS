@@ -22,26 +22,27 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const siteName = config.siteName || "CloudMarket";
   const siteLogoUrl = config.siteLogoUrl;
 
+  const isInBillingGroup =
+    location.startsWith("/admin/billing") ||
+    location.startsWith("/admin/invoices") ||
+    location.startsWith("/admin/payments");
+
   const isInSubscriptionsGroup =
     location.startsWith("/admin/subscriptions") || location.startsWith("/admin/plans");
 
+  const isInSettingsGroup =
+    location.startsWith("/admin/system") || location.startsWith("/admin/settings");
+
+  const [billingOpen, setBillingOpen] = useState(isInBillingGroup);
   const [subsOpen, setSubsOpen] = useState(isInSubscriptionsGroup);
+  const [settingsOpen, setSettingsOpen] = useState(isInSettingsGroup);
 
   const navItems = [
     { href: "/admin/dashboard", label: t("admin.nav.dashboard"), icon: LayoutDashboard },
-    { href: "/admin/users", label: t("admin.nav.users"), icon: Users },
-    { href: "/admin/orders", label: t("admin.nav.orders"), icon: Receipt },
-    { href: "/admin/services", label: t("admin.nav.services"), icon: Server },
-    { href: "/admin/billing", label: t("admin.nav.billing"), icon: CreditCard },
-    { href: "/admin/invoices", label: t("admin.nav.invoices"), icon: FileText },
-    { href: "/admin/payments", label: t("admin.nav.payments"), icon: CreditCard },
+    { href: "/admin/users",     label: t("admin.nav.users"),     icon: Users },
+    { href: "/admin/orders",    label: t("admin.nav.orders"),    icon: Receipt },
+    { href: "/admin/services",  label: t("admin.nav.services"),  icon: Server },
     { href: "/admin/audit-logs", label: t("admin.nav.auditLogs"), icon: Activity },
-    ...(isSuperAdmin
-      ? [
-          { href: "/admin/settings", label: t("admin.nav.siteSettings"), icon: Palette },
-          { href: "/admin/system", label: t("admin.nav.system"), icon: Settings },
-        ]
-      : []),
   ];
 
   const LogoMark = () => {
@@ -59,55 +60,105 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     );
   };
 
+  const groupButtonClass = (active: boolean) =>
+    `w-full flex items-center gap-3 ps-3 pe-3 py-2.5 rounded-lg transition-all duration-150 text-sm font-medium ${
+      active
+        ? "bg-sidebar-primary/20 text-sidebar-foreground"
+        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+    }`;
+
+  const subItemClass = (active: boolean) =>
+    `flex items-center gap-2.5 px-2 py-2 rounded-lg transition-all duration-150 text-sm font-medium ${
+      active
+        ? "bg-sidebar-primary text-white shadow-sm"
+        : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+    }`;
+
+  const SubList = ({ children }: { children: ReactNode }) => (
+    <div className="mt-1 ms-4 ps-3 border-s border-sidebar-border/60 space-y-0.5">
+      {children}
+    </div>
+  );
+
+  const Chevron = ({ open }: { open: boolean }) =>
+    open
+      ? <ChevronDown className="h-3.5 w-3.5 opacity-60 shrink-0" />
+      : <ChevronRight className="h-3.5 w-3.5 opacity-60 shrink-0" />;
+
+  const BillingGroup = ({ onClick }: { onClick?: () => void }) => (
+    <div>
+      <button onClick={() => setBillingOpen((o) => !o)} className={groupButtonClass(isInBillingGroup)}>
+        <CreditCard className="h-5 w-5 shrink-0" />
+        <span className="flex-1 text-start">{t("admin.nav.billingGroup")}</span>
+        <Chevron open={billingOpen} />
+      </button>
+      {billingOpen && (
+        <SubList>
+          <Link href="/admin/billing" onClick={onClick} className={subItemClass(location === "/admin/billing")}>
+            <CreditCard className="h-4 w-4 shrink-0" />
+            <span>{t("admin.nav.billing")}</span>
+          </Link>
+          <Link href="/admin/invoices" onClick={onClick} className={subItemClass(location === "/admin/invoices")}>
+            <FileText className="h-4 w-4 shrink-0" />
+            <span>{t("admin.nav.invoices")}</span>
+          </Link>
+          <Link href="/admin/payments" onClick={onClick} className={subItemClass(location === "/admin/payments")}>
+            <Receipt className="h-4 w-4 shrink-0" />
+            <span>{t("admin.nav.payments")}</span>
+          </Link>
+        </SubList>
+      )}
+    </div>
+  );
+
   const SubscriptionsGroup = ({ onClick }: { onClick?: () => void }) => (
     <div>
-      <button
-        onClick={() => setSubsOpen((o) => !o)}
-        className={`w-full flex items-center gap-3 ps-3 pe-3 py-2.5 rounded-lg transition-all duration-150 text-sm font-medium ${
-          isInSubscriptionsGroup
-            ? "bg-sidebar-primary/20 text-sidebar-foreground"
-            : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-        }`}
-      >
+      <button onClick={() => setSubsOpen((o) => !o)} className={groupButtonClass(isInSubscriptionsGroup)}>
         <BadgeCheck className="h-5 w-5 shrink-0" />
         <span className="flex-1 text-start">{t("admin.nav.subscriptionsGroup")}</span>
-        {subsOpen
-          ? <ChevronDown className="h-3.5 w-3.5 opacity-60 shrink-0" />
-          : <ChevronRight className="h-3.5 w-3.5 opacity-60 shrink-0" />}
+        <Chevron open={subsOpen} />
       </button>
-
       {subsOpen && (
-        <div className="mt-1 ms-4 ps-3 border-s border-sidebar-border/60 space-y-0.5">
-          <Link
-            href="/admin/subscriptions"
-            onClick={onClick}
-            className={`flex items-center gap-2.5 px-2 py-2 rounded-lg transition-all duration-150 text-sm font-medium ${
-              location === "/admin/subscriptions"
-                ? "bg-sidebar-primary text-white shadow-sm"
-                : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            }`}
-          >
+        <SubList>
+          <Link href="/admin/subscriptions" onClick={onClick} className={subItemClass(location === "/admin/subscriptions")}>
             <BadgeCheck className="h-4 w-4 shrink-0" />
             <span>{t("admin.nav.subscriptions")}</span>
           </Link>
           {isSuperAdmin && (
-            <Link
-              href="/admin/plans"
-              onClick={onClick}
-              className={`flex items-center gap-2.5 px-2 py-2 rounded-lg transition-all duration-150 text-sm font-medium ${
-                location === "/admin/plans"
-                  ? "bg-sidebar-primary text-white shadow-sm"
-                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              }`}
-            >
+            <Link href="/admin/plans" onClick={onClick} className={subItemClass(location === "/admin/plans")}>
               <Sparkles className="h-4 w-4 shrink-0" />
               <span>{t("admin.nav.plans")}</span>
             </Link>
           )}
-        </div>
+        </SubList>
       )}
     </div>
   );
+
+  const SettingsGroup = ({ onClick }: { onClick?: () => void }) => {
+    if (!isSuperAdmin) return null;
+    return (
+      <div>
+        <button onClick={() => setSettingsOpen((o) => !o)} className={groupButtonClass(isInSettingsGroup)}>
+          <Settings className="h-5 w-5 shrink-0" />
+          <span className="flex-1 text-start">{t("admin.nav.settingsGroup")}</span>
+          <Chevron open={settingsOpen} />
+        </button>
+        {settingsOpen && (
+          <SubList>
+            <Link href="/admin/system" onClick={onClick} className={subItemClass(location === "/admin/system")}>
+              <Settings className="h-4 w-4 shrink-0" />
+              <span>{t("admin.nav.system")}</span>
+            </Link>
+            <Link href="/admin/settings" onClick={onClick} className={subItemClass(location === "/admin/settings")}>
+              <Palette className="h-4 w-4 shrink-0" />
+              <span>{t("admin.nav.siteSettings")}</span>
+            </Link>
+          </SubList>
+        )}
+      </div>
+    );
+  };
 
   const NavLinks = ({ onClick }: { onClick?: () => void }) => (
     <>
@@ -129,7 +180,9 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           </Link>
         );
       })}
+      <BillingGroup onClick={onClick} />
       <SubscriptionsGroup onClick={onClick} />
+      <SettingsGroup onClick={onClick} />
     </>
   );
 

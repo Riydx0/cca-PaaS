@@ -236,6 +236,8 @@ const translations = {
     "admin.nav.subscriptions": "User Subscriptions",
     "admin.nav.plans": "Pricing Plans",
     "admin.nav.subscriptionsGroup": "Subscriptions",
+    "admin.nav.billingGroup": "Billing",
+    "admin.nav.settingsGroup": "Settings",
 
     // ---- Nav ----
     "nav.pricing": "Pricing",
@@ -737,6 +739,8 @@ const translations = {
     "admin.nav.subscriptions": "اشتراكات المستخدمين",
     "admin.nav.plans": "خطط الأسعار",
     "admin.nav.subscriptionsGroup": "الاشتراكات",
+    "admin.nav.billingGroup": "الفوترة",
+    "admin.nav.settingsGroup": "الإعدادات",
 
     // ---- Nav ----
     "nav.pricing": "الأسعار",
