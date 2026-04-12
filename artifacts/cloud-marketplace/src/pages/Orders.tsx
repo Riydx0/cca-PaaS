@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Server, Calendar, Receipt } from "lucide-react";
+import { Server, Calendar, Receipt, Cloud, MapPin } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 

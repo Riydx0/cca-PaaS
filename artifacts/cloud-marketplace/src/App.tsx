@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from 'wouter';
+import { Switch, Route, useLocation, Router as WouterRouter, Redirect, useRoute } from 'wouter';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "sonner";
@@ -83,6 +83,12 @@ function WaitingForServer({ elapsed }: { elapsed: number }) {
       </div>
     </div>
   );
+}
+
+/** Preserves the :id param when redirecting legacy /dashboard/services/:id deep-links. */
+function ServiceDetailsRedirect() {
+  const [, params] = useRoute<{ id: string }>("/dashboard/services/:id");
+  return <Redirect to={`/my-services/${params?.id ?? ""}`} />;
 }
 
 function HomeRedirect() {
@@ -181,9 +187,7 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
       <Route path="/dashboard/my-services">
         <Redirect to="/my-services" />
       </Route>
-      <Route path="/dashboard/services/:id">
-        <Redirect to="/my-services" />
-      </Route>
+      <Route path="/dashboard/services/:id" component={ServiceDetailsRedirect} />
 
       <Route path="/admin">
         <Redirect to="/admin/dashboard" />

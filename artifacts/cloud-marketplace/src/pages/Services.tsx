@@ -1,8 +1,26 @@
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { useCreateOrder, getListMyOrdersQueryKey, getGetDashboardStatsQueryKey } from "@workspace/api-client-react";
-import type { CloudService } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+
+/** Shape of a cloud service from /api/catalog. */
+interface CloudService {
+  id: number;
+  name: string;
+  description?: string | null;
+  provider: string;
+  category: string;
+  cpu: number;
+  ramGb: number;
+  storageGb: number;
+  bandwidthTb: string | number;
+  priceMonthly: string | number;
+  storageType?: string | null;
+  region?: string | null;
+  availableRegions?: string[] | null;
+  isActive?: boolean;
+  createdAt?: string;
+}
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -169,7 +187,7 @@ export function Services() {
                     className="w-full h-10 font-semibold shadow-sm"
                     onClick={() => {
                       setSelectedService(service.id);
-                      setOrderRegion(service.region);
+                      setOrderRegion(service.region ?? "");
                     }}
                     disabled={!service.isActive}
                   >

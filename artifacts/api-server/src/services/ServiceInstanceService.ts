@@ -1,6 +1,7 @@
 import { db } from "@workspace/db";
 import { serviceInstancesTable, cloudServicesTable, providersTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
+import type { InferSelectModel } from "drizzle-orm";
 import { contaboProvider, ContaboProvider } from "./providers/ContaboProvider";
 
 type ProviderCode = "contabo";
@@ -10,7 +11,14 @@ function getProvider(code: string): ContaboProvider | null {
   return providers[code as ProviderCode] ?? null;
 }
 
-function formatInstance(row: any) {
+/** Shape of a joined row returned by all instance queries. */
+type InstanceRow = {
+  instance: InferSelectModel<typeof serviceInstancesTable>;
+  service: InferSelectModel<typeof cloudServicesTable> | null;
+  provider: InferSelectModel<typeof providersTable> | null;
+};
+
+function formatInstance(row: InstanceRow) {
   return {
     ...row.instance,
     cloudService: row.service

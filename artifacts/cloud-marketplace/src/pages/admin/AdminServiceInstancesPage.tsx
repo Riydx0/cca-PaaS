@@ -27,18 +27,14 @@ interface ServiceInstance {
 }
 
 async function fetchInstances(): Promise<ServiceInstance[]> {
-  const res = await adminFetch("/api/admin/service-instances");
-  if (!res.ok) throw new Error("Failed to load service instances");
-  return res.json();
+  return adminFetch<ServiceInstance[]>("/api/admin/service-instances");
 }
 
 async function doAdminAction(id: number, action: "start" | "stop" | "reboot") {
-  const res = await adminFetch(`/api/admin/service-instances/${id}/${action}`, { method: "POST" });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(err.error || "Request failed");
-  }
-  return res.json();
+  return adminFetch<{ success: boolean; message: string }>(
+    `/api/admin/service-instances/${id}/${action}`,
+    { method: "POST" }
+  );
 }
 
 function RunningBadge({ status }: { status: string }) {

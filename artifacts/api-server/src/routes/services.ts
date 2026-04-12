@@ -5,15 +5,19 @@
  * Public catalog (cloud_services table) is served at /api/catalog.
  * /api/my-services is a deprecated alias for backward compatibility.
  */
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/requireRole";
 import { serviceInstanceService } from "../services/ServiceInstanceService";
 import { AuditService } from "../services/audit_service";
+import type { User } from "@workspace/db/schema";
+
+/** Express Request augmented with the authenticated user (set by requireAuth). */
+type AuthenticatedRequest = Request & { currentUser: User };
 
 const router: IRouter = Router();
 
 // GET /api/services — list user's active service instances
-router.get("/", requireAuth, async (req: any, res) => {
+router.get("/", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = String(req.currentUser.id);
     const instances = await serviceInstanceService.listForUser(userId);
@@ -25,7 +29,7 @@ router.get("/", requireAuth, async (req: any, res) => {
 });
 
 // GET /api/services/:id — get a specific instance (owned by user)
-router.get("/:id", requireAuth, async (req: any, res) => {
+router.get("/:id", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const userId = String(req.currentUser.id);
   const id = parseInt(req.params.id, 10);
 
@@ -44,7 +48,7 @@ router.get("/:id", requireAuth, async (req: any, res) => {
 });
 
 // POST /api/services/:id/start
-router.post("/:id/start", requireAuth, async (req: any, res) => {
+router.post("/:id/start", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const userId = String(req.currentUser.id);
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
@@ -65,7 +69,7 @@ router.post("/:id/start", requireAuth, async (req: any, res) => {
 });
 
 // POST /api/services/:id/stop
-router.post("/:id/stop", requireAuth, async (req: any, res) => {
+router.post("/:id/stop", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const userId = String(req.currentUser.id);
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
@@ -86,7 +90,7 @@ router.post("/:id/stop", requireAuth, async (req: any, res) => {
 });
 
 // POST /api/services/:id/reboot
-router.post("/:id/reboot", requireAuth, async (req: any, res) => {
+router.post("/:id/reboot", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const userId = String(req.currentUser.id);
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
