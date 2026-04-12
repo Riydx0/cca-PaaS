@@ -233,8 +233,9 @@ const translations = {
     "admin.nav.invoices": "Invoices",
     "admin.nav.payments": "Payments",
     "admin.nav.auditLogs": "Audit Logs",
-    "admin.nav.subscriptions": "Subscriptions",
+    "admin.nav.subscriptions": "User Subscriptions",
     "admin.nav.plans": "Pricing Plans",
+    "admin.nav.subscriptionsGroup": "Subscriptions",
 
     // ---- Nav ----
     "nav.pricing": "Pricing",
@@ -732,8 +733,9 @@ const translations = {
     "admin.nav.invoices": "الفواتير",
     "admin.nav.payments": "المدفوعات",
     "admin.nav.auditLogs": "سجلات التدقيق",
-    "admin.nav.subscriptions": "الاشتراكات",
+    "admin.nav.subscriptions": "اشتراكات المستخدمين",
     "admin.nav.plans": "خطط الأسعار",
+    "admin.nav.subscriptionsGroup": "الاشتراكات",
 
     // ---- Nav ----
     "nav.pricing": "الأسعار",

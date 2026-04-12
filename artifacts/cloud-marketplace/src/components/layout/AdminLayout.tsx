@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   LayoutDashboard, Users, Receipt, Server, Settings, Menu, LogOut,
   ShieldCheck, ArrowLeft, CreditCard, Activity, FileText, Palette,
-  Sparkles, BadgeCheck,
+  Sparkles, BadgeCheck, ChevronDown, ChevronRight,
 } from "lucide-react";
 
 export function AdminLayout({ children }: { children: ReactNode }) {
@@ -22,19 +22,22 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const siteName = config.siteName || "CloudMarket";
   const siteLogoUrl = config.siteLogoUrl;
 
+  const isInSubscriptionsGroup =
+    location.startsWith("/admin/subscriptions") || location.startsWith("/admin/plans");
+
+  const [subsOpen, setSubsOpen] = useState(isInSubscriptionsGroup);
+
   const navItems = [
     { href: "/admin/dashboard", label: t("admin.nav.dashboard"), icon: LayoutDashboard },
     { href: "/admin/users", label: t("admin.nav.users"), icon: Users },
     { href: "/admin/orders", label: t("admin.nav.orders"), icon: Receipt },
     { href: "/admin/services", label: t("admin.nav.services"), icon: Server },
-    { href: "/admin/subscriptions", label: t("admin.nav.subscriptions"), icon: BadgeCheck },
     { href: "/admin/billing", label: t("admin.nav.billing"), icon: CreditCard },
     { href: "/admin/invoices", label: t("admin.nav.invoices"), icon: FileText },
     { href: "/admin/payments", label: t("admin.nav.payments"), icon: CreditCard },
     { href: "/admin/audit-logs", label: t("admin.nav.auditLogs"), icon: Activity },
     ...(isSuperAdmin
       ? [
-          { href: "/admin/plans", label: t("admin.nav.plans"), icon: Sparkles },
           { href: "/admin/settings", label: t("admin.nav.siteSettings"), icon: Palette },
           { href: "/admin/system", label: t("admin.nav.system"), icon: Settings },
         ]
@@ -56,6 +59,56 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     );
   };
 
+  const SubscriptionsGroup = ({ onClick }: { onClick?: () => void }) => (
+    <div>
+      <button
+        onClick={() => setSubsOpen((o) => !o)}
+        className={`w-full flex items-center gap-3 ps-3 pe-3 py-2.5 rounded-lg transition-all duration-150 text-sm font-medium ${
+          isInSubscriptionsGroup
+            ? "bg-sidebar-primary/20 text-sidebar-foreground"
+            : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+        }`}
+      >
+        <BadgeCheck className="h-5 w-5 shrink-0" />
+        <span className="flex-1 text-start">{t("admin.nav.subscriptionsGroup")}</span>
+        {subsOpen
+          ? <ChevronDown className="h-3.5 w-3.5 opacity-60 shrink-0" />
+          : <ChevronRight className="h-3.5 w-3.5 opacity-60 shrink-0" />}
+      </button>
+
+      {subsOpen && (
+        <div className="mt-1 ms-4 ps-3 border-s border-sidebar-border/60 space-y-0.5">
+          <Link
+            href="/admin/subscriptions"
+            onClick={onClick}
+            className={`flex items-center gap-2.5 px-2 py-2 rounded-lg transition-all duration-150 text-sm font-medium ${
+              location === "/admin/subscriptions"
+                ? "bg-sidebar-primary text-white shadow-sm"
+                : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            }`}
+          >
+            <BadgeCheck className="h-4 w-4 shrink-0" />
+            <span>{t("admin.nav.subscriptions")}</span>
+          </Link>
+          {isSuperAdmin && (
+            <Link
+              href="/admin/plans"
+              onClick={onClick}
+              className={`flex items-center gap-2.5 px-2 py-2 rounded-lg transition-all duration-150 text-sm font-medium ${
+                location === "/admin/plans"
+                  ? "bg-sidebar-primary text-white shadow-sm"
+                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              }`}
+            >
+              <Sparkles className="h-4 w-4 shrink-0" />
+              <span>{t("admin.nav.plans")}</span>
+            </Link>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   const NavLinks = ({ onClick }: { onClick?: () => void }) => (
     <>
       {navItems.map((item) => {
@@ -76,6 +129,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           </Link>
         );
       })}
+      <SubscriptionsGroup onClick={onClick} />
     </>
   );
 
