@@ -145,17 +145,9 @@ export class ServerProvisioningService {
         return { success: false, message: "Invalid action" };
     }
 
-    if (result.success) {
-      const statusMap: Record<typeof action, string> = {
-        start: "active",
-        stop: "stopped",
-        reboot: "active",
-      };
-      await db
-        .update(serverOrdersTable)
-        .set({ provisioningStatus: statusMap[action] })
-        .where(eq(serverOrdersTable.id, orderId));
-    }
+    // NOTE: provisioningStatus (pending|provisioning|active|failed) is not updated here
+    // because it reflects the provisioning lifecycle, not the runtime state.
+    // Runtime state (running/stopped) lives exclusively in service_instances.runningStatus.
 
     return { success: result.success, message: result.message };
   }

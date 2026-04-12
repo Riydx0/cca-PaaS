@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useRoute, Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, type TranslationKey } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,25 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+
+const RUNNING_STATUS_KEYS: Record<string, TranslationKey> = {
+  running: "service.runningStatus.running",
+  stopped: "service.runningStatus.stopped",
+  rebooting: "service.runningStatus.rebooting",
+};
+
+const PROVISIONING_STATUS_KEYS: Record<string, TranslationKey> = {
+  pending: "service.provisioningStatus.pending",
+  provisioning: "service.provisioningStatus.provisioning",
+  active: "service.provisioningStatus.active",
+  failed: "service.provisioningStatus.failed",
+};
+
+const ACTION_SUCCESS_KEYS: Record<string, TranslationKey> = {
+  start: "server.action.start.success",
+  stop: "server.action.stop.success",
+  reboot: "server.action.reboot.success",
+};
 
 interface ServiceInstance {
   id: number;
@@ -118,7 +137,7 @@ export function ServerDetailsPage() {
     setActionLoading(action);
     try {
       const result = await performAction(id, action);
-      toast.success(result.message || t(`server.action.${action}.success` as any));
+      toast.success(result.message || t(ACTION_SUCCESS_KEYS[action] ?? "server.action.start.success"));
       queryClient.invalidateQueries({ queryKey: ["service-instance", id] });
       queryClient.invalidateQueries({ queryKey: ["my-services"] });
     } catch (err: any) {
@@ -189,10 +208,10 @@ export function ServerDetailsPage() {
         <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
           <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 border font-semibold text-xs ${getRunningStatusColor(instance.runningStatus)}`}>
             <span className="me-1.5 text-[10px]">●</span>
-            {t(`service.runningStatus.${instance.runningStatus}` as any)}
+            {t(RUNNING_STATUS_KEYS[instance.runningStatus] ?? "service.runningStatus.unknown")}
           </Badge>
           <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 border font-medium text-xs ${getProvisioningStatusColor(instance.provisioningStatus)}`}>
-            {t(`service.provisioningStatus.${instance.provisioningStatus}` as any)}
+            {t(PROVISIONING_STATUS_KEYS[instance.provisioningStatus] ?? "service.provisioningStatus.pending")}
           </Badge>
         </div>
       </div>

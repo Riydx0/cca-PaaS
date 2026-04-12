@@ -1,5 +1,6 @@
 import { useI18n } from "@/lib/i18n";
 import { useListMyOrders } from "@workspace/api-client-react";
+import type { ServerOrder } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -60,7 +61,7 @@ export function Orders() {
         <>
           {/* Mobile Card View */}
           <div className="md:hidden space-y-4">
-            {(orders as any[]).map((order: any, i: number) => (
+            {orders.map((order: ServerOrder, i: number) => (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -74,7 +75,7 @@ export function Orders() {
                       <Server className="h-4 w-4 text-primary" />
                     </div>
                     <div>
-                      <p className="font-semibold text-[15px]">{order.cloudService?.name || "Unknown Service"}</p>
+                      <p className="font-semibold text-[15px]">{order.cloudService?.name ?? "Unknown Service"}</p>
                       <p className="text-sm font-medium text-muted-foreground mt-0.5 flex items-center gap-1">
                         <Cloud className="h-3 w-3" />
                         {order.cloudService?.provider}
@@ -126,7 +127,7 @@ export function Orders() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(orders as any[]).map((order: any) => (
+                  {orders.map((order: ServerOrder) => (
                     <TableRow key={order.id} className="hover:bg-muted/30 transition-colors border-b border-border/50">
                       <TableCell className="py-4">
                         <span className="font-mono text-sm text-muted-foreground">#{order.id}</span>
@@ -136,13 +137,13 @@ export function Orders() {
                           <div className="bg-gradient-to-br from-primary/10 to-primary/5 p-2 rounded-lg border border-primary/10">
                             <Server className="h-4 w-4 text-primary" />
                           </div>
-                          <p className="font-semibold">{order.cloudService?.name || "Unknown Service"}</p>
+                          <p className="font-semibold">{order.cloudService?.name ?? "Unknown Service"}</p>
                         </div>
                       </TableCell>
                       <TableCell className="py-4">
                         <div className="flex items-center gap-2 font-medium">
                           <Cloud className="h-4 w-4 text-muted-foreground" />
-                          <span>{order.cloudService?.provider || "—"}</span>
+                          <span>{order.cloudService?.provider ?? "—"}</span>
                         </div>
                       </TableCell>
                       <TableCell className="py-4">

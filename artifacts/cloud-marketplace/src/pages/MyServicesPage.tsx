@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, type TranslationKey } from "@/lib/i18n";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,19 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+
+const RUNNING_STATUS_KEYS: Record<string, TranslationKey> = {
+  running: "service.runningStatus.running",
+  stopped: "service.runningStatus.stopped",
+  rebooting: "service.runningStatus.rebooting",
+};
+
+const PROVISIONING_STATUS_KEYS: Record<string, TranslationKey> = {
+  pending: "service.provisioningStatus.pending",
+  provisioning: "service.provisioningStatus.provisioning",
+  active: "service.provisioningStatus.active",
+  failed: "service.provisioningStatus.failed",
+};
 
 interface ServiceInstance {
   id: number;
@@ -192,7 +205,7 @@ export function MyServicesPage() {
                   </div>
                   <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 border font-semibold shrink-0 text-xs ${getRunningStatusBadge(instance.runningStatus)}`}>
                     <span className="me-1.5 text-[10px]">●</span>
-                    {t(`service.runningStatus.${instance.runningStatus}` as any)}
+                    {t(RUNNING_STATUS_KEYS[instance.runningStatus] ?? "service.runningStatus.unknown")}
                   </Badge>
                 </div>
 
@@ -307,12 +320,12 @@ export function MyServicesPage() {
                       <TableCell className="py-4">
                         <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 border font-semibold text-xs ${getRunningStatusBadge(instance.runningStatus)}`}>
                           <span className="me-1.5 text-[10px]">●</span>
-                          {t(`service.runningStatus.${instance.runningStatus}` as any)}
+                          {t(RUNNING_STATUS_KEYS[instance.runningStatus] ?? "service.runningStatus.unknown")}
                         </Badge>
                       </TableCell>
                       <TableCell className="py-4">
                         <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 border font-medium text-xs ${getProvisioningBadge(instance.provisioningStatus)}`}>
-                          {t(`service.provisioningStatus.${instance.provisioningStatus}` as any)}
+                          {t(PROVISIONING_STATUS_KEYS[instance.provisioningStatus] ?? "service.provisioningStatus.pending")}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right py-4">
