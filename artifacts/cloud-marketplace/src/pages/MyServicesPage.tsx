@@ -128,7 +128,7 @@ function ActionButtons({ instance, onAction }: { instance: ServiceInstance; onAc
         <RotateCcw className="h-3.5 w-3.5" />
       </Button>
       <Link href={`/my-services/${instance.id}`}>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" title="Manage">
+        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" title={t("server.manage")}>
           <ExternalLink className="h-3.5 w-3.5" />
         </Button>
       </Link>
@@ -175,7 +175,7 @@ export function MyServicesPage() {
         <Card className="border-border/50 shadow-sm">
           <div className="p-12 flex flex-col items-center justify-center space-y-4">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            <p className="text-muted-foreground font-medium">Loading services...</p>
+            <p className="text-muted-foreground font-medium">{t("page.myServices.loading")}</p>
           </div>
         </Card>
       ) : services && services.length > 0 ? (
@@ -349,7 +349,7 @@ export function MyServicesPage() {
             <h3 className="text-2xl font-bold mb-2">{t("page.myServices.title")}</h3>
             <p className="text-muted-foreground max-w-md mb-8">{t("page.myServices.empty")}</p>
             <Link href="/services" className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors bg-primary text-primary-foreground shadow hover:bg-primary/90 h-10 px-6">
-              Browse Services
+              {t("btn.browseServices")}
             </Link>
           </CardContent>
         </Card>

@@ -20,6 +20,9 @@ const translations = {
     "page.myServices.title": "My Services",
     "page.myServices.subtitle": "View and manage your active server instances.",
     "page.myServices.empty": "No active services yet. Your servers will appear here after provisioning.",
+    "page.myServices.loading": "Loading services...",
+    "btn.browseServices": "Browse Services",
+    "label.externalId": "External ID",
     // Buttons
     "btn.requestServer": "Request Server",
     "btn.submit": "Submit Order",
@@ -584,6 +587,9 @@ const translations = {
     "page.myServices.title": "خدماتي",
     "page.myServices.subtitle": "عرض وإدارة خوادمك النشطة.",
     "page.myServices.empty": "لا توجد خدمات نشطة بعد. ستظهر خوادمك هنا بعد التوفير.",
+    "page.myServices.loading": "جارٍ تحميل الخدمات...",
+    "btn.browseServices": "تصفح الخدمات",
+    "label.externalId": "المعرف الخارجي",
     // Buttons
     "btn.requestServer": "طلب خادم",
     "btn.submit": "تأكيد الطلب",

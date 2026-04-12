@@ -254,7 +254,7 @@ export function ServerDetailsPage() {
 
               {instance.externalId && (
                 <>
-                  <div className="text-muted-foreground font-medium">External ID</div>
+                  <div className="text-muted-foreground font-medium">{t("label.externalId")}</div>
                   <div className="font-mono text-xs text-muted-foreground truncate">{instance.externalId}</div>
                 </>
               )}
