@@ -85,6 +85,25 @@ function ProtectedRoute({ component: Component }: { component: any }) {
   );
 }
 
+function PublicOrAppRoute({ component: Component }: { component: any }) {
+  const { isLoaded, isSignedIn } = useAuth();
+  if (!isLoaded) return <LoadingScreen />;
+  if (isSignedIn) {
+    return (
+      <AppLayout>
+        <Component />
+      </AppLayout>
+    );
+  }
+  return (
+    <div className="min-h-screen bg-background p-4 md:p-8">
+      <div className="max-w-6xl mx-auto w-full">
+        <Component />
+      </div>
+    </div>
+  );
+}
+
 function AdminRoute({ component: Component, superAdminOnly = false }: { component: any; superAdminOnly?: boolean }) {
   const { isLoaded, isSignedIn } = useAuth();
   const { isAdmin, isSuperAdmin } = useRole();
@@ -129,7 +148,7 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
         <ProtectedRoute component={PaymentsPage} />
       </Route>
       <Route path="/pricing">
-        <ProtectedRoute component={PricingPage} />
+        <PublicOrAppRoute component={PricingPage} />
       </Route>
       <Route path="/subscription">
         <ProtectedRoute component={SubscriptionPage} />
