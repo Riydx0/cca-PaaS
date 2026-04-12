@@ -13,7 +13,7 @@ import {
 
 interface VersionInfo {
   currentVersion: string;
-  githubVersionUrl: string | null;
+  versionSourceUrl: string | null;
   logs: UpdateLog[];
 }
 
@@ -307,9 +307,9 @@ export function AdminSystemUpdates() {
           <CardContent>
             {isLoading ? (
               <Skeleton className="h-6 w-full" />
-            ) : data?.githubVersionUrl ? (
+            ) : data?.versionSourceUrl ? (
               <code className="text-xs bg-muted px-2 py-1 rounded text-muted-foreground break-all block">
-                {data.githubVersionUrl}
+                {data.versionSourceUrl}
               </code>
             ) : (
               <div className="flex items-center gap-2 text-amber-600 text-sm">

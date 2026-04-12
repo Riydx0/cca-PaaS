@@ -48,7 +48,7 @@ router.get("/version", requireSuperAdmin, async (_req, res) => {
 
   res.json({
     currentVersion,
-    githubVersionUrl: process.env.GITHUB_RAW_VERSION_URL ?? null,
+    versionSourceUrl: process.env.GITHUB_RAW_VERSION_URL ?? null,
     logs,
   });
 });
@@ -65,7 +65,7 @@ router.post("/check-updates", requireSuperAdmin, async (req: any, res) => {
   if (!remoteVersion) {
     status = "checked";
     message = process.env.GITHUB_RAW_VERSION_URL
-      ? "Failed to reach GitHub version URL"
+      ? "Failed to reach the version source URL"
       : "GITHUB_RAW_VERSION_URL is not configured. Set this environment variable to enable update checks.";
     targetVersion = null;
   } else if (remoteVersion === currentVersion) {
@@ -132,7 +132,7 @@ router.post("/run-update", requireSuperAdmin, async (req: any, res) => {
       status: "rebuilding",
       newVersion,
       message:
-        "Code pulled from GitHub. Containers are rebuilding and restarting — this may take 1-3 minutes. Refresh the page once the app is back.",
+        "Code updated. Containers are rebuilding and restarting — this may take 1-3 minutes. Refresh the page once the app is back.",
     });
 
     // Give Express time to flush the response socket before we start the rebuild
