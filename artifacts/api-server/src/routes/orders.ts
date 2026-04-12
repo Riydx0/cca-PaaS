@@ -78,6 +78,7 @@ router.post("/", requireAuth, async (req: any, res) => {
       notes: notes ?? null,
       externalOrderId,
       providerResponse,
+      provisioningStatus: "pending",
     })
     .returning();
 
@@ -89,6 +90,10 @@ router.post("/", requireAuth, async (req: any, res) => {
     details: { cloudServiceId, requestedRegion, status: "Pending" },
     ipAddress: (req as any).ip,
   }).catch(() => {});
+
+  serverProvisioningService.provision(order.id).catch((err) => {
+    console.error(`[orders] Provisioning failed for order ${order.id}:`, err);
+  });
 
   res.status(201).json(formatOrder(order, service));
 });
