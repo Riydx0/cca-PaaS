@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   LayoutDashboard, Users, Receipt, Server, Settings, Menu, LogOut,
   ShieldCheck, ArrowLeft, CreditCard, Activity, FileText, Palette,
+  Sparkles, BadgeCheck,
 } from "lucide-react";
 
 export function AdminLayout({ children }: { children: ReactNode }) {
@@ -26,12 +27,14 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     { href: "/admin/users", label: t("admin.nav.users"), icon: Users },
     { href: "/admin/orders", label: t("admin.nav.orders"), icon: Receipt },
     { href: "/admin/services", label: t("admin.nav.services"), icon: Server },
+    { href: "/admin/subscriptions", label: t("admin.nav.subscriptions"), icon: BadgeCheck },
     { href: "/admin/billing", label: t("admin.nav.billing"), icon: CreditCard },
     { href: "/admin/invoices", label: t("admin.nav.invoices"), icon: FileText },
     { href: "/admin/payments", label: t("admin.nav.payments"), icon: CreditCard },
     { href: "/admin/audit-logs", label: t("admin.nav.auditLogs"), icon: Activity },
     ...(isSuperAdmin
       ? [
+          { href: "/admin/plans", label: t("admin.nav.plans"), icon: Sparkles },
           { href: "/admin/settings", label: t("admin.nav.siteSettings"), icon: Palette },
           { href: "/admin/system", label: t("admin.nav.system"), icon: Settings },
         ]

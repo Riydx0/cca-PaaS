@@ -36,6 +36,10 @@ import { AdminInvoicesPage } from "@/pages/admin/AdminInvoicesPage";
 import { AdminPaymentsPage } from "@/pages/admin/AdminPaymentsPage";
 import { AuditLogsPage } from "@/pages/admin/AuditLogsPage";
 import { AdminSiteSettings } from "@/pages/admin/AdminSiteSettings";
+import { AdminSubscriptionsPage } from "@/pages/admin/AdminSubscriptionsPage";
+import { AdminPlansPage } from "@/pages/admin/AdminPlansPage";
+import { PricingPage } from "@/pages/PricingPage";
+import { SubscriptionPage } from "@/pages/SubscriptionPage";
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -124,6 +128,12 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
       <Route path="/billing/payments">
         <ProtectedRoute component={PaymentsPage} />
       </Route>
+      <Route path="/pricing">
+        <ProtectedRoute component={PricingPage} />
+      </Route>
+      <Route path="/subscription">
+        <ProtectedRoute component={SubscriptionPage} />
+      </Route>
 
       <Route path="/admin">
         <Redirect to="/admin/dashboard" />
@@ -157,6 +167,12 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
       </Route>
       <Route path="/admin/audit-logs">
         <AdminRoute component={AuditLogsPage} />
+      </Route>
+      <Route path="/admin/subscriptions">
+        <AdminRoute component={AdminSubscriptionsPage} />
+      </Route>
+      <Route path="/admin/plans">
+        <AdminRoute component={AdminPlansPage} superAdminOnly />
       </Route>
 
       <Route component={NotFound} />

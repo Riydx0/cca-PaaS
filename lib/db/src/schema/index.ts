@@ -7,3 +7,5 @@ export * from "./invoices";
 export * from "./paymentRecords";
 export * from "./auditLogs";
 export * from "./passwordResetTokens";
+export * from "./subscriptionPlans";
+export * from "./userSubscriptions";
