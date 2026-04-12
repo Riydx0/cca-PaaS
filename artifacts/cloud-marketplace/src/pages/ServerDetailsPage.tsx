@@ -77,13 +77,13 @@ interface ServiceInstance {
 }
 
 async function fetchServiceInstance(id: string): Promise<ServiceInstance> {
-  const res = await fetch(`/api/my-services/${id}`, { credentials: "include" });
+  const res = await fetch(`/api/services/${id}`, { credentials: "include" });
   if (!res.ok) throw new Error("Service instance not found");
   return res.json();
 }
 
 async function performAction(id: string, action: "start" | "stop" | "reboot"): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`/api/my-services/${id}/${action}`, {
+  const res = await fetch(`/api/services/${id}/${action}`, {
     method: "POST",
     credentials: "include",
   });

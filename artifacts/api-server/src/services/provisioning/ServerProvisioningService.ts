@@ -97,7 +97,7 @@ export class ServerProvisioningService {
     }
   }
 
-  // TODO: Deprecated — use ServiceInstanceService.performAction() via POST /api/my-services/:id/start|stop|reboot
+  // TODO: Deprecated — use ServiceInstanceService.performAction() via POST /api/services/:id/start|stop|reboot
   async performAction(
     orderId: number,
     action: "start" | "stop" | "reboot",

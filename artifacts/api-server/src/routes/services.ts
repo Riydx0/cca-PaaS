@@ -1,47 +1,19 @@
+/**
+ * /api/services — User-facing service instance management (authenticated).
+ * These routes operate on the service_instances table.
+ *
+ * Public catalog (cloud_services table) is served at /api/catalog.
+ * /api/my-services is a deprecated alias for backward compatibility.
+ */
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
-import { cloudServicesTable } from "@workspace/db/schema";
-import { ListServicesQueryParams } from "@workspace/api-zod";
-import { eq, and, gte, lte, type SQL } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireRole";
 import { serviceInstanceService } from "../services/ServiceInstanceService";
 import { AuditService } from "../services/audit_service";
 
 const router: IRouter = Router();
 
-// ── Public catalog: list all active services ─────────────────────────────────
-
-router.get("/", async (req, res) => {
-  const parsed = ListServicesQueryParams.safeParse(req.query);
-  const filters: SQL[] = [eq(cloudServicesTable.isActive, true)];
-
-  if (parsed.success) {
-    const { provider, region, minPrice, maxPrice } = parsed.data;
-    if (provider) filters.push(eq(cloudServicesTable.provider, provider));
-    if (region) filters.push(eq(cloudServicesTable.region, region));
-    if (minPrice != null) filters.push(gte(cloudServicesTable.priceMonthly, String(minPrice)));
-    if (maxPrice != null) filters.push(lte(cloudServicesTable.priceMonthly, String(maxPrice)));
-  }
-
-  const services = await db
-    .select()
-    .from(cloudServicesTable)
-    .where(and(...filters));
-
-  const mapped = services.map((s) => ({
-    ...s,
-    bandwidthTb: Number(s.bandwidthTb),
-    priceMonthly: Number(s.priceMonthly),
-  }));
-
-  res.json(mapped);
-});
-
-// ── Authenticated service instance routes ─────────────────────────────────────
-// IMPORTANT: These must be defined BEFORE the `/:id` catalog route so they
-// are not intercepted by it.
-
-router.get("/instances", requireAuth, async (req: any, res) => {
+// GET /api/services — list user's active service instances
+router.get("/", requireAuth, async (req: any, res) => {
   try {
     const userId = String(req.currentUser.id);
     const instances = await serviceInstanceService.listForUser(userId);
@@ -52,7 +24,8 @@ router.get("/instances", requireAuth, async (req: any, res) => {
   }
 });
 
-router.get("/instances/:id", requireAuth, async (req: any, res) => {
+// GET /api/services/:id — get a specific instance (owned by user)
+router.get("/:id", requireAuth, async (req: any, res) => {
   const userId = String(req.currentUser.id);
   const id = parseInt(req.params.id, 10);
 
@@ -70,7 +43,8 @@ router.get("/instances/:id", requireAuth, async (req: any, res) => {
   res.json(instance);
 });
 
-router.post("/instances/:id/start", requireAuth, async (req: any, res) => {
+// POST /api/services/:id/start
+router.post("/:id/start", requireAuth, async (req: any, res) => {
   const userId = String(req.currentUser.id);
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
@@ -90,7 +64,8 @@ router.post("/instances/:id/start", requireAuth, async (req: any, res) => {
   res.json(result);
 });
 
-router.post("/instances/:id/stop", requireAuth, async (req: any, res) => {
+// POST /api/services/:id/stop
+router.post("/:id/stop", requireAuth, async (req: any, res) => {
   const userId = String(req.currentUser.id);
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
@@ -110,7 +85,8 @@ router.post("/instances/:id/stop", requireAuth, async (req: any, res) => {
   res.json(result);
 });
 
-router.post("/instances/:id/reboot", requireAuth, async (req: any, res) => {
+// POST /api/services/:id/reboot
+router.post("/:id/reboot", requireAuth, async (req: any, res) => {
   const userId = String(req.currentUser.id);
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
@@ -128,33 +104,6 @@ router.post("/instances/:id/reboot", requireAuth, async (req: any, res) => {
   }).catch(() => {});
 
   res.json(result);
-});
-
-// ── Public catalog: get single service by ID ──────────────────────────────────
-// Defined LAST so it does not intercept /instances/* routes above.
-
-router.get("/:id", async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) {
-    res.status(400).json({ error: "Invalid ID" });
-    return;
-  }
-
-  const [service] = await db
-    .select()
-    .from(cloudServicesTable)
-    .where(eq(cloudServicesTable.id, id));
-
-  if (!service) {
-    res.status(404).json({ error: "Service not found" });
-    return;
-  }
-
-  res.json({
-    ...service,
-    bandwidthTb: Number(service.bandwidthTb),
-    priceMonthly: Number(service.priceMonthly),
-  });
 });
 
 export default router;

@@ -1,3 +1,7 @@
+/**
+ * @deprecated Use /api/services instead.
+ * This router is kept as a backward-compatibility alias and will be removed in a future release.
+ */
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/requireRole";
 import { serviceInstanceService } from "../services/ServiceInstanceService";

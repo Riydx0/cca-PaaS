@@ -53,13 +53,13 @@ interface ServiceInstance {
 }
 
 async function fetchMyServices(): Promise<ServiceInstance[]> {
-  const res = await fetch("/api/my-services", { credentials: "include" });
+  const res = await fetch("/api/services", { credentials: "include" });
   if (!res.ok) throw new Error("Failed to load services");
   return res.json();
 }
 
 async function doAction(id: number, action: "start" | "stop" | "reboot") {
-  const res = await fetch(`/api/my-services/${id}/${action}`, {
+  const res = await fetch(`/api/services/${id}/${action}`, {
     method: "POST",
     credentials: "include",
   });

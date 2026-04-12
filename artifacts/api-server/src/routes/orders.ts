@@ -133,7 +133,7 @@ router.get("/:id", requireAuth, async (req: any, res) => {
   res.json(formatOrder(row.order, row.service));
 });
 
-// TODO: Deprecated — use POST /api/my-services/:id/start|stop|reboot instead.
+// TODO: Deprecated — use POST /api/services/:id/start|stop|reboot instead.
 // This endpoint is kept as a compatibility layer and internally forwards to ServiceInstanceService when possible.
 router.post("/:id/action", requireAuth, async (req: any, res) => {
   const userId = String(req.currentUser.id);

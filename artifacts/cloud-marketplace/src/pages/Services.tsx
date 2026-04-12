@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import { useListServices, useCreateOrder, getListMyOrdersQueryKey, getGetDashboardStatsQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCreateOrder, getListMyOrdersQueryKey, getGetDashboardStatsQueryKey } from "@workspace/api-client-react";
+import type { CloudService } from "@workspace/api-client-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,9 +21,17 @@ export function Services() {
   const [providerFilter, setProviderFilter] = useState<string>("all");
   const [regionFilter, setRegionFilter] = useState<string>("");
   
-  const { data: services, isLoading } = useListServices({
-    provider: providerFilter !== "all" ? providerFilter : undefined,
-    region: regionFilter || undefined
+  const { data: services, isLoading } = useQuery<CloudService[]>({
+    queryKey: ["catalog", providerFilter, regionFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (providerFilter !== "all") params.set("provider", providerFilter);
+      if (regionFilter) params.set("region", regionFilter);
+      const url = `/api/catalog${params.toString() ? `?${params}` : ""}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to load catalog");
+      return res.json();
+    },
   });
 
   const createOrder = useCreateOrder();
