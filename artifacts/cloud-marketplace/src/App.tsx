@@ -177,6 +177,13 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
       <Route path="/my-services/:id">
         <ProtectedRoute component={ServerDetailsPage} />
       </Route>
+      {/* Legacy route redirects for backward URL compatibility */}
+      <Route path="/dashboard/my-services">
+        <Redirect to="/my-services" />
+      </Route>
+      <Route path="/dashboard/services/:id">
+        <Redirect to="/my-services" />
+      </Route>
 
       <Route path="/admin">
         <Redirect to="/admin/dashboard" />

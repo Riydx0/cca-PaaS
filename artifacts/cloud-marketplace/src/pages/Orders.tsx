@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Server, Calendar, MapPin, Receipt, Cloud } from "lucide-react";
+import { Server, Calendar, Receipt } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 
@@ -112,18 +112,16 @@ export function Orders() {
             ))}
           </div>
 
-          {/* Desktop Table View */}
+          {/* Desktop Table View — 4 columns: ID, Plan, Status, Created At */}
           <div className="hidden md:block">
             <Card className="border-card-border shadow-sm overflow-hidden bg-card">
               <Table>
                 <TableHeader className="bg-muted/40 border-b border-border">
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-[60px] text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">ID</TableHead>
-                    <TableHead className="w-[260px] text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">Service</TableHead>
-                    <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">{t("label.provider")}</TableHead>
-                    <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">{t("label.region")}</TableHead>
-                    <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">Date</TableHead>
+                    <TableHead className="w-[80px] text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">Order ID</TableHead>
+                    <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">Plan</TableHead>
                     <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">{t("label.status")}</TableHead>
+                    <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground py-4">Created At</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -141,28 +139,16 @@ export function Orders() {
                         </div>
                       </TableCell>
                       <TableCell className="py-4">
-                        <div className="flex items-center gap-2 font-medium">
-                          <Cloud className="h-4 w-4 text-muted-foreground" />
-                          <span>{order.cloudService?.provider ?? "—"}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-4">
-                        <div className="flex items-center gap-2 text-muted-foreground font-medium">
-                          <MapPin className="h-3.5 w-3.5" />
-                          <span>{order.requestedRegion}</span>
-                        </div>
+                        <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 border font-semibold ${getStatusColor(order.status)}`}>
+                          <span className="me-1.5 text-[10px]">●</span>
+                          {getStatusText(order.status)}
+                        </Badge>
                       </TableCell>
                       <TableCell className="py-4">
                         <div className="flex items-center gap-2 text-muted-foreground font-medium">
                           <Calendar className="h-3.5 w-3.5" />
                           <span>{new Date(order.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
                         </div>
-                      </TableCell>
-                      <TableCell className="py-4">
-                        <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 border font-semibold ${getStatusColor(order.status)}`}>
-                          <span className="me-1.5 text-[10px]">●</span>
-                          {getStatusText(order.status)}
-                        </Badge>
                       </TableCell>
                     </TableRow>
                   ))}
