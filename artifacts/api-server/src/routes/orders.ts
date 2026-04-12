@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { cloudServicesTable, serverOrdersTable } from "@workspace/db/schema";
+import { cloudServicesTable, serverOrdersTable, providersTable } from "@workspace/db/schema";
 import { CreateOrderBody } from "@workspace/api-zod";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, ilike } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireRole";
 import { AuditService } from "../services/audit_service";
 import { serverProvisioningService } from "../services/provisioning/ServerProvisioningService";
@@ -60,6 +60,14 @@ router.post("/", requireAuth, async (req: any, res) => {
     return;
   }
 
+  const [matchedProvider] = service.provider
+    ? await db
+        .select({ id: providersTable.id })
+        .from(providersTable)
+        .where(ilike(providersTable.name, service.provider))
+        .limit(1)
+    : [];
+
   const externalOrderId = `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const providerResponse = JSON.stringify({
     status: "accepted",
@@ -79,6 +87,7 @@ router.post("/", requireAuth, async (req: any, res) => {
       externalOrderId,
       providerResponse,
       provisioningStatus: "pending",
+      providerId: matchedProvider?.id ?? null,
     })
     .returning();
 

@@ -108,6 +108,18 @@ export class ServerProvisioningService {
         return { success: false, message: "Invalid action" };
     }
 
+    if (result.success) {
+      const statusMap: Record<typeof action, string> = {
+        start: "active",
+        stop: "stopped",
+        reboot: "active",
+      };
+      await db
+        .update(serverOrdersTable)
+        .set({ provisioningStatus: statusMap[action] })
+        .where(eq(serverOrdersTable.id, orderId));
+    }
+
     return { success: result.success, message: result.message };
   }
 }
