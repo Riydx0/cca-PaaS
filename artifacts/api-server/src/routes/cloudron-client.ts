@@ -12,8 +12,9 @@ import {
   cloudronClientAccessTable,
   cloudronInstancesTable,
   auditLogsTable,
+  usersTable,
 } from "@workspace/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireRole";
 import { createCloudronClient, CloudronError } from "../cloudron/client";
 import {
@@ -150,49 +151,71 @@ router.get("/summary", requireAuth, async (req: Request, res: Response) => {
   });
 });
 
+// ─── Activity helpers ───────────────────────────────────────────────────────
+
+function buildClientMessage(action: string, entityId: string | null): string {
+  const id = entityId ? ` ${entityId}` : "";
+  const map: Record<string, string> = {
+    cloudron_install:        `Installed app${id}`,
+    cloudron_restart:        `Restarted app${id}`,
+    cloudron_stop:           `Stopped app${id}`,
+    cloudron_start:          `Started app${id}`,
+    cloudron_uninstall:      `Uninstalled app${id}`,
+    cloudron_update:         `Updated app${id}`,
+    cloudron_create_mailbox: `Created mailbox${id}`,
+    cloudron_edit_mailbox:   `Edited mailbox${id}`,
+    cloudron_delete_mailbox: `Deleted mailbox${id}`,
+  };
+  return map[action] ?? action;
+}
+
 // ─── Activity log ──────────────────────────────────────────────────────────────
 
 /**
  * GET /api/cloudron-client/activity
  * Returns the last 50 Cloudron activity log entries for the current user's instance.
+ * Filters at DB level on userId + instanceId JSON field.
  * Required permission: view_cloudron
  */
 router.get("/activity", requireAuth, async (req: Request, res: Response) => {
   await withPermission(req, res, "view_cloudron", async (access, userId) => {
+    const instanceId = access.instance.id;
+
     const rows = await db
-      .select()
-      .from(auditLogsTable)
-      .where(
-        and(
-          eq(auditLogsTable.userId, userId),
-          eq(auditLogsTable.entityType, "cloudron_app")
-        )
-      )
-      .orderBy(desc(auditLogsTable.createdAt))
-      .limit(50);
-
-    // Also include mailbox entries
-    const mailboxRows = await db
-      .select()
-      .from(auditLogsTable)
-      .where(
-        and(
-          eq(auditLogsTable.userId, userId),
-          eq(auditLogsTable.entityType, "cloudron_mailbox")
-        )
-      )
-      .orderBy(desc(auditLogsTable.createdAt))
-      .limit(50);
-
-    const all = [...rows, ...mailboxRows]
-      .filter((r) => {
-        const det = r.details as Record<string, unknown> | null;
-        return det?.instanceId === access.instance.id;
+      .select({
+        log: auditLogsTable,
+        userName: usersTable.name,
+        userEmail: usersTable.email,
       })
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .slice(0, 50);
+      .from(auditLogsTable)
+      .leftJoin(usersTable, eq(auditLogsTable.userId, usersTable.id))
+      .where(
+        and(
+          eq(auditLogsTable.userId, userId),
+          inArray(auditLogsTable.entityType, ["cloudron_app", "cloudron_mailbox"]),
+          sql`(${auditLogsTable.details}->>'instanceId')::integer = ${instanceId}`
+        )
+      )
+      .orderBy(desc(auditLogsTable.createdAt))
+      .limit(50);
 
-    res.json({ logs: all });
+    const logs = rows.map((r) => {
+      const det = r.log.details as Record<string, unknown> | null;
+      const status = (det?.status as string) === "failed" ? "failed" : "success";
+      return {
+        id: r.log.id,
+        action: r.log.action,
+        entityType: r.log.entityType,
+        entityId: r.log.entityId ?? null,
+        status,
+        message: buildClientMessage(r.log.action, r.log.entityId ?? null),
+        userId: r.log.userId ?? null,
+        userName: r.userName ?? null,
+        createdAt: r.log.createdAt.toISOString(),
+      };
+    });
+
+    res.json({ logs });
   });
 });
 

@@ -88,11 +88,13 @@ interface Mailbox {
 
 interface ActivityLog {
   id: number;
-  userId: number | null;
   action: string;
   entityType: string;
   entityId: string | null;
-  details: Record<string, unknown> | null;
+  status: "success" | "failed" | "info";
+  message: string;
+  userId: number | null;
+  userName: string | null;
   createdAt: string;
 }
 
@@ -103,11 +105,23 @@ function activityLabel(action: string): string {
     cloudron_stop: "Stop",
     cloudron_start: "Start",
     cloudron_uninstall: "Uninstall",
+    cloudron_update: "Update",
     cloudron_create_mailbox: "Create Mailbox",
     cloudron_edit_mailbox: "Edit Mailbox",
     cloudron_delete_mailbox: "Delete Mailbox",
   };
   return map[action] ?? action;
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
 interface TaskResult {
@@ -695,8 +709,9 @@ function ClientActivityTab() {
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/40">
+            <TableHead>{t("cloudron.client.activity.col.status")}</TableHead>
             <TableHead>{t("cloudron.client.activity.col.action")}</TableHead>
-            <TableHead>{t("cloudron.client.activity.col.entity")}</TableHead>
+            <TableHead>{t("cloudron.client.activity.col.message")}</TableHead>
             <TableHead>{t("cloudron.client.activity.col.date")}</TableHead>
           </TableRow>
         </TableHeader>
@@ -704,15 +719,27 @@ function ClientActivityTab() {
           {logs.map((log) => (
             <TableRow key={log.id}>
               <TableCell>
+                <Badge
+                  variant="outline"
+                  className={
+                    log.status === "failed"
+                      ? "border-red-200 bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400 text-xs"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 text-xs"
+                  }
+                >
+                  {log.status === "failed" ? "✗" : "✓"}
+                </Badge>
+              </TableCell>
+              <TableCell>
                 <Badge variant="outline" className="font-mono text-xs">
                   {activityLabel(log.action)}
                 </Badge>
               </TableCell>
-              <TableCell className="font-mono text-xs text-muted-foreground">
-                {log.entityId ?? log.entityType}
+              <TableCell className="text-xs text-muted-foreground max-w-[260px] truncate">
+                {log.message}
               </TableCell>
-              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                {new Date(log.createdAt).toLocaleString()}
+              <TableCell className="text-xs text-muted-foreground whitespace-nowrap" title={new Date(log.createdAt).toLocaleString()}>
+                {relativeTime(log.createdAt)}
               </TableCell>
             </TableRow>
           ))}

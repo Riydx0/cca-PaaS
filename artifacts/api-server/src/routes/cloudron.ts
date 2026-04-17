@@ -6,17 +6,21 @@
  */
 
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, inArray, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   cloudronInstancesTable,
   auditLogsTable,
+  usersTable,
   insertCloudronInstanceSchema,
   updateCloudronInstanceSchema,
 } from "@workspace/db/schema";
 import { requireAdmin } from "../middlewares/requireRole";
 import { cloudronService } from "../services/CloudronService";
 import { CloudronError } from "../cloudron/client";
+import pino from "pino";
+
+const logger = pino({ name: "cloudron-routes" });
 
 const router: IRouter = Router();
 
@@ -199,6 +203,7 @@ router.post("/apps/install", requireAdmin, async (req: Request, res: Response) =
       portBindings,
       accessRestriction,
     });
+    fireAdminLog(req, "cloudron_install", result.appId);
     res.status(202).json(result);
   } catch (err) {
     handleCloudronError(err, res);
@@ -215,6 +220,7 @@ router.post("/apps/:id/uninstall", requireAdmin, async (req: Request, res: Respo
 
   try {
     const result = await cloudronService.requestUninstall(appId);
+    fireAdminLog(req, "cloudron_uninstall", appId);
     res.status(202).json(result);
   } catch (err) {
     handleCloudronError(err, res);
@@ -231,6 +237,7 @@ router.post("/apps/:id/restart", requireAdmin, async (req: Request, res: Respons
 
   try {
     const result = await cloudronService.requestRestart(appId);
+    fireAdminLog(req, "cloudron_restart", appId);
     res.status(202).json(result);
   } catch (err) {
     handleCloudronError(err, res);
@@ -247,6 +254,7 @@ router.post("/apps/:id/stop", requireAdmin, async (req: Request, res: Response) 
 
   try {
     const result = await cloudronService.requestStop(appId);
+    fireAdminLog(req, "cloudron_stop", appId);
     res.status(202).json(result);
   } catch (err) {
     handleCloudronError(err, res);
@@ -263,6 +271,7 @@ router.post("/apps/:id/start", requireAdmin, async (req: Request, res: Response)
 
   try {
     const result = await cloudronService.requestStart(appId);
+    fireAdminLog(req, "cloudron_start", appId);
     res.status(202).json(result);
   } catch (err) {
     handleCloudronError(err, res);
@@ -279,6 +288,7 @@ router.post("/apps/:id/update", requireAdmin, async (req: Request, res: Response
 
   try {
     const result = await cloudronService.requestUpdate(appId);
+    fireAdminLog(req, "cloudron_update", appId);
     res.status(202).json(result);
   } catch (err) {
     handleCloudronError(err, res);
@@ -316,41 +326,137 @@ router.get("/tasks/:id", requireAdmin, async (req: Request, res: Response) => {
   }
 });
 
+// ─── Activity helpers ─────────────────────────────────────────────────────────
+
+function buildActivityMessage(action: string, entityId: string | null): string {
+  const id = entityId ? ` ${entityId}` : "";
+  const map: Record<string, string> = {
+    cloudron_install:        `Installed app${id}`,
+    cloudron_restart:        `Restarted app${id}`,
+    cloudron_stop:           `Stopped app${id}`,
+    cloudron_start:          `Started app${id}`,
+    cloudron_uninstall:      `Uninstalled app${id}`,
+    cloudron_create_mailbox: `Created mailbox${id}`,
+    cloudron_edit_mailbox:   `Edited mailbox${id}`,
+    cloudron_delete_mailbox: `Deleted mailbox${id}`,
+    cloudron_sync:           "Background sync completed",
+  };
+  return map[action] ?? action;
+}
+
+interface NormalizedLog {
+  id: number;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  status: "success" | "failed" | "info";
+  message: string;
+  userId: number | null;
+  userName: string | null;
+  userEmail: string | null;
+  createdAt: string;
+}
+
+function normalizeLog(
+  row: typeof auditLogsTable.$inferSelect,
+  user: { name: string; email: string } | null
+): NormalizedLog {
+  const det = row.details as Record<string, unknown> | null;
+  const status = ((det?.status as string) === "failed" ? "failed" : "success") as NormalizedLog["status"];
+  return {
+    id: row.id,
+    action: row.action,
+    entityType: row.entityType,
+    entityId: row.entityId ?? null,
+    status,
+    message: buildActivityMessage(row.action, row.entityId ?? null),
+    userId: row.userId ?? null,
+    userName: user?.name ?? null,
+    userEmail: user?.email ?? null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+// ─── Admin action logging ─────────────────────────────────────────────────────
+
+interface LogAdminActionOptions {
+  userId: number;
+  instanceId: number;
+  action: string;
+  appId?: string;
+  details?: Record<string, unknown>;
+}
+
+function logAdminCloudronAction(opts: LogAdminActionOptions): void {
+  const { userId, instanceId, action, appId, details } = opts;
+  db.insert(auditLogsTable)
+    .values({
+      userId,
+      action,
+      entityType: "cloudron_app",
+      entityId: appId ?? String(instanceId),
+      details: { instanceId, ...(appId ? { appId } : {}), ...details },
+    })
+    .catch((err) => {
+      logger.warn({ err }, "[cloudron] Failed to write admin activity log");
+    });
+}
+
+async function getActiveInstanceId(): Promise<number | null> {
+  try {
+    const [inst] = await db
+      .select({ id: cloudronInstancesTable.id })
+      .from(cloudronInstancesTable)
+      .where(eq(cloudronInstancesTable.isActive, true))
+      .limit(1);
+    return inst?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function fireAdminLog(req: Request, action: string, appId?: string): void {
+  const userId = (req as Request & { currentUser?: { id: number } }).currentUser?.id;
+  if (!userId) return;
+  getActiveInstanceId().then((instanceId) => {
+    if (instanceId) logAdminCloudronAction({ userId, instanceId, action, appId });
+  }).catch(() => {});
+}
+
 // ─── Admin activity log ───────────────────────────────────────────────────────
 
 /**
  * GET /api/cloudron/instances/:id/activity
  * Returns the last 100 Cloudron activity log entries for a specific instance.
- * Admins only.
+ * Admins only. Filters at the DB level on details.instanceId; joins users for name.
  */
 router.get("/instances/:id/activity", requireAdmin, async (req: Request, res: Response) => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid instance ID" }); return; }
 
   try {
-    const appLogs = await db
-      .select()
-      .from(auditLogsTable)
-      .where(eq(auditLogsTable.entityType, "cloudron_app"))
-      .orderBy(desc(auditLogsTable.createdAt))
-      .limit(200);
-
-    const mailboxLogs = await db
-      .select()
-      .from(auditLogsTable)
-      .where(eq(auditLogsTable.entityType, "cloudron_mailbox"))
-      .orderBy(desc(auditLogsTable.createdAt))
-      .limit(200);
-
-    const all = [...appLogs, ...mailboxLogs]
-      .filter((r) => {
-        const det = r.details as Record<string, unknown> | null;
-        return det?.instanceId === id;
+    const rows = await db
+      .select({
+        log: auditLogsTable,
+        userName: usersTable.name,
+        userEmail: usersTable.email,
       })
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .slice(0, 100);
+      .from(auditLogsTable)
+      .leftJoin(usersTable, eq(auditLogsTable.userId, usersTable.id))
+      .where(
+        and(
+          inArray(auditLogsTable.entityType, ["cloudron_app", "cloudron_mailbox"]),
+          sql`(${auditLogsTable.details}->>'instanceId')::integer = ${id}`
+        )
+      )
+      .orderBy(desc(auditLogsTable.createdAt))
+      .limit(100);
 
-    res.json({ logs: all });
+    const logs = rows.map((r) =>
+      normalizeLog(r.log, r.userName ? { name: r.userName, email: r.userEmail ?? "" } : null)
+    );
+
+    res.json({ logs });
   } catch (err) {
     handleCloudronError(err, res);
   }

@@ -230,12 +230,14 @@ async function fetchAppStore(): Promise<AppStoreResult> {
 
 interface ActivityLog {
   id: number;
-  userId: number | null;
   action: string;
   entityType: string;
   entityId: string | null;
-  details: Record<string, unknown> | null;
-  ipAddress: string | null;
+  status: "success" | "failed" | "info";
+  message: string;
+  userId: number | null;
+  userName: string | null;
+  userEmail: string | null;
   createdAt: string;
 }
 
@@ -250,6 +252,7 @@ function actionLabel(action: string): string {
     cloudron_stop: "Stop",
     cloudron_start: "Start",
     cloudron_uninstall: "Uninstall",
+    cloudron_update: "Update",
     cloudron_create_mailbox: "Create Mailbox",
     cloudron_edit_mailbox: "Edit Mailbox",
     cloudron_delete_mailbox: "Delete Mailbox",
@@ -258,66 +261,104 @@ function actionLabel(action: string): string {
   return map[action] ?? action;
 }
 
-function AdminActivityTab({ instanceId }: { instanceId: number }) {
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function AdminActivityTab({ instances }: { instances: CloudronInstance[] }) {
   const { t } = useI18n();
+  const [selectedId, setSelectedId] = useState<number>(instances[0]?.id ?? 0);
+
   const { data, isLoading } = useQuery({
-    queryKey: ["cloudron-activity", instanceId],
-    queryFn: () => fetchInstanceActivity(instanceId),
+    queryKey: ["cloudron-activity", selectedId],
+    queryFn: () => fetchInstanceActivity(selectedId),
     staleTime: 30_000,
+    enabled: selectedId > 0,
   });
 
   const logs = data?.logs ?? [];
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span className="text-sm">{t("admin.cloudron.activity.loading")}</span>
-      </div>
-    );
-  }
-
-  if (logs.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
-        <Clock className="h-10 w-10 opacity-30" />
-        <p className="text-sm">{t("admin.cloudron.activity.empty")}</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="rounded-xl border border-border overflow-hidden">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/40">
-            <TableHead>{t("admin.cloudron.activity.col.action")}</TableHead>
-            <TableHead>{t("admin.cloudron.activity.col.entity")}</TableHead>
-            <TableHead>{t("admin.cloudron.activity.col.user")}</TableHead>
-            <TableHead>{t("admin.cloudron.activity.col.date")}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {logs.map((log) => (
-            <TableRow key={log.id}>
-              <TableCell>
-                <Badge variant="outline" className="font-mono text-xs">
-                  {actionLabel(log.action)}
-                </Badge>
-              </TableCell>
-              <TableCell className="font-mono text-xs text-muted-foreground">
-                {log.entityId ?? log.entityType}
-              </TableCell>
-              <TableCell className="text-xs text-muted-foreground">
-                {log.userId ?? "—"}
-              </TableCell>
-              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                {new Date(log.createdAt).toLocaleString()}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+    <div className="space-y-4">
+      {instances.length > 1 && (
+        <div className="flex items-center gap-3 px-1">
+          <span className="text-sm text-muted-foreground">{t("admin.cloudron.activity.selectInstance")}:</span>
+          <select
+            className="text-sm border border-border rounded-md px-3 py-1.5 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+            value={selectedId}
+            onChange={(e) => setSelectedId(Number(e.target.value))}
+          >
+            {instances.map((inst) => (
+              <option key={inst.id} value={inst.id}>{inst.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span className="text-sm">{t("admin.cloudron.activity.loading")}</span>
+        </div>
+      ) : logs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
+          <Clock className="h-10 w-10 opacity-30" />
+          <p className="text-sm">{t("admin.cloudron.activity.empty")}</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead className="w-16">{t("admin.cloudron.activity.col.status")}</TableHead>
+                <TableHead>{t("admin.cloudron.activity.col.action")}</TableHead>
+                <TableHead>{t("admin.cloudron.activity.col.message")}</TableHead>
+                <TableHead>{t("admin.cloudron.activity.col.user")}</TableHead>
+                <TableHead className="whitespace-nowrap">{t("admin.cloudron.activity.col.date")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {logs.map((log) => (
+                <TableRow key={log.id}>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={
+                        log.status === "failed"
+                          ? "border-red-200 bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400 text-xs"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 text-xs"
+                      }
+                    >
+                      {log.status === "failed" ? "✗" : "✓"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="font-mono text-xs">
+                      {actionLabel(log.action)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground max-w-[240px] truncate">
+                    {log.message}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {log.userName ?? (log.userId != null ? `#${log.userId}` : "—")}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap" title={new Date(log.createdAt).toLocaleString()}>
+                    {relativeTime(log.createdAt)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }
@@ -1485,7 +1526,7 @@ export function AdminCloudronPage() {
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                <AdminActivityTab instanceId={instances[0].id} />
+                <AdminActivityTab instances={instances} />
               </CardContent>
             </Card>
           </TabsContent>
