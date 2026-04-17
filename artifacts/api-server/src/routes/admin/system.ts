@@ -7,6 +7,7 @@ import { execSync } from "child_process";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { cloudronService } from "../../services/CloudronService";
+import { cloudronHealthMonitor } from "../../services/CloudronHealthMonitor";
 
 const router = Router();
 
@@ -229,6 +230,16 @@ router.get("/cloudron-status", requireAdmin, async (_req, res) => {
       error: err?.message ?? "Unexpected error while testing Cloudron connectivity",
     });
   }
+});
+
+/**
+ * GET /api/admin/system/cloudron-health
+ * Returns the last known Cloudron connectivity status from the background monitor.
+ * Requires admin (not super_admin only — any admin can view).
+ */
+router.get("/cloudron-health", requireAdmin, (_req, res) => {
+  const status = cloudronHealthMonitor.getStatus();
+  res.json(status);
 });
 
 export default router;

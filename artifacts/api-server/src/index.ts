@@ -123,6 +123,9 @@ await ensureDefaultSeedData();
 
 const { default: app } = await import("./app.js");
 
+const { cloudronHealthMonitor } = await import("./services/CloudronHealthMonitor.js");
+cloudronHealthMonitor.start();
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users, Receipt, Server, Clock } from "lucide-react";
 import { motion } from "framer-motion";
+import { CloudronStatusBanner } from "@/components/admin/CloudronStatusBanner";
 
 interface AdminStats {
   totalUsers: number;
@@ -61,6 +62,7 @@ export function AdminDashboard() {
 
   return (
     <div className="space-y-8">
+      <CloudronStatusBanner />
       <div>
         <h1 className="text-3xl font-bold tracking-tight">{t("admin.page.dashboard")}</h1>
         <p className="text-muted-foreground mt-1">{t("admin.page.dashboardDesc")}</p>
