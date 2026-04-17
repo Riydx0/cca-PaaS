@@ -16,13 +16,18 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 import {
   User, Mail, Shield, Clock, FileText, CheckCircle2, Ban,
   Copy, Check, KeyRound, ShoppingCart, AlertCircle, CreditCard,
   Activity, History, X, ChevronRight, Lock, Unlock, UserCog,
-  Globe, RefreshCw, Package,
+  Globe, RefreshCw, Package, Cloud, CloudOff, Loader2, Trash2, Plus,
 } from "lucide-react";
 
 interface AuditEvent {
@@ -149,6 +154,28 @@ function AuditEventRow({ event }: { event: AuditEvent }) {
   );
 }
 
+interface CloudronAccessData {
+  id: number;
+  instanceId: number;
+  instanceName: string;
+  instanceBaseUrl: string;
+  permissions: string[];
+  linkedAt: string;
+}
+
+interface CloudronInstanceItem {
+  id: number;
+  name: string;
+  baseUrl: string;
+  isActive: boolean;
+}
+
+const ALL_CLOUDRON_PERMS = [
+  "view_cloudron", "view_apps", "install_apps", "restart_apps",
+  "uninstall_apps", "stop_apps", "start_apps", "view_app_store",
+  "view_mail", "create_mailboxes", "edit_mailboxes", "delete_mailboxes",
+] as const;
+
 interface UserDetailDrawerProps {
   userId: string;
   onClose: () => void;
@@ -162,6 +189,10 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState("overview");
+
+  const [cloudronEditMode, setCloudronEditMode] = useState(false);
+  const [selectedInstanceId, setSelectedInstanceId] = useState("");
+  const [selectedPerms, setSelectedPerms] = useState<string[]>([]);
 
   const statusLabels: Record<string, string> = {
     active: t("admin.user.status.active"),
@@ -184,7 +215,67 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
     setTab("overview");
     setGeneratedLink(null);
     setNotes(null);
+    setCloudronEditMode(false);
+    setSelectedInstanceId("");
+    setSelectedPerms([]);
   }, [userId]);
+
+  const accessQuery = useQuery<{ access: CloudronAccessData | null }>({
+    queryKey: ["admin", "user", userId, "cloudron-access"],
+    queryFn: () => adminFetch(`/api/admin/users/${userId}/cloudron-access`),
+    enabled: !!userId && tab === "cloudron",
+  });
+
+  const instancesQuery = useQuery<{ instances: CloudronInstanceItem[] }>({
+    queryKey: ["cloudron-instances"],
+    queryFn: () => adminFetch("/api/cloudron/instances"),
+    enabled: tab === "cloudron",
+  });
+
+  useEffect(() => {
+    const access = accessQuery.data?.access;
+    if (access) {
+      setSelectedInstanceId(String(access.instanceId));
+      setSelectedPerms(access.permissions);
+    } else if (accessQuery.data && !access) {
+      setSelectedInstanceId("");
+      setSelectedPerms([]);
+    }
+  }, [accessQuery.data]);
+
+  const saveAccessMutation = useMutation({
+    mutationFn: () => {
+      const hasExisting = !!accessQuery.data?.access;
+      return adminFetch(`/api/admin/users/${userId}/cloudron-access`, {
+        method: hasExisting ? "PATCH" : "POST",
+        body: JSON.stringify({ instanceId: parseInt(selectedInstanceId, 10), permissions: selectedPerms }),
+      });
+    },
+    onSuccess: () => {
+      toast.success(t("admin.user.cloudron.toast.saved"));
+      qc.invalidateQueries({ queryKey: ["admin", "user", userId, "cloudron-access"] });
+      setCloudronEditMode(false);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const removeAccessMutation = useMutation({
+    mutationFn: () => adminFetch(`/api/admin/users/${userId}/cloudron-access`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast.success(t("admin.user.cloudron.toast.removed"));
+      qc.invalidateQueries({ queryKey: ["admin", "user", userId, "cloudron-access"] });
+      setCloudronEditMode(false);
+      setSelectedInstanceId("");
+      setSelectedPerms([]);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  function togglePerm(perm: string) {
+    setSelectedPerms((prev) =>
+      prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]
+    );
+  }
 
   const displayNotes = notes !== null ? notes : (user?.adminNotes ?? "");
 
@@ -384,6 +475,7 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
                       { value: "activity", label: t("admin.user.tab.activity"), icon: Activity },
                       { value: "notes", label: t("admin.user.tab.notes"), icon: FileText },
                       { value: "history", label: t("admin.user.tab.history"), icon: History },
+                      { value: "cloudron", label: t("admin.user.tab.cloudron"), icon: Cloud },
                     ].map(({ value, label, icon: Icon }) => (
                       <TabsTrigger
                         key={value}
@@ -566,6 +658,185 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
                             {t("admin.user.viewFullHistory")}
                             <ChevronRight className="h-3.5 w-3.5" />
                           </Button>
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    {/* ── CLOUDRON ACCESS ── */}
+                    <TabsContent value="cloudron" className="mt-0 space-y-4">
+                      <div>
+                        <p className="text-sm font-semibold">{t("admin.user.cloudron.title")}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{t("admin.user.cloudron.subtitle")}</p>
+                      </div>
+
+                      {accessQuery.isLoading ? (
+                        <div className="flex items-center gap-2 py-6 text-muted-foreground justify-center">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span className="text-sm">Loading…</span>
+                        </div>
+                      ) : !accessQuery.data?.access && !cloudronEditMode ? (
+                        <div className="rounded-xl border border-dashed border-border py-10 flex flex-col items-center gap-3 text-muted-foreground">
+                          <CloudOff className="h-9 w-9 opacity-30" />
+                          <div className="text-center">
+                            <p className="text-sm font-medium">{t("admin.user.cloudron.noAccess")}</p>
+                            <p className="text-xs mt-0.5 max-w-xs">{t("admin.user.cloudron.noAccessDesc")}</p>
+                          </div>
+                          {isSuperAdmin && (
+                            <Button size="sm" className="gap-1.5 mt-1" onClick={() => setCloudronEditMode(true)}>
+                              <Plus className="h-3.5 w-3.5" />
+                              {t("admin.user.cloudron.addBtn")}
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {accessQuery.data?.access && !cloudronEditMode && (
+                            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20 dark:border-emerald-800 p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-9 h-9 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
+                                    <Cloud className="h-4 w-4 text-emerald-600" />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-semibold">{accessQuery.data.access.instanceName}</p>
+                                    <p className="text-xs text-muted-foreground">{accessQuery.data.access.instanceBaseUrl}</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {t("admin.user.cloudron.linkedSince")} {fmt(accessQuery.data.access.linkedAt)}
+                                    </p>
+                                  </div>
+                                </div>
+                                {isSuperAdmin && (
+                                  <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={() => setCloudronEditMode(true)}>
+                                    <RefreshCw className="h-3.5 w-3.5" />
+                                    Edit
+                                  </Button>
+                                )}
+                              </div>
+                              <div className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-800">
+                                <p className="text-xs font-semibold text-muted-foreground mb-2">{t("admin.user.cloudron.permissions")}</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {accessQuery.data.access.permissions.length === 0 ? (
+                                    <span className="text-xs text-muted-foreground">No permissions granted</span>
+                                  ) : accessQuery.data.access.permissions.map((perm) => (
+                                    <Badge key={perm} variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400">
+                                      {t(`admin.user.cloudron.perm.${perm}` as any)}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {(cloudronEditMode || !accessQuery.data?.access) && isSuperAdmin && (
+                            <div className="space-y-4 rounded-xl border border-border/60 p-4">
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                  {t("admin.user.cloudron.instance")}
+                                </label>
+                                {instancesQuery.isLoading ? (
+                                  <Skeleton className="h-9 w-full rounded-lg" />
+                                ) : (instancesQuery.data?.instances ?? []).length === 0 ? (
+                                  <p className="text-xs text-muted-foreground">{t("admin.user.cloudron.noInstances")}</p>
+                                ) : (
+                                  <Select value={selectedInstanceId} onValueChange={setSelectedInstanceId}>
+                                    <SelectTrigger className="h-9 text-sm">
+                                      <SelectValue placeholder={t("admin.user.cloudron.selectInstance")} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {(instancesQuery.data?.instances ?? []).map((inst) => (
+                                        <SelectItem key={inst.id} value={String(inst.id)}>
+                                          <span className="flex items-center gap-2">
+                                            {inst.name}
+                                            {inst.isActive && <Badge variant="outline" className="text-[10px] px-1 py-0 bg-emerald-50 text-emerald-700 border-emerald-200">Active</Badge>}
+                                          </span>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                )}
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                    {t("admin.user.cloudron.permissions")}
+                                  </label>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      type="button" variant="ghost" size="sm"
+                                      className="h-6 text-xs px-2 text-emerald-600 hover:text-emerald-700"
+                                      onClick={() => setSelectedPerms([...ALL_CLOUDRON_PERMS])}
+                                    >
+                                      {t("admin.user.cloudron.grantAll")}
+                                    </Button>
+                                    <Button
+                                      type="button" variant="ghost" size="sm"
+                                      className="h-6 text-xs px-2 text-destructive hover:text-destructive"
+                                      onClick={() => setSelectedPerms([])}
+                                    >
+                                      {t("admin.user.cloudron.revokeAll")}
+                                    </Button>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {ALL_CLOUDRON_PERMS.map((perm) => (
+                                    <label key={perm} className="flex items-center gap-2 rounded-lg border border-border/60 px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors">
+                                      <Checkbox
+                                        checked={selectedPerms.includes(perm)}
+                                        onCheckedChange={() => togglePerm(perm)}
+                                        className="shrink-0"
+                                      />
+                                      <span className="text-xs font-medium leading-tight">
+                                        {t(`admin.user.cloudron.perm.${perm}` as any)}
+                                      </span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <Button
+                                  className="flex-1 gap-1.5"
+                                  disabled={!selectedInstanceId || saveAccessMutation.isPending}
+                                  onClick={() => saveAccessMutation.mutate()}
+                                >
+                                  {saveAccessMutation.isPending
+                                    ? <><Loader2 className="h-4 w-4 animate-spin" />{t("admin.user.cloudron.saving")}</>
+                                    : <><Check className="h-4 w-4" />{t("admin.user.cloudron.save")}</>
+                                  }
+                                </Button>
+                                <Button variant="outline" onClick={() => { setCloudronEditMode(false); }}>
+                                  {t("btn.cancel")}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+
+                          {accessQuery.data?.access && !cloudronEditMode && isSuperAdmin && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="outline" className="w-full gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/5 border-destructive/30">
+                                  <Trash2 className="h-4 w-4" />
+                                  {t("admin.user.cloudron.removeAccess")}
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>{t("admin.user.cloudron.removeConfirmTitle")}</AlertDialogTitle>
+                                  <AlertDialogDescription>{t("admin.user.cloudron.removeConfirmDesc")}</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>{t("btn.cancel")}</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive hover:bg-destructive/90"
+                                    onClick={() => removeAccessMutation.mutate()}
+                                  >
+                                    {t("admin.user.cloudron.removeBtn")}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
                         </div>
                       )}
                     </TabsContent>

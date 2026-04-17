@@ -11,11 +11,13 @@ import subscriptionsRouter from "./subscriptions";
 import providersRouter from "./providers";
 import seedRouter from "./seed";
 import serviceInstancesRouter from "./service-instances";
+import cloudronAccessRouter from "./cloudron-access";
 
 const router = Router();
 
 router.use("/dashboard", dashboardRouter);
 router.use("/users", usersRouter);
+router.use("/users/:userId/cloudron-access", cloudronAccessRouter);
 router.use("/orders", ordersRouter);
 router.use("/services", servicesRouter);
 router.use("/system", systemRouter);

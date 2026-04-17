@@ -12,3 +12,4 @@ export * from "./passwordResetTokens";
 export * from "./subscriptionPlans";
 export * from "./userSubscriptions";
 export * from "./cloudronInstances";
+export * from "./cloudronClientAccess";
