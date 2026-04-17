@@ -38,6 +38,7 @@ import {
   Clock,
   AppWindow,
   Trash2,
+  RotateCcw,
   Server,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -86,6 +87,11 @@ interface InstallResult {
   error?: string;
 }
 
+interface AppActionResult {
+  taskId?: string;
+  error?: string;
+}
+
 type CloudronTaskState = "pending" | "active" | "success" | "error" | "cancelled";
 
 interface CloudronTask {
@@ -97,6 +103,11 @@ interface CloudronTask {
   errorMessage?: string;
   createdAt?: string;
   _installRecord?: { appStoreId?: string; location?: string } | null;
+}
+
+interface ActiveTask {
+  taskId: string;
+  label: string;
 }
 
 async function fetchInstances(): Promise<CloudronInstancesResult> {
@@ -136,6 +147,20 @@ async function deleteInstance(id: number): Promise<{ success: boolean }> {
   return adminFetch(`/api/cloudron/instances/${id}`, { method: "DELETE" });
 }
 
+async function postUninstall(appId: string): Promise<AppActionResult> {
+  return adminFetch<AppActionResult>(`/api/cloudron/apps/${encodeURIComponent(appId)}/uninstall`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+async function postRestart(appId: string): Promise<AppActionResult> {
+  return adminFetch<AppActionResult>(`/api/cloudron/apps/${encodeURIComponent(appId)}/restart`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 function RunStateBadge({ state }: { state?: string }) {
   const s = state ?? "unknown";
   const map: Record<string, string> = {
@@ -166,7 +191,7 @@ function InstallStateBadge({ state }: { state?: string }) {
 
 const MAX_POLL_ERRORS = 3;
 
-function TaskProgressStrip({ taskId, onDone }: { taskId: string; onDone: () => void }) {
+function TaskProgressStrip({ taskId, label, onDone }: { taskId: string; label: string; onDone: () => void }) {
   const { t } = useI18n();
   const [task, setTask] = useState<CloudronTask | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -242,7 +267,7 @@ function InstallModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onTaskStarted: (taskId: string) => void;
+  onTaskStarted: (task: ActiveTask) => void;
 }) {
   const { t } = useI18n();
   const [appStoreId, setAppStoreId] = useState("");
@@ -257,7 +282,7 @@ function InstallModal({
       }
       if (data.taskId) {
         toast.success(t("admin.cloudron.install.queued"));
-        onTaskStarted(data.taskId);
+        onTaskStarted({ taskId: data.taskId, label: t("admin.cloudron.task.inProgress") });
         onClose();
       } else if (data.error) {
         toast.error(data.error);
@@ -365,13 +390,112 @@ function AddInstanceModal({
   );
 }
 
+type ConfirmActionType = "uninstall" | "restart";
+
+interface ConfirmAction {
+  type: ConfirmActionType;
+  app: CloudronApp;
+}
+
+function ConfirmActionDialog({
+  action,
+  onClose,
+  onTaskStarted,
+}: {
+  action: ConfirmAction | null;
+  onClose: () => void;
+  onTaskStarted: (task: ActiveTask) => void;
+}) {
+  const { t } = useI18n();
+
+  const uninstallMutation = useMutation({
+    mutationFn: (appId: string) => postUninstall(appId),
+    onSuccess: (data) => {
+      if (data.taskId) {
+        toast.success(t("admin.cloudron.uninstall.queued"));
+        onTaskStarted({ taskId: data.taskId, label: t("admin.cloudron.uninstall.task.inProgress") });
+        onClose();
+      } else if (data.error) {
+        toast.error(data.error);
+      }
+    },
+    onError: () => toast.error(t("admin.cloudron.uninstall.error")),
+  });
+
+  const restartMutation = useMutation({
+    mutationFn: (appId: string) => postRestart(appId),
+    onSuccess: (data) => {
+      if (data.taskId) {
+        toast.success(t("admin.cloudron.restart.queued"));
+        onTaskStarted({ taskId: data.taskId, label: t("admin.cloudron.restart.task.inProgress") });
+        onClose();
+      } else if (data.error) {
+        toast.error(data.error);
+      }
+    },
+    onError: () => toast.error(t("admin.cloudron.restart.error")),
+  });
+
+  if (!action) return null;
+
+  const appName = action.app.manifest?.title ?? action.app.appStoreId ?? action.app.id;
+  const isPending = uninstallMutation.isPending || restartMutation.isPending;
+  const isUninstall = action.type === "uninstall";
+
+  const title = isUninstall
+    ? t("admin.cloudron.uninstall.confirm.title")
+    : t("admin.cloudron.restart.confirm.title");
+  const body = isUninstall
+    ? t("admin.cloudron.uninstall.confirm.body").replace("{name}", appName)
+    : t("admin.cloudron.restart.confirm.body").replace("{name}", appName);
+  const submitLabel = isUninstall
+    ? t("admin.cloudron.uninstall.confirm.submit")
+    : t("admin.cloudron.restart.confirm.submit");
+
+  function handleConfirm() {
+    if (isUninstall) {
+      uninstallMutation.mutate(action!.app.id);
+    } else {
+      restartMutation.mutate(action!.app.id);
+    }
+  }
+
+  return (
+    <Dialog open={!!action} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{body}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="pt-2">
+          <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
+            {t("btn.cancel")}
+          </Button>
+          <Button
+            type="button"
+            variant={isUninstall ? "destructive" : "default"}
+            onClick={handleConfirm}
+            disabled={isPending}
+          >
+            {isPending && <Loader2 className="h-4 w-4 animate-spin me-2" />}
+            {!isPending && isUninstall && <Trash2 className="h-4 w-4 me-2" />}
+            {!isPending && !isUninstall && <RotateCcw className="h-4 w-4 me-2" />}
+            {submitLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function AdminCloudronPage() {
   const { t } = useI18n();
   const qc = useQueryClient();
   const [installOpen, setInstallOpen] = useState(false);
   const [addInstanceOpen, setAddInstanceOpen] = useState(false);
-  const [activeTasks, setActiveTasks] = useState<string[]>([]);
+  const [activeTasks, setActiveTasks] = useState<ActiveTask[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<CloudronInstance | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   const { data: instancesData, isLoading: instancesLoading } = useQuery<CloudronInstancesResult>({
     queryKey: ["cloudron-instances"],
@@ -405,9 +529,9 @@ export function AdminCloudronPage() {
     onError: () => toast.error(t("admin.cloudron.install.error")),
   });
 
-  const handleTaskStarted = (taskId: string) => setActiveTasks((prev) => [...prev, taskId]);
+  const handleTaskStarted = (task: ActiveTask) => setActiveTasks((prev) => [...prev, task]);
   const handleTaskDone = (taskId: string) => {
-    setActiveTasks((prev) => prev.filter((id) => id !== taskId));
+    setActiveTasks((prev) => prev.filter((t) => t.taskId !== taskId));
     void qc.invalidateQueries({ queryKey: ["cloudron-apps"] });
     void refetch();
   };
@@ -530,16 +654,20 @@ export function AdminCloudronPage() {
       {/* Active task progress strips */}
       {activeTasks.length > 0 && (
         <div className="space-y-3">
-          {activeTasks.map((taskId) => (
-            <Card key={taskId} className="border-blue-200 bg-blue-50/60 dark:bg-blue-500/5">
+          {activeTasks.map((activeTask) => (
+            <Card key={activeTask.taskId} className="border-blue-200 bg-blue-50/60 dark:bg-blue-500/5">
               <CardHeader className="py-3 px-4">
                 <CardTitle className="text-sm font-semibold text-blue-800 dark:text-blue-300 flex items-center gap-2">
                   <Clock className="h-4 w-4" />
-                  {t("admin.cloudron.task.inProgress")} — {taskId}
+                  {activeTask.label} — {activeTask.taskId}
                 </CardTitle>
               </CardHeader>
               <CardContent className="pb-4 px-4">
-                <TaskProgressStrip taskId={taskId} onDone={() => handleTaskDone(taskId)} />
+                <TaskProgressStrip
+                  taskId={activeTask.taskId}
+                  label={activeTask.label}
+                  onDone={() => handleTaskDone(activeTask.taskId)}
+                />
               </CardContent>
             </Card>
           ))}
@@ -576,11 +704,14 @@ export function AdminCloudronPage() {
                     <TableHead>{t("admin.cloudron.col.fqdn")}</TableHead>
                     <TableHead>{t("admin.cloudron.col.runState")}</TableHead>
                     <TableHead>{t("admin.cloudron.col.installState")}</TableHead>
+                    <TableHead className="text-end">{t("admin.cloudron.col.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {apps.map((app) => {
                     const title = app.manifest?.title ?? app.appStoreId ?? app.id;
+                    const isBusy = app.installationState === "installing" ||
+                      app.installationState?.startsWith("pending_");
                     return (
                       <TableRow key={app.id}>
                         <TableCell>
@@ -612,6 +743,30 @@ export function AdminCloudronPage() {
                         </TableCell>
                         <TableCell><RunStateBadge state={app.runState} /></TableCell>
                         <TableCell><InstallStateBadge state={app.installationState} /></TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              disabled={isBusy}
+                              onClick={() => setConfirmAction({ type: "restart", app })}
+                            >
+                              <RotateCcw className="h-3.5 w-3.5 me-1" />
+                              {t("admin.cloudron.restart.btn")}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                              disabled={isBusy}
+                              onClick={() => setConfirmAction({ type: "uninstall", app })}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 me-1" />
+                              {t("admin.cloudron.uninstall.btn")}
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -622,6 +777,12 @@ export function AdminCloudronPage() {
         </Card>
       )}
 
+      <InstallModal
+        open={installOpen}
+        onClose={() => setInstallOpen(false)}
+        onTaskStarted={handleTaskStarted}
+      />
+
       <AddInstanceModal
         open={addInstanceOpen}
         onClose={() => setAddInstanceOpen(false)}
@@ -629,12 +790,6 @@ export function AdminCloudronPage() {
           void qc.invalidateQueries({ queryKey: ["cloudron-instances"] });
           void qc.invalidateQueries({ queryKey: ["cloudron-apps"] });
         }}
-      />
-
-      <InstallModal
-        open={installOpen}
-        onClose={() => setInstallOpen(false)}
-        onTaskStarted={handleTaskStarted}
       />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
@@ -657,6 +812,12 @@ export function AdminCloudronPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ConfirmActionDialog
+        action={confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onTaskStarted={handleTaskStarted}
+      />
     </div>
   );
 }

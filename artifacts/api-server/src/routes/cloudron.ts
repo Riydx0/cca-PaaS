@@ -205,6 +205,38 @@ router.post("/apps/install", requireAdmin, async (req: Request, res: Response) =
 });
 
 /**
+ * POST /api/cloudron/apps/:id/uninstall
+ * Uninstalls an installed Cloudron app by app ID on the primary active instance.
+ * Returns: { taskId } immediately — does NOT wait for completion.
+ */
+router.post("/apps/:id/uninstall", requireAdmin, async (req: Request, res: Response) => {
+  const appId = String(req.params.id);
+
+  try {
+    const result = await cloudronService.requestUninstall(appId);
+    res.status(202).json(result);
+  } catch (err) {
+    handleCloudronError(err, res);
+  }
+});
+
+/**
+ * POST /api/cloudron/apps/:id/restart
+ * Restarts an installed Cloudron app by app ID on the primary active instance.
+ * Returns: { taskId } immediately — does NOT wait for completion.
+ */
+router.post("/apps/:id/restart", requireAdmin, async (req: Request, res: Response) => {
+  const appId = String(req.params.id);
+
+  try {
+    const result = await cloudronService.requestRestart(appId);
+    res.status(202).json(result);
+  } catch (err) {
+    handleCloudronError(err, res);
+  }
+});
+
+/**
  * GET /api/cloudron/tasks
  * Lists all recent Cloudron background tasks.
  * Returns: { configured, instanceName?, tasks[] }

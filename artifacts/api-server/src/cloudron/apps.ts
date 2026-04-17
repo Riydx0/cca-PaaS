@@ -52,6 +52,10 @@ export interface InstallAppResponse {
   taskId: string;
 }
 
+export interface AppTaskResponse {
+  taskId: string;
+}
+
 /** List all installed apps on the Cloudron. */
 export async function listApps(client: CloudronClient): Promise<CloudronApp[]> {
   const response = await client.get<CloudronAppsResponse>("/apps");
@@ -72,4 +76,26 @@ export async function installApp(
     portBindings: params.portBindings ?? {},
     accessRestriction: params.accessRestriction ?? null,
   });
+}
+
+/**
+ * Uninstall an installed Cloudron app by ID.
+ * Returns immediately with the taskId — does NOT wait for completion.
+ */
+export async function uninstallApp(
+  client: CloudronClient,
+  appId: string
+): Promise<AppTaskResponse> {
+  return client.post<AppTaskResponse>(`/apps/${encodeURIComponent(appId)}/uninstall`, {});
+}
+
+/**
+ * Restart an installed Cloudron app by ID.
+ * Returns immediately with the taskId — does NOT wait for completion.
+ */
+export async function restartApp(
+  client: CloudronClient,
+  appId: string
+): Promise<AppTaskResponse> {
+  return client.post<AppTaskResponse>(`/apps/${encodeURIComponent(appId)}/restart`, {});
 }
