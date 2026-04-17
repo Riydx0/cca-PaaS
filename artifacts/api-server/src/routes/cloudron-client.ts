@@ -17,7 +17,7 @@ import {
   subscriptionPlansTable,
   subscriptionPlanFeaturesTable,
 } from "@workspace/db/schema";
-import { eq, and, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, desc, inArray, sql, asc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireRole";
 import { createCloudronClient, CloudronError } from "../cloudron/client";
 import {
@@ -105,6 +105,7 @@ async function getActiveSubscription(userId: number): Promise<ActivePlanInfo | n
         sql`${userSubscriptionsTable.status} IN ('active', 'trial')`
       )
     )
+    .orderBy(desc(userSubscriptionsTable.startedAt), desc(userSubscriptionsTable.id))
     .limit(1);
   return row ?? null;
 }

@@ -136,6 +136,11 @@ router.patch("/:id", requireSuperAdmin, async (req: any, res) => {
     const subId = Number(req.params.id);
     const { planId, status, billingCycle, startedAt, expiresAt, autoRenew, notes } = req.body ?? {};
 
+    if (planId !== undefined) {
+      const [plan] = await db.select({ id: subscriptionPlansTable.id }).from(subscriptionPlansTable).where(eq(subscriptionPlansTable.id, Number(planId)));
+      if (!plan) { res.status(404).json({ error: "Plan not found" }); return; }
+    }
+
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (planId !== undefined) updateData.planId = Number(planId);
     if (status !== undefined) updateData.status = status;
