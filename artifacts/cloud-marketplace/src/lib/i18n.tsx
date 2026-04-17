@@ -377,6 +377,21 @@ const translations = {
     "admin.plans.sortOrder": "Sort Order",
     "admin.plans.prioritySupport": "Priority Support",
 
+    // ---- Plan Cloudron features editor ----
+    "admin.plans.cloudronFeatures.title": "Cloudron Features",
+    "admin.plans.cloudronFeatures.edit": "Edit Features",
+    "admin.plans.cloudronFeatures.close": "Close",
+    "admin.plans.cloudronFeatures.saved": "Plan features saved.",
+    "admin.plans.cloudronFeatures.save": "Save Features",
+    "admin.plans.cloudronFeatures.permSection": "Permission Features",
+    "admin.plans.cloudronFeatures.limitSection": "Numeric Limits",
+    "admin.plans.cloudronFeatures.maxApps": "Max Apps",
+    "admin.plans.cloudronFeatures.maxMailboxes": "Max Mailboxes",
+    "admin.plans.cloudronFeatures.maxInstances": "Max Cloudron Instances",
+    "admin.plans.cloudronFeatures.limitPlaceholder": "Unlimited",
+    "admin.plans.cloudronFeatures.loading": "Loading features…",
+    "admin.plans.cloudronFeatures.error": "Failed to load features.",
+
     // ---- Pagination ----
     "admin.pagination.page": "Page {p} of {total}",
 

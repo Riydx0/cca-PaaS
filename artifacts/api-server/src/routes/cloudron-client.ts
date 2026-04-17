@@ -650,4 +650,42 @@ router.get("/tasks/:id", requireAuth, async (req: Request, res: Response) => {
   });
 });
 
+// ─── My Subscription ───────────────────────────────────────────────────────────
+
+/**
+ * GET /api/cloudron-client/my-subscription
+ * Returns the authenticated user's active/trial subscription with plan features.
+ * Required permission: view_cloudron
+ */
+router.get("/my-subscription", requireAuth, async (req: Request, res: Response) => {
+  await withPermission(req, res, "view_cloudron", async (_access, userId) => {
+    const activeSub = await getActiveSubscription(userId);
+
+    if (!activeSub) {
+      res.json({ subscription: null });
+      return;
+    }
+
+    const features = await db
+      .select({
+        featureKey: subscriptionPlanFeaturesTable.featureKey,
+        enabled: subscriptionPlanFeaturesTable.enabled,
+        limitValue: subscriptionPlanFeaturesTable.limitValue,
+      })
+      .from(subscriptionPlanFeaturesTable)
+      .where(eq(subscriptionPlanFeaturesTable.planId, activeSub.planId))
+      .orderBy(asc(subscriptionPlanFeaturesTable.featureKey));
+
+    res.json({
+      subscription: {
+        id: activeSub.subscriptionId,
+        planId: activeSub.planId,
+        planName: activeSub.planName,
+        status: activeSub.status,
+        features,
+      },
+    });
+  });
+});
+
 export default router;
