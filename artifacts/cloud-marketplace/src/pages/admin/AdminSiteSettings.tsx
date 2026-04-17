@@ -5,8 +5,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Cloud, Palette, Upload, X, Loader2, Save, RefreshCw, FileImage } from "lucide-react";
+import { Cloud, Palette, Upload, X, Loader2, Save, RefreshCw, FileImage, Server, CheckCircle2, XCircle, WifiOff } from "lucide-react";
 
 interface SettingsData {
   siteName: string;
@@ -14,6 +16,21 @@ interface SettingsData {
   faviconUrl: string;
   metaTitle: string;
 }
+
+const TOKEN_MASK = "••••••••";
+
+interface CloudronInstanceData {
+  id: number;
+  name: string;
+  baseUrl: string;
+  isActive: boolean;
+}
+
+type TestResult =
+  | { status: "success"; instanceName?: string }
+  | { status: "error"; error: string }
+  | { status: "not_configured" }
+  | null;
 
 async function apiFetch(path: string, init?: RequestInit) {
   const res = await fetch(path, { ...init, credentials: "include" });
@@ -42,16 +59,40 @@ export function AdminSiteSettings() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const [cloudronInstance, setCloudronInstance] = useState<CloudronInstanceData | null>(null);
+  const [cloudronName, setCloudronName] = useState("");
+  const [cloudronBaseUrl, setCloudronBaseUrl] = useState("");
+  const [cloudronApiToken, setCloudronApiToken] = useState("");
+  const [cloudronEnabled, setCloudronEnabled] = useState(true);
+  const [cloudronSaving, setCloudronSaving] = useState(false);
+  const [testResult, setTestResult] = useState<TestResult>(null);
+  const [testing, setTesting] = useState(false);
+
   useEffect(() => {
-    apiFetch("/api/admin/settings")
-      .then((data: SettingsData) => {
+    const loadAll = async () => {
+      try {
+        const data: SettingsData = await apiFetch("/api/admin/settings");
         setSiteName(data.siteName || "");
         setMetaTitle(data.metaTitle || "");
         setCurrentLogoUrl(data.siteLogoUrl || null);
         setCurrentFaviconUrl(data.faviconUrl || null);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      } catch {}
+
+      try {
+        const { instances } = await apiFetch("/api/cloudron/instances");
+        const primary: CloudronInstanceData | undefined = instances?.[0];
+        if (primary) {
+          setCloudronInstance(primary);
+          setCloudronName(primary.name || "");
+          setCloudronBaseUrl(primary.baseUrl || "");
+          setCloudronApiToken(TOKEN_MASK);
+          setCloudronEnabled(primary.isActive);
+        }
+      } catch {}
+
+      setLoading(false);
+    };
+    loadAll();
   }, []);
 
   const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -159,6 +200,83 @@ export function AdminSiteSettings() {
       toast({ title: "Error", description: err?.message ?? "Failed to save settings.", variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCloudronSave = async () => {
+    const trimmedBaseUrl = cloudronBaseUrl.trim();
+    const trimmedName = cloudronName.trim();
+    if (!trimmedBaseUrl || !trimmedName) {
+      toast({ title: "Required fields missing", description: "Please provide both a name and a Base URL.", variant: "destructive" });
+      return;
+    }
+    const tokenChanged = cloudronApiToken !== TOKEN_MASK;
+    if (!cloudronInstance && !tokenChanged) {
+      toast({ title: "API Token required", description: "Please enter an API Token.", variant: "destructive" });
+      return;
+    }
+
+    setCloudronSaving(true);
+    setTestResult(null);
+    try {
+      const body: Record<string, unknown> = {
+        name: trimmedName,
+        baseUrl: trimmedBaseUrl,
+        isActive: cloudronEnabled,
+      };
+      if (tokenChanged) {
+        body.apiToken = cloudronApiToken.trim();
+      }
+
+      let result;
+      if (cloudronInstance) {
+        result = await apiFetch(`/api/cloudron/instances/${cloudronInstance.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        if (!body.apiToken) {
+          toast({ title: "API Token required", description: "Please enter an API Token.", variant: "destructive" });
+          return;
+        }
+        result = await apiFetch("/api/cloudron/instances", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      }
+
+      const saved: CloudronInstanceData = result.instance;
+      setCloudronInstance(saved);
+      setCloudronName(saved.name);
+      setCloudronBaseUrl(saved.baseUrl);
+      setCloudronApiToken(TOKEN_MASK);
+      setCloudronEnabled(saved.isActive);
+      toast({ title: "Cloudron settings saved" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Failed to save Cloudron settings.", variant: "destructive" });
+    } finally {
+      setCloudronSaving(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const data = await apiFetch("/api/cloudron/test");
+      if (!data.configured) {
+        setTestResult({ status: "not_configured" });
+      } else if (data.connected) {
+        setTestResult({ status: "success", instanceName: data.instanceName });
+      } else {
+        setTestResult({ status: "error", error: data.error ?? "Connection failed" });
+      }
+    } catch (err: any) {
+      setTestResult({ status: "error", error: err?.message ?? "Request failed" });
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -361,6 +479,123 @@ export function AdminSiteSettings() {
           {saving ? t("admin.settings.saving") : t("admin.settings.save")}
         </Button>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Server className="h-5 w-5 text-blue-500" />
+            Cloudron Integration
+          </CardTitle>
+          <CardDescription>
+            Connect your Cloudron instance to manage apps directly from this panel.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">Integration enabled</p>
+              <p className="text-xs text-muted-foreground">
+                When disabled, Cloudron features will not be available.
+              </p>
+            </div>
+            <Switch
+              checked={cloudronEnabled}
+              onCheckedChange={setCloudronEnabled}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cloudron-name">Display name</Label>
+            <Input
+              id="cloudron-name"
+              value={cloudronName}
+              onChange={(e) => setCloudronName(e.target.value)}
+              placeholder="My Cloudron"
+              maxLength={80}
+            />
+            <p className="text-xs text-muted-foreground">A label to identify this instance.</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cloudron-url">Base URL</Label>
+            <Input
+              id="cloudron-url"
+              value={cloudronBaseUrl}
+              onChange={(e) => setCloudronBaseUrl(e.target.value)}
+              placeholder="https://my.cloudron.io"
+              type="url"
+            />
+            <p className="text-xs text-muted-foreground">
+              The root URL of your Cloudron instance, e.g. <code>https://my.example.com</code>.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cloudron-token">API Token</Label>
+            <Input
+              id="cloudron-token"
+              value={cloudronApiToken}
+              onChange={(e) => setCloudronApiToken(e.target.value)}
+              onFocus={() => {
+                if (cloudronApiToken === TOKEN_MASK) setCloudronApiToken("");
+              }}
+              onBlur={() => {
+                if (cloudronApiToken === "" && cloudronInstance) setCloudronApiToken(TOKEN_MASK);
+              }}
+              placeholder="Enter API token"
+              type="password"
+              autoComplete="off"
+            />
+            {cloudronInstance && cloudronApiToken === TOKEN_MASK && (
+              <p className="text-xs text-muted-foreground">
+                Token is saved. Click to replace it.
+              </p>
+            )}
+          </div>
+
+          {testResult && (
+            <div className={`flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${
+              testResult.status === "success"
+                ? "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950/40 dark:text-green-300"
+                : testResult.status === "not_configured"
+                  ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                  : "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
+            }`}>
+              {testResult.status === "success" && <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />}
+              {testResult.status === "not_configured" && <WifiOff className="h-4 w-4 mt-0.5 shrink-0" />}
+              {testResult.status === "error" && <XCircle className="h-4 w-4 mt-0.5 shrink-0" />}
+              <span>
+                {testResult.status === "success" && (
+                  <>Connected successfully{testResult.instanceName ? ` to <strong>${testResult.instanceName}</strong>` : ""}.</>
+                )}
+                {testResult.status === "not_configured" && "No active Cloudron instance is configured. Save your settings first."}
+                {testResult.status === "error" && `Connection failed: ${testResult.error}`}
+              </span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 pt-1">
+            <Button onClick={handleCloudronSave} disabled={cloudronSaving} className="gap-2">
+              {cloudronSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {cloudronSaving ? "Saving…" : "Save Cloudron settings"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleTestConnection}
+              disabled={testing || cloudronSaving}
+              className="gap-2"
+            >
+              {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Server className="h-4 w-4" />}
+              {testing ? "Testing…" : "Test connection"}
+            </Button>
+            {cloudronInstance && (
+              <Badge variant={cloudronInstance.isActive ? "default" : "secondary"} className="ml-auto">
+                {cloudronInstance.isActive ? "Active" : "Inactive"}
+              </Badge>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
