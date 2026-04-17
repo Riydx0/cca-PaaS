@@ -315,21 +315,71 @@ router.get("/tasks/:id", requireAdmin, async (req: Request, res: Response) => {
   }
 });
 
+// ─── App Store catalogue cache ────────────────────────────────────────────────
+
+const APPSTORE_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+interface AppStoreCache {
+  data: unknown;
+  fetchedAt: number;
+}
+
+let appStoreCache: AppStoreCache | null = null;
+let appStoreFetchInFlight: Promise<unknown> | null = null;
+
+async function fetchAppStoreCatalogue(): Promise<unknown> {
+  if (appStoreFetchInFlight) return appStoreFetchInFlight;
+
+  appStoreFetchInFlight = (async () => {
+    try {
+      const response = await fetch("https://api.cloudron.io/api/v1/apps", {
+        headers: { "Accept": "application/json" },
+      });
+      if (!response.ok) {
+        throw new Error(`App Store returned ${response.status}`);
+      }
+      const data = await response.json() as unknown;
+      appStoreCache = { data, fetchedAt: Date.now() };
+      return data;
+    } finally {
+      appStoreFetchInFlight = null;
+    }
+  })();
+
+  return appStoreFetchInFlight;
+}
+
 /**
  * GET /api/cloudron/appstore
- * Proxies the Cloudron App Store catalogue from cloudron.io.
+ * Proxies the Cloudron App Store catalogue from cloudron.io with a 30-minute
+ * server-side in-memory cache and stale-while-revalidate behaviour.
  * Returns: { apps: AppStoreListing[] }
  */
 router.get("/appstore", requireAdmin, async (_req: Request, res: Response) => {
-  try {
-    const response = await fetch("https://api.cloudron.io/api/v1/apps", {
-      headers: { "Accept": "application/json" },
+  const now = Date.now();
+  const cacheAge = appStoreCache ? now - appStoreCache.fetchedAt : Infinity;
+  const isStale = cacheAge >= APPSTORE_CACHE_TTL_MS;
+
+  res.setHeader(
+    "Cache-Control",
+    `private, max-age=${Math.floor(APPSTORE_CACHE_TTL_MS / 1000)}, stale-while-revalidate=${Math.floor(APPSTORE_CACHE_TTL_MS / 1000)}`,
+  );
+
+  if (appStoreCache && !isStale) {
+    res.json(appStoreCache.data);
+    return;
+  }
+
+  if (appStoreCache && isStale) {
+    res.json(appStoreCache.data);
+    fetchAppStoreCatalogue().catch((err) => {
+      console.error("[cloudron/appstore] background revalidation failed:", err);
     });
-    if (!response.ok) {
-      res.status(response.status).json({ error: `App Store returned ${response.status}` });
-      return;
-    }
-    const data = await response.json() as unknown;
+    return;
+  }
+
+  try {
+    const data = await fetchAppStoreCatalogue();
     res.json(data);
   } catch (err) {
     console.error("[cloudron/appstore]", err);

@@ -631,7 +631,8 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
   const { data, isLoading, isError, refetch, isFetching } = useQuery<AppStoreResult>({
     queryKey: ["cloudron-appstore"],
     queryFn: fetchAppStore,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
     retry: 2,
   });
 
