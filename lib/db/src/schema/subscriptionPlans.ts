@@ -23,9 +23,11 @@ export const subscriptionPlansTable = pgTable("subscription_plans", {
 
 export const subscriptionPlansRelations = relations(subscriptionPlansTable, ({ many }) => ({
   userSubscriptions: many(userSubscriptionsTable),
+  planFeatures: many(subscriptionPlanFeaturesTable),
 }));
 
 import { userSubscriptionsTable } from "./userSubscriptions";
+import { subscriptionPlanFeaturesTable } from "./subscriptionPlanFeatures";
 
 export type SubscriptionPlan = typeof subscriptionPlansTable.$inferSelect;
 export type NewSubscriptionPlan = typeof subscriptionPlansTable.$inferInsert;

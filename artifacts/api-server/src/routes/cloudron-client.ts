@@ -13,6 +13,9 @@ import {
   cloudronInstancesTable,
   auditLogsTable,
   usersTable,
+  userSubscriptionsTable,
+  subscriptionPlansTable,
+  subscriptionPlanFeaturesTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireRole";
@@ -77,7 +80,115 @@ function handleCloudronError(err: unknown, res: Response): void {
   res.status(500).json({ error: "Internal server error" });
 }
 
-/** Middleware: resolve userId, load access, check a specific permission. */
+// ─── Plan feature helpers ───────────────────────────────────────────────────────
+
+interface ActivePlanInfo {
+  subscriptionId: number;
+  planId: number;
+  planName: string;
+  status: string;
+}
+
+async function getActiveSubscription(userId: number): Promise<ActivePlanInfo | null> {
+  const [row] = await db
+    .select({
+      subscriptionId: userSubscriptionsTable.id,
+      planId: subscriptionPlansTable.id,
+      planName: subscriptionPlansTable.name,
+      status: userSubscriptionsTable.status,
+    })
+    .from(userSubscriptionsTable)
+    .innerJoin(subscriptionPlansTable, eq(userSubscriptionsTable.planId, subscriptionPlansTable.id))
+    .where(
+      and(
+        eq(userSubscriptionsTable.userId, userId),
+        sql`${userSubscriptionsTable.status} IN ('active', 'trial')`
+      )
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+async function getPlanFeature(
+  planId: number,
+  featureKey: string
+): Promise<{ enabled: boolean; limitValue: number | null } | null> {
+  const [row] = await db
+    .select({
+      enabled: subscriptionPlanFeaturesTable.enabled,
+      limitValue: subscriptionPlanFeaturesTable.limitValue,
+    })
+    .from(subscriptionPlanFeaturesTable)
+    .where(
+      and(
+        eq(subscriptionPlanFeaturesTable.planId, planId),
+        eq(subscriptionPlanFeaturesTable.featureKey, featureKey)
+      )
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+const PERMISSION_LIMIT_FEATURE: Record<string, string> = {
+  install_apps: "max_apps",
+  create_mailboxes: "max_mailboxes",
+};
+
+/**
+ * Checks the plan-level limit for install_apps (max_apps) and create_mailboxes (max_mailboxes).
+ * Returns null if no limit applies, or a string error message if limit is exceeded.
+ */
+async function checkPlanLimit(
+  perm: string,
+  planId: number,
+  instance: typeof cloudronInstancesTable.$inferSelect
+): Promise<string | null> {
+  const limitFeatureKey = PERMISSION_LIMIT_FEATURE[perm];
+  if (!limitFeatureKey) return null;
+
+  const limitFeature = await getPlanFeature(planId, limitFeatureKey);
+  if (!limitFeature || !limitFeature.enabled || limitFeature.limitValue == null) return null;
+
+  const maxAllowed = limitFeature.limitValue;
+
+  try {
+    if (perm === "install_apps") {
+      const client = createCloudronClient(instance.baseUrl, instance.apiToken);
+      const apps = await listApps(client);
+      if (apps.length >= maxAllowed) {
+        return `App limit reached (${apps.length}/${maxAllowed}). Upgrade your plan to install more apps.`;
+      }
+    }
+
+    if (perm === "create_mailboxes") {
+      const client = createCloudronClient(instance.baseUrl, instance.apiToken);
+      const domainData = await client.get<{ domains?: { domain: string }[] }>("/mail/domains");
+      const domain = domainData.domains?.[0]?.domain;
+      if (domain) {
+        const mailData = await client.get<{ mailboxes?: unknown[] }>(
+          `/mail/${encodeURIComponent(domain)}/mailboxes`
+        );
+        const count = mailData.mailboxes?.length ?? 0;
+        if (count >= maxAllowed) {
+          return `Mailbox limit reached (${count}/${maxAllowed}). Upgrade your plan to create more mailboxes.`;
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "[cloudron-client] Failed to check plan limit — allowing action");
+  }
+
+  return null;
+}
+
+/**
+ * THREE-LAYER permission check:
+ * 1. Manual permission must exist in cloudron_client_access.permissions[]
+ * 2. If user has an active subscription, the plan must enable the feature
+ * 3. If the action has a count limit (install_apps, create_mailboxes), current count < limit
+ *
+ * If NO active subscription exists, only layer 1 applies (backward compatible).
+ */
 async function withPermission(
   req: Request,
   res: Response,
@@ -89,9 +200,33 @@ async function withPermission(
 
   try {
     const access = await getClientAccess(userId);
+
+    // Layer 1: manual permission check
     if (!access || !hasPermission(access.permissions, perm)) {
       res.status(403).json({ error: "Forbidden", missing: perm }); return;
     }
+
+    // Layer 2 + 3: plan-based check (only if user has an active subscription)
+    const activeSub = await getActiveSubscription(userId);
+    if (activeSub) {
+      const planFeature = await getPlanFeature(activeSub.planId, perm);
+
+      if (!planFeature || !planFeature.enabled) {
+        res.status(403).json({
+          error: "Your current plan does not include this feature.",
+          planName: activeSub.planName,
+          missing: perm,
+        });
+        return;
+      }
+
+      const limitError = await checkPlanLimit(perm, activeSub.planId, access.instance);
+      if (limitError) {
+        res.status(403).json({ error: limitError, limitExceeded: true, planName: activeSub.planName });
+        return;
+      }
+    }
+
     await handler(access, userId);
   } catch (err) {
     handleCloudronError(err, res);

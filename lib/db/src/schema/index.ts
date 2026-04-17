@@ -10,6 +10,7 @@ export * from "./paymentRecords";
 export * from "./auditLogs";
 export * from "./passwordResetTokens";
 export * from "./subscriptionPlans";
+export * from "./subscriptionPlanFeatures";
 export * from "./userSubscriptions";
 export * from "./cloudronInstances";
 export * from "./cloudronClientAccess";

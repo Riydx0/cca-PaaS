@@ -1,7 +1,11 @@
 import { Router } from "express";
 import { requireSuperAdmin } from "../../middlewares/requireRole";
 import { db } from "@workspace/db";
-import { subscriptionPlansTable, userSubscriptionsTable } from "@workspace/db/schema";
+import {
+  subscriptionPlansTable,
+  userSubscriptionsTable,
+  subscriptionPlanFeaturesTable,
+} from "@workspace/db/schema";
 import { eq, count, asc } from "drizzle-orm";
 import { AuditService } from "../../services/audit_service";
 
@@ -208,6 +212,77 @@ router.delete("/:id", async (req: any, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to delete plan" });
+  }
+});
+
+router.get("/:id/features", async (req, res) => {
+  try {
+    const planId = Number(req.params.id);
+    const features = await db
+      .select()
+      .from(subscriptionPlanFeaturesTable)
+      .where(eq(subscriptionPlanFeaturesTable.planId, planId))
+      .orderBy(asc(subscriptionPlanFeaturesTable.featureKey));
+    res.json({ features });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch plan features" });
+  }
+});
+
+router.put("/:id/features", async (req: any, res) => {
+  try {
+    const userId = req?.session?.userId as number;
+    const planId = Number(req.params.id);
+    const { features } = req.body as {
+      features: Array<{ featureKey: string; enabled: boolean; limitValue?: number | null }>;
+    };
+
+    if (!Array.isArray(features)) {
+      res.status(400).json({ error: "features must be an array" });
+      return;
+    }
+
+    const [plan] = await db.select({ id: subscriptionPlansTable.id }).from(subscriptionPlansTable).where(eq(subscriptionPlansTable.id, planId));
+    if (!plan) {
+      res.status(404).json({ error: "Plan not found" });
+      return;
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.delete(subscriptionPlanFeaturesTable).where(eq(subscriptionPlanFeaturesTable.planId, planId));
+      if (features.length > 0) {
+        await tx.insert(subscriptionPlanFeaturesTable).values(
+          features.map((f) => ({
+            planId,
+            featureKey: f.featureKey,
+            enabled: f.enabled ?? true,
+            limitValue: f.limitValue ?? null,
+            updatedAt: new Date(),
+          }))
+        );
+      }
+    });
+
+    await AuditService.logEvent({
+      userId,
+      action: "plan.features_updated",
+      entityType: "subscription_plan",
+      entityId: String(planId),
+      details: { featureCount: features.length },
+      ipAddress: req.ip ?? null,
+    });
+
+    const updated = await db
+      .select()
+      .from(subscriptionPlanFeaturesTable)
+      .where(eq(subscriptionPlanFeaturesTable.planId, planId))
+      .orderBy(asc(subscriptionPlanFeaturesTable.featureKey));
+
+    res.json({ features: updated });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update plan features" });
   }
 });
 
