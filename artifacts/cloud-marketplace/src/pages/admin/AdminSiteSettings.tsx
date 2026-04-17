@@ -8,7 +8,18 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Cloud, Palette, Upload, X, Loader2, Save, RefreshCw, FileImage, Server, CheckCircle2, XCircle, WifiOff } from "lucide-react";
+import { Cloud, Palette, Upload, X, Loader2, Save, RefreshCw, FileImage, Server, CheckCircle2, XCircle, WifiOff, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface SettingsData {
   siteName: string;
@@ -65,6 +76,7 @@ export function AdminSiteSettings() {
   const [cloudronApiToken, setCloudronApiToken] = useState("");
   const [cloudronEnabled, setCloudronEnabled] = useState(true);
   const [cloudronSaving, setCloudronSaving] = useState(false);
+  const [cloudronRemoving, setCloudronRemoving] = useState(false);
   const [testResult, setTestResult] = useState<TestResult>(null);
   const [testing, setTesting] = useState(false);
 
@@ -277,6 +289,25 @@ export function AdminSiteSettings() {
       setTestResult({ status: "error", error: err?.message ?? "Request failed" });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleCloudronRemove = async () => {
+    if (!cloudronInstance) return;
+    setCloudronRemoving(true);
+    try {
+      await apiFetch(`/api/cloudron/instances/${cloudronInstance.id}`, { method: "DELETE" });
+      setCloudronInstance(null);
+      setCloudronName("");
+      setCloudronBaseUrl("");
+      setCloudronApiToken("");
+      setCloudronEnabled(true);
+      setTestResult(null);
+      toast({ title: "Integration removed", description: "The Cloudron integration has been disconnected." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Failed to remove integration.", variant: "destructive" });
+    } finally {
+      setCloudronRemoving(false);
     }
   };
 
@@ -574,7 +605,7 @@ export function AdminSiteSettings() {
             </div>
           )}
 
-          <div className="flex items-center gap-3 pt-1">
+          <div className="flex items-center gap-3 pt-1 flex-wrap">
             <Button onClick={handleCloudronSave} disabled={cloudronSaving} className="gap-2">
               {cloudronSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {cloudronSaving ? "Saving…" : "Save Cloudron settings"}
@@ -589,9 +620,45 @@ export function AdminSiteSettings() {
               {testing ? "Testing…" : "Test connection"}
             </Button>
             {cloudronInstance && (
-              <Badge variant={cloudronInstance.isActive ? "default" : "secondary"} className="ml-auto">
-                {cloudronInstance.isActive ? "Active" : "Inactive"}
-              </Badge>
+              <>
+                <Badge variant={cloudronInstance.isActive ? "default" : "secondary"} className="ml-auto">
+                  {cloudronInstance.isActive ? "Active" : "Inactive"}
+                </Badge>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      disabled={cloudronRemoving}
+                      className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      {cloudronRemoving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                      {cloudronRemoving ? "Removing…" : "Remove integration"}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Remove Cloudron integration?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently disconnect <strong>{cloudronInstance.name}</strong> from this panel.
+                        All Cloudron features will be unavailable until a new instance is configured.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleCloudronRemove}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Remove integration
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
             )}
           </div>
         </CardContent>
