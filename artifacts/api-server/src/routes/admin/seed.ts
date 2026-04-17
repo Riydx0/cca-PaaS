@@ -7,7 +7,7 @@ import {
   subscriptionPlansTable,
   subscriptionPlanFeaturesTable,
 } from "@workspace/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -127,46 +127,47 @@ router.post("/seed", requireSuperAdmin, async (_req, res) => {
     }
 
     for (const planDef of PLAN_SEED) {
-      const existing = await db
-        .select({ id: subscriptionPlansTable.id })
-        .from(subscriptionPlansTable)
-        .where(eq(subscriptionPlansTable.slug, planDef.slug));
-
-      let planId: number;
-      if (existing.length > 0) {
-        planId = existing[0].id;
-      } else {
-        const [inserted] = await db
-          .insert(subscriptionPlansTable)
-          .values({
-            name: planDef.name,
-            slug: planDef.slug,
-            description: planDef.description,
-            isActive: true,
-            sortOrder: planDef.sortOrder,
+      const [upsertedPlan] = await db
+        .insert(subscriptionPlansTable)
+        .values({
+          name: planDef.name,
+          slug: planDef.slug,
+          description: planDef.description,
+          isActive: true,
+          sortOrder: planDef.sortOrder,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: subscriptionPlansTable.slug,
+          set: {
+            name: sql`excluded.name`,
+            description: sql`excluded.description`,
+            sortOrder: sql`excluded.sort_order`,
             updatedAt: new Date(),
-          })
-          .returning({ id: subscriptionPlansTable.id });
-        planId = inserted.id;
-      }
+          },
+        })
+        .returning({ id: subscriptionPlansTable.id });
 
-      const existingFeatureKeys = await db
-        .select({ featureKey: subscriptionPlanFeaturesTable.featureKey })
-        .from(subscriptionPlanFeaturesTable)
-        .where(eq(subscriptionPlanFeaturesTable.planId, planId));
+      const planId = upsertedPlan.id;
 
-      const existingKeys = new Set(existingFeatureKeys.map((f) => f.featureKey));
-
-      const toInsert = planDef.features.filter((f) => !existingKeys.has(f.featureKey));
-      if (toInsert.length > 0) {
-        await db.insert(subscriptionPlanFeaturesTable).values(
-          toInsert.map((f) => ({
+      for (const f of planDef.features) {
+        await db
+          .insert(subscriptionPlanFeaturesTable)
+          .values({
             planId,
             featureKey: f.featureKey,
             enabled: f.enabled,
             limitValue: f.limitValue ?? null,
-          }))
-        );
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: [subscriptionPlanFeaturesTable.planId, subscriptionPlanFeaturesTable.featureKey],
+            set: {
+              enabled: sql`excluded.enabled`,
+              limitValue: sql`excluded.limit_value`,
+              updatedAt: new Date(),
+            },
+          });
       }
     }
 

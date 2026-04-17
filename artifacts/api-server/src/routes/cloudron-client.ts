@@ -134,15 +134,23 @@ const PERMISSION_LIMIT_FEATURE: Record<string, string> = {
   create_mailboxes: "max_mailboxes",
 };
 
+interface PlanLimitResult {
+  blocked: boolean;
+  status: 403 | 503;
+  message: string;
+}
+
 /**
  * Checks the plan-level limit for install_apps (max_apps) and create_mailboxes (max_mailboxes).
- * Returns null if no limit applies, or a string error message if limit is exceeded.
+ * Returns null if no limit applies or limit is not exceeded.
+ * Returns a PlanLimitResult if the action should be blocked (limit exceeded or verification failed).
+ * FAIL-CLOSED: if the live count cannot be fetched, the action is BLOCKED with 503.
  */
 async function checkPlanLimit(
   perm: string,
   planId: number,
   instance: typeof cloudronInstancesTable.$inferSelect
-): Promise<string | null> {
+): Promise<PlanLimitResult | null> {
   const limitFeatureKey = PERMISSION_LIMIT_FEATURE[perm];
   if (!limitFeatureKey) return null;
 
@@ -156,8 +164,13 @@ async function checkPlanLimit(
       const client = createCloudronClient(instance.baseUrl, instance.apiToken);
       const apps = await listApps(client);
       if (apps.length >= maxAllowed) {
-        return `App limit reached (${apps.length}/${maxAllowed}). Upgrade your plan to install more apps.`;
+        return {
+          blocked: true,
+          status: 403,
+          message: `App limit reached (${apps.length}/${maxAllowed}). Upgrade your plan to install more apps.`,
+        };
       }
+      return null;
     }
 
     if (perm === "create_mailboxes") {
@@ -170,15 +183,25 @@ async function checkPlanLimit(
         );
         const count = mailData.mailboxes?.length ?? 0;
         if (count >= maxAllowed) {
-          return `Mailbox limit reached (${count}/${maxAllowed}). Upgrade your plan to create more mailboxes.`;
+          return {
+            blocked: true,
+            status: 403,
+            message: `Mailbox limit reached (${count}/${maxAllowed}). Upgrade your plan to create more mailboxes.`,
+          };
         }
       }
+      return null;
     }
-  } catch (err) {
-    logger.warn({ err }, "[cloudron-client] Failed to check plan limit — allowing action");
-  }
 
-  return null;
+    return null;
+  } catch (err) {
+    logger.warn({ err }, "[cloudron-client] Failed to verify plan limit — blocking action (fail-closed)");
+    return {
+      blocked: true,
+      status: 503,
+      message: "Unable to verify plan limits at this time. Please try again shortly.",
+    };
+  }
 }
 
 /**
@@ -220,9 +243,13 @@ async function withPermission(
         return;
       }
 
-      const limitError = await checkPlanLimit(perm, activeSub.planId, access.instance);
-      if (limitError) {
-        res.status(403).json({ error: limitError, limitExceeded: true, planName: activeSub.planName });
+      const limitResult = await checkPlanLimit(perm, activeSub.planId, access.instance);
+      if (limitResult) {
+        res.status(limitResult.status).json({
+          error: limitResult.message,
+          limitExceeded: limitResult.status === 403,
+          planName: activeSub.planName,
+        });
         return;
       }
     }
