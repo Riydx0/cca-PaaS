@@ -382,7 +382,12 @@ export function AdminCloudronPage() {
   const instances = instancesData?.instances ?? [];
   const hasInstances = instances.length > 0;
 
-  const { data: appsData, isLoading: appsLoading, refetch } = useQuery<CloudronAppsResult>({
+  const {
+    data: appsData,
+    isLoading: appsLoading,
+    error: appsError,
+    refetch,
+  } = useQuery<CloudronAppsResult>({
     queryKey: ["cloudron-apps"],
     queryFn: fetchApps,
     enabled: hasInstances,
@@ -509,12 +514,16 @@ export function AdminCloudronPage() {
         </CardContent>
       </Card>
 
-      {/* Connection error alert — only show when instances exist but can't connect */}
-      {!isLoading && hasInstances && configured === false && (
+      {/* Connection error alert — show when instances exist but apps fetch fails or reports not configured */}
+      {!isLoading && hasInstances && (configured === false || !!appsError) && (
         <Alert variant="destructive">
           <XCircle className="h-4 w-4" />
           <AlertTitle>{t("admin.cloudron.connectionError.title")}</AlertTitle>
-          <AlertDescription>{t("admin.cloudron.connectionError.body")}</AlertDescription>
+          <AlertDescription>
+            {appsError instanceof Error
+              ? appsError.message
+              : appsData?.error ?? t("admin.cloudron.connectionError.body")}
+          </AlertDescription>
         </Alert>
       )}
 
