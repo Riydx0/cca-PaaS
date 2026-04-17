@@ -408,6 +408,7 @@ async function getActiveInstanceId(): Promise<number | null> {
       .select({ id: cloudronInstancesTable.id })
       .from(cloudronInstancesTable)
       .where(eq(cloudronInstancesTable.isActive, true))
+      .orderBy(cloudronInstancesTable.id)
       .limit(1);
     return inst?.id ?? null;
   } catch {

@@ -12,6 +12,7 @@ import providersRouter from "./providers";
 import seedRouter from "./seed";
 import serviceInstancesRouter from "./service-instances";
 import cloudronAccessRouter from "./cloudron-access";
+import cloudronAdminRouter from "./cloudron";
 
 const router = Router();
 
@@ -25,6 +26,7 @@ router.use("/plans", plansRouter);
 router.use("/subscriptions", subscriptionsRouter);
 router.use("/providers", providersRouter);
 router.use("/service-instances", serviceInstancesRouter);
+router.use("/cloudron", cloudronAdminRouter);
 router.use("/", seedRouter);
 router.use("/", settingsRouter);
 router.use("/", billingRouter);

@@ -242,7 +242,7 @@ interface ActivityLog {
 }
 
 async function fetchInstanceActivity(instanceId: number): Promise<{ logs: ActivityLog[] }> {
-  return adminFetch<{ logs: ActivityLog[] }>(`/api/cloudron/instances/${instanceId}/activity`);
+  return adminFetch<{ logs: ActivityLog[] }>(`/api/admin/cloudron/instances/${instanceId}/activity`);
 }
 
 function actionLabel(action: string): string {
