@@ -99,3 +99,25 @@ export async function restartApp(
 ): Promise<AppTaskResponse> {
   return client.post<AppTaskResponse>(`/apps/${encodeURIComponent(appId)}/restart`, {});
 }
+
+/**
+ * Stop a running Cloudron app by ID.
+ * Returns immediately with the taskId — does NOT wait for completion.
+ */
+export async function stopApp(
+  client: CloudronClient,
+  appId: string
+): Promise<AppTaskResponse> {
+  return client.post<AppTaskResponse>(`/apps/${encodeURIComponent(appId)}/stop`, {});
+}
+
+/**
+ * Start a stopped Cloudron app by ID.
+ * Returns immediately with the taskId — does NOT wait for completion.
+ */
+export async function startApp(
+  client: CloudronClient,
+  appId: string
+): Promise<AppTaskResponse> {
+  return client.post<AppTaskResponse>(`/apps/${encodeURIComponent(appId)}/start`, {});
+}

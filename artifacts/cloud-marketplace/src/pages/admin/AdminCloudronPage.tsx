@@ -44,6 +44,8 @@ import {
   Search,
   Store,
   Download,
+  Square,
+  Play,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -182,6 +184,20 @@ async function postUninstall(appId: string): Promise<AppActionResult> {
 
 async function postRestart(appId: string): Promise<AppActionResult> {
   return adminFetch<AppActionResult>(`/api/cloudron/apps/${encodeURIComponent(appId)}/restart`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+async function postStop(appId: string): Promise<AppActionResult> {
+  return adminFetch<AppActionResult>(`/api/cloudron/apps/${encodeURIComponent(appId)}/stop`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+async function postStart(appId: string): Promise<AppActionResult> {
+  return adminFetch<AppActionResult>(`/api/cloudron/apps/${encodeURIComponent(appId)}/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });
@@ -429,7 +445,7 @@ function AddInstanceModal({
   );
 }
 
-type ConfirmActionType = "uninstall" | "restart";
+type ConfirmActionType = "uninstall" | "restart" | "stop" | "start";
 
 interface ConfirmAction {
   type: ConfirmActionType;
@@ -475,29 +491,83 @@ function ConfirmActionDialog({
     onError: () => toast.error(t("admin.cloudron.restart.error")),
   });
 
+  const stopMutation = useMutation({
+    mutationFn: (appId: string) => postStop(appId),
+    onSuccess: (data) => {
+      if (data.taskId) {
+        toast.success(t("admin.cloudron.stop.queued"));
+        onTaskStarted({ taskId: data.taskId, label: t("admin.cloudron.stop.task.inProgress") });
+        onClose();
+      } else if (data.error) {
+        toast.error(data.error);
+      }
+    },
+    onError: () => toast.error(t("admin.cloudron.stop.error")),
+  });
+
+  const startMutation = useMutation({
+    mutationFn: (appId: string) => postStart(appId),
+    onSuccess: (data) => {
+      if (data.taskId) {
+        toast.success(t("admin.cloudron.start.queued"));
+        onTaskStarted({ taskId: data.taskId, label: t("admin.cloudron.start.task.inProgress") });
+        onClose();
+      } else if (data.error) {
+        toast.error(data.error);
+      }
+    },
+    onError: () => toast.error(t("admin.cloudron.start.error")),
+  });
+
   if (!action) return null;
 
   const appName = action.app.manifest?.title ?? action.app.appStoreId ?? action.app.id;
-  const isPending = uninstallMutation.isPending || restartMutation.isPending;
-  const isUninstall = action.type === "uninstall";
+  const isPending =
+    uninstallMutation.isPending ||
+    restartMutation.isPending ||
+    stopMutation.isPending ||
+    startMutation.isPending;
 
-  const title = isUninstall
-    ? t("admin.cloudron.uninstall.confirm.title")
-    : t("admin.cloudron.restart.confirm.title");
-  const body = isUninstall
-    ? t("admin.cloudron.uninstall.confirm.body").replace("{name}", appName)
-    : t("admin.cloudron.restart.confirm.body").replace("{name}", appName);
-  const submitLabel = isUninstall
-    ? t("admin.cloudron.uninstall.confirm.submit")
-    : t("admin.cloudron.restart.confirm.submit");
+  const titleKey: Record<ConfirmActionType, string> = {
+    uninstall: "admin.cloudron.uninstall.confirm.title",
+    restart: "admin.cloudron.restart.confirm.title",
+    stop: "admin.cloudron.stop.confirm.title",
+    start: "admin.cloudron.start.confirm.title",
+  };
+  const bodyKey: Record<ConfirmActionType, string> = {
+    uninstall: "admin.cloudron.uninstall.confirm.body",
+    restart: "admin.cloudron.restart.confirm.body",
+    stop: "admin.cloudron.stop.confirm.body",
+    start: "admin.cloudron.start.confirm.body",
+  };
+  const submitKey: Record<ConfirmActionType, string> = {
+    uninstall: "admin.cloudron.uninstall.confirm.submit",
+    restart: "admin.cloudron.restart.confirm.submit",
+    stop: "admin.cloudron.stop.confirm.submit",
+    start: "admin.cloudron.start.confirm.submit",
+  };
+
+  const title = t(titleKey[action.type] as Parameters<typeof t>[0]);
+  const body = t(bodyKey[action.type] as Parameters<typeof t>[0]).replace("{name}", appName);
+  const submitLabel = t(submitKey[action.type] as Parameters<typeof t>[0]);
+
+  const isDestructive = action.type === "uninstall" || action.type === "stop";
 
   function handleConfirm() {
-    if (isUninstall) {
-      uninstallMutation.mutate(action!.app.id);
-    } else {
-      restartMutation.mutate(action!.app.id);
-    }
+    const id = action!.app.id;
+    if (action!.type === "uninstall") uninstallMutation.mutate(id);
+    else if (action!.type === "restart") restartMutation.mutate(id);
+    else if (action!.type === "stop") stopMutation.mutate(id);
+    else if (action!.type === "start") startMutation.mutate(id);
   }
+
+  const ActionIcon = () => {
+    if (isPending) return <Loader2 className="h-4 w-4 animate-spin me-2" />;
+    if (action.type === "uninstall") return <Trash2 className="h-4 w-4 me-2" />;
+    if (action.type === "restart") return <RotateCcw className="h-4 w-4 me-2" />;
+    if (action.type === "stop") return <Square className="h-4 w-4 me-2" />;
+    return <Play className="h-4 w-4 me-2" />;
+  };
 
   return (
     <Dialog open={!!action} onOpenChange={(v) => !v && onClose()}>
@@ -512,13 +582,11 @@ function ConfirmActionDialog({
           </Button>
           <Button
             type="button"
-            variant={isUninstall ? "destructive" : "default"}
+            variant={isDestructive ? "destructive" : "default"}
             onClick={handleConfirm}
             disabled={isPending}
           >
-            {isPending && <Loader2 className="h-4 w-4 animate-spin me-2" />}
-            {!isPending && isUninstall && <Trash2 className="h-4 w-4 me-2" />}
-            {!isPending && !isUninstall && <RotateCcw className="h-4 w-4 me-2" />}
+            <ActionIcon />
             {submitLabel}
           </Button>
         </DialogFooter>
@@ -926,6 +994,30 @@ export function AdminCloudronPage() {
                           <TableCell><InstallStateBadge state={app.installationState} /></TableCell>
                           <TableCell>
                             <div className="flex items-center justify-end gap-1.5">
+                              {app.runState === "running" && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs text-amber-700 border-amber-300 hover:bg-amber-50 hover:text-amber-800 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-500/10"
+                                  disabled={isBusy}
+                                  onClick={() => setConfirmAction({ type: "stop", app })}
+                                >
+                                  <Square className="h-3.5 w-3.5 me-1" />
+                                  {t("admin.cloudron.stop.btn")}
+                                </Button>
+                              )}
+                              {app.runState === "stopped" && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:border-emerald-700 dark:hover:bg-emerald-500/10"
+                                  disabled={isBusy}
+                                  onClick={() => setConfirmAction({ type: "start", app })}
+                                >
+                                  <Play className="h-3.5 w-3.5 me-1" />
+                                  {t("admin.cloudron.start.btn")}
+                                </Button>
+                              )}
                               <Button
                                 variant="outline"
                                 size="sm"

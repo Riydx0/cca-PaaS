@@ -237,6 +237,38 @@ router.post("/apps/:id/restart", requireAdmin, async (req: Request, res: Respons
 });
 
 /**
+ * POST /api/cloudron/apps/:id/stop
+ * Stops a running Cloudron app by app ID on the primary active instance.
+ * Returns: { taskId } immediately — does NOT wait for completion.
+ */
+router.post("/apps/:id/stop", requireAdmin, async (req: Request, res: Response) => {
+  const appId = String(req.params.id);
+
+  try {
+    const result = await cloudronService.requestStop(appId);
+    res.status(202).json(result);
+  } catch (err) {
+    handleCloudronError(err, res);
+  }
+});
+
+/**
+ * POST /api/cloudron/apps/:id/start
+ * Starts a stopped Cloudron app by app ID on the primary active instance.
+ * Returns: { taskId } immediately — does NOT wait for completion.
+ */
+router.post("/apps/:id/start", requireAdmin, async (req: Request, res: Response) => {
+  const appId = String(req.params.id);
+
+  try {
+    const result = await cloudronService.requestStart(appId);
+    res.status(202).json(result);
+  } catch (err) {
+    handleCloudronError(err, res);
+  }
+});
+
+/**
  * GET /api/cloudron/tasks
  * Lists all recent Cloudron background tasks.
  * Returns: { configured, instanceName?, tasks[] }

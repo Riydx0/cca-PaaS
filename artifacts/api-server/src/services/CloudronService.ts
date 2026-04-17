@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { cloudronInstancesTable, type CloudronInstance } from "@workspace/db/schema";
 import { createCloudronClient, CloudronError } from "../cloudron/client";
-import { listApps, installApp, uninstallApp, restartApp, type InstallAppParams } from "../cloudron/apps";
+import { listApps, installApp, uninstallApp, restartApp, stopApp, startApp, type InstallAppParams } from "../cloudron/apps";
 import { listTasks, getTask } from "../cloudron/tasks";
 
 export interface CloudronStatus {
@@ -156,6 +156,32 @@ class CloudronService {
     }
     const client = createCloudronClient(instance.baseUrl, instance.apiToken);
     return restartApp(client, appId);
+  }
+
+  /**
+   * Stop a running app asynchronously on the primary active instance.
+   * Returns the taskId immediately.
+   */
+  async requestStop(appId: string) {
+    const instance = await getPrimaryInstance();
+    if (!instance) {
+      throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
+    }
+    const client = createCloudronClient(instance.baseUrl, instance.apiToken);
+    return stopApp(client, appId);
+  }
+
+  /**
+   * Start a stopped app asynchronously on the primary active instance.
+   * Returns the taskId immediately.
+   */
+  async requestStart(appId: string) {
+    const instance = await getPrimaryInstance();
+    if (!instance) {
+      throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
+    }
+    const client = createCloudronClient(instance.baseUrl, instance.apiToken);
+    return startApp(client, appId);
   }
 
   /** Internal polling — updates the in-memory registry every POLL_INTERVAL_MS. */
