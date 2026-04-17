@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { cloudronInstancesTable, type CloudronInstance } from "@workspace/db/schema";
 import { createCloudronClient, CloudronError } from "../cloudron/client";
-import { listApps, installApp, uninstallApp, restartApp, stopApp, startApp, type InstallAppParams } from "../cloudron/apps";
+import { listApps, installApp, uninstallApp, restartApp, stopApp, startApp, updateApp, type InstallAppParams } from "../cloudron/apps";
 import { listTasks, getTask } from "../cloudron/tasks";
 
 export interface CloudronStatus {
@@ -182,6 +182,19 @@ class CloudronService {
     }
     const client = createCloudronClient(instance.baseUrl, instance.apiToken);
     return startApp(client, appId);
+  }
+
+  /**
+   * Update an app to the latest version on the primary active instance.
+   * Returns the taskId immediately.
+   */
+  async requestUpdate(appId: string) {
+    const instance = await getPrimaryInstance();
+    if (!instance) {
+      throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
+    }
+    const client = createCloudronClient(instance.baseUrl, instance.apiToken);
+    return updateApp(client, appId);
   }
 
   /** Internal polling — updates the in-memory registry every POLL_INTERVAL_MS. */

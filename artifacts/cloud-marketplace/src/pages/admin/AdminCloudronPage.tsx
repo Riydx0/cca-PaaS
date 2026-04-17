@@ -46,6 +46,7 @@ import {
   Download,
   Square,
   Play,
+  ArrowUpCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -198,6 +199,13 @@ async function postStop(appId: string): Promise<AppActionResult> {
 
 async function postStart(appId: string): Promise<AppActionResult> {
   return adminFetch<AppActionResult>(`/api/cloudron/apps/${encodeURIComponent(appId)}/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+async function postUpdate(appId: string): Promise<AppActionResult> {
+  return adminFetch<AppActionResult>(`/api/cloudron/apps/${encodeURIComponent(appId)}/update`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });
@@ -445,7 +453,7 @@ function AddInstanceModal({
   );
 }
 
-type ConfirmActionType = "uninstall" | "restart" | "stop" | "start";
+type ConfirmActionType = "uninstall" | "restart" | "stop" | "start" | "update";
 
 interface ConfirmAction {
   type: ConfirmActionType;
@@ -519,6 +527,20 @@ function ConfirmActionDialog({
     onError: () => toast.error(t("admin.cloudron.start.error")),
   });
 
+  const updateMutation = useMutation({
+    mutationFn: (appId: string) => postUpdate(appId),
+    onSuccess: (data) => {
+      if (data.taskId) {
+        toast.success(t("admin.cloudron.update.queued"));
+        onTaskStarted({ taskId: data.taskId, label: t("admin.cloudron.update.task.inProgress") });
+        onClose();
+      } else if (data.error) {
+        toast.error(data.error);
+      }
+    },
+    onError: () => toast.error(t("admin.cloudron.update.error")),
+  });
+
   if (!action) return null;
 
   const appName = action.app.manifest?.title ?? action.app.appStoreId ?? action.app.id;
@@ -526,25 +548,29 @@ function ConfirmActionDialog({
     uninstallMutation.isPending ||
     restartMutation.isPending ||
     stopMutation.isPending ||
-    startMutation.isPending;
+    startMutation.isPending ||
+    updateMutation.isPending;
 
   const titleKey: Record<ConfirmActionType, string> = {
     uninstall: "admin.cloudron.uninstall.confirm.title",
     restart: "admin.cloudron.restart.confirm.title",
     stop: "admin.cloudron.stop.confirm.title",
     start: "admin.cloudron.start.confirm.title",
+    update: "admin.cloudron.update.confirm.title",
   };
   const bodyKey: Record<ConfirmActionType, string> = {
     uninstall: "admin.cloudron.uninstall.confirm.body",
     restart: "admin.cloudron.restart.confirm.body",
     stop: "admin.cloudron.stop.confirm.body",
     start: "admin.cloudron.start.confirm.body",
+    update: "admin.cloudron.update.confirm.body",
   };
   const submitKey: Record<ConfirmActionType, string> = {
     uninstall: "admin.cloudron.uninstall.confirm.submit",
     restart: "admin.cloudron.restart.confirm.submit",
     stop: "admin.cloudron.stop.confirm.submit",
     start: "admin.cloudron.start.confirm.submit",
+    update: "admin.cloudron.update.confirm.submit",
   };
 
   const title = t(titleKey[action.type] as Parameters<typeof t>[0]);
@@ -559,6 +585,7 @@ function ConfirmActionDialog({
     else if (action!.type === "restart") restartMutation.mutate(id);
     else if (action!.type === "stop") stopMutation.mutate(id);
     else if (action!.type === "start") startMutation.mutate(id);
+    else if (action!.type === "update") updateMutation.mutate(id);
   }
 
   const ActionIcon = () => {
@@ -566,7 +593,9 @@ function ConfirmActionDialog({
     if (action.type === "uninstall") return <Trash2 className="h-4 w-4 me-2" />;
     if (action.type === "restart") return <RotateCcw className="h-4 w-4 me-2" />;
     if (action.type === "stop") return <Square className="h-4 w-4 me-2" />;
-    return <Play className="h-4 w-4 me-2" />;
+    if (action.type === "start") return <Play className="h-4 w-4 me-2" />;
+    if (action.type === "update") return <ArrowUpCircle className="h-4 w-4 me-2" />;
+    return null;
   };
 
   return (
@@ -1018,6 +1047,16 @@ export function AdminCloudronPage() {
                                   {t("admin.cloudron.start.btn")}
                                 </Button>
                               )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-blue-600 border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:border-blue-400/40 dark:hover:bg-blue-500/10"
+                                disabled={isBusy}
+                                onClick={() => setConfirmAction({ type: "update", app })}
+                              >
+                                <ArrowUpCircle className="h-3.5 w-3.5 me-1" />
+                                {t("admin.cloudron.update.btn")}
+                              </Button>
                               <Button
                                 variant="outline"
                                 size="sm"

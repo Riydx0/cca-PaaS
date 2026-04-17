@@ -269,6 +269,22 @@ router.post("/apps/:id/start", requireAdmin, async (req: Request, res: Response)
 });
 
 /**
+ * POST /api/cloudron/apps/:id/update
+ * Updates an installed Cloudron app to the latest version.
+ * Returns: { taskId } immediately — does NOT wait for completion.
+ */
+router.post("/apps/:id/update", requireAdmin, async (req: Request, res: Response) => {
+  const appId = String(req.params.id);
+
+  try {
+    const result = await cloudronService.requestUpdate(appId);
+    res.status(202).json(result);
+  } catch (err) {
+    handleCloudronError(err, res);
+  }
+});
+
+/**
  * GET /api/cloudron/tasks
  * Lists all recent Cloudron background tasks.
  * Returns: { configured, instanceName?, tasks[] }

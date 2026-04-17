@@ -716,6 +716,13 @@ const translations = {
     "admin.cloudron.appstore.install": "Install",
     "admin.cloudron.appstore.retry": "Retry",
     "admin.cloudron.appstore.apps": "apps",
+    "admin.cloudron.update.btn": "Update",
+    "admin.cloudron.update.queued": "Update queued successfully.",
+    "admin.cloudron.update.error": "Failed to queue update.",
+    "admin.cloudron.update.task.inProgress": "Update in progress",
+    "admin.cloudron.update.confirm.title": "Update App",
+    "admin.cloudron.update.confirm.body": "Update \"{name}\" to the latest available version? The app may be briefly unavailable during the update.",
+    "admin.cloudron.update.confirm.submit": "Yes, Update",
   },
   ar: {
     // Nav
@@ -1430,6 +1437,13 @@ const translations = {
     "admin.cloudron.appstore.install": "تثبيت",
     "admin.cloudron.appstore.retry": "إعادة المحاولة",
     "admin.cloudron.appstore.apps": "تطبيقات",
+    "admin.cloudron.update.btn": "تحديث",
+    "admin.cloudron.update.queued": "تمت جدولة التحديث بنجاح.",
+    "admin.cloudron.update.error": "فشل في جدولة التحديث.",
+    "admin.cloudron.update.task.inProgress": "التحديث قيد التنفيذ",
+    "admin.cloudron.update.confirm.title": "تحديث التطبيق",
+    "admin.cloudron.update.confirm.body": "تحديث \"{name}\" إلى أحدث إصدار متاح؟ قد يتوقف التطبيق مؤقتًا أثناء التحديث.",
+    "admin.cloudron.update.confirm.submit": "نعم، تحديث",
   },
 };
 

@@ -121,3 +121,14 @@ export async function startApp(
 ): Promise<AppTaskResponse> {
   return client.post<AppTaskResponse>(`/apps/${encodeURIComponent(appId)}/start`, {});
 }
+
+/**
+ * Update an installed Cloudron app to the latest version.
+ * Returns immediately with the taskId — does NOT wait for completion.
+ */
+export async function updateApp(
+  client: CloudronClient,
+  appId: string
+): Promise<AppTaskResponse> {
+  return client.post<AppTaskResponse>(`/apps/${encodeURIComponent(appId)}/update`, {});
+}
