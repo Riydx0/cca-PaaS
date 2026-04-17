@@ -47,7 +47,16 @@ import {
   Square,
   Play,
   ArrowUpCircle,
+  Info,
+  ExternalLink,
+  Tag,
+  User,
+  Globe,
+  BookOpen,
+  ImageOff,
 } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 
 interface CloudronInstance {
@@ -128,7 +137,9 @@ interface AppStoreListing {
     version?: string;
     author?: string;
     website?: string;
+    documentationUrl?: string;
     tags?: string[];
+    mediaLinks?: string[];
   };
   createdAt?: string;
   updatedAt?: string;
@@ -624,9 +635,185 @@ function ConfirmActionDialog({
   );
 }
 
+function AppDetailsModal({
+  app,
+  onClose,
+  onInstall,
+}: {
+  app: AppStoreListing | null;
+  onClose: () => void;
+  onInstall: (appStoreId: string) => void;
+}) {
+  const { t } = useI18n();
+  const [screenshotError, setScreenshotError] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    setScreenshotError({});
+  }, [app?.id]);
+
+  if (!app) return null;
+
+  const title = app.manifest?.title ?? app.id;
+  const tagline = app.manifest?.tagline;
+  const description = app.manifest?.description;
+  const version = app.manifest?.version;
+  const author = app.manifest?.author;
+  const website = app.manifest?.website;
+  const documentationUrl = app.manifest?.documentationUrl;
+  const tags = app.manifest?.tags ?? [];
+  const screenshots = (app.manifest?.mediaLinks ?? []).filter(Boolean);
+  const icon = app.iconUrl;
+
+  function handleInstall() {
+    if (!app) return;
+    onInstall(app.id);
+    onClose();
+  }
+
+  return (
+    <Dialog open={!!app} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
+          <div className="flex items-start gap-4">
+            <div className="shrink-0">
+              {icon ? (
+                <img
+                  src={icon}
+                  alt={title}
+                  className="h-14 w-14 rounded-xl object-contain border border-border bg-background"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <div className="h-14 w-14 rounded-xl border border-border bg-muted flex items-center justify-center">
+                  <AppWindow className="h-7 w-7 text-muted-foreground" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <DialogTitle className="text-lg leading-tight">{title}</DialogTitle>
+              {tagline && (
+                <DialogDescription className="mt-0.5 text-sm">{tagline}</DialogDescription>
+              )}
+              <p className="text-xs text-muted-foreground/70 font-mono mt-1">{app.id}{version ? ` · v${version}` : ""}</p>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <ScrollArea className="flex-1 overflow-auto">
+          <div className="px-6 py-5 space-y-5">
+            {screenshots.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2.5">
+                  {t("admin.cloudron.appstore.details.screenshots")}
+                </p>
+                <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
+                  {screenshots.map((url, i) =>
+                    screenshotError[i] ? null : (
+                      <div key={i} className="shrink-0 rounded-lg overflow-hidden border border-border bg-muted h-36 w-60">
+                        <img
+                          src={url}
+                          alt={`${title} screenshot ${i + 1}`}
+                          className="h-full w-full object-cover"
+                          onError={() => setScreenshotError((prev) => ({ ...prev, [i]: true }))}
+                        />
+                      </div>
+                    )
+                  )}
+                  {screenshots.every((_, i) => screenshotError[i]) && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
+                      <ImageOff className="h-4 w-4" />
+                      {t("admin.cloudron.appstore.details.noScreenshots")}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {description && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                  {t("admin.cloudron.appstore.details.description")}
+                </p>
+                <div className="prose prose-sm dark:prose-invert max-w-none text-sm text-foreground leading-relaxed [&>p]:mb-2 [&>ul]:list-disc [&>ul]:ps-5 [&>ul]:mb-2 [&>ol]:list-decimal [&>ol]:ps-5 [&>ol]:mb-2 [&>h1]:text-base [&>h2]:text-sm [&>h3]:text-sm [&>h1]:font-semibold [&>h2]:font-semibold [&>h3]:font-semibold [&>h1]:mt-3 [&>h2]:mt-2.5 [&>h3]:mt-2 [&>code]:bg-muted [&>code]:px-1 [&>code]:rounded [&>code]:text-xs">
+                  <ReactMarkdown>{description}</ReactMarkdown>
+                </div>
+              </div>
+            )}
+
+            {tags.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                  {t("admin.cloudron.appstore.details.tags")}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {tags.map((tag) => (
+                    <Badge key={tag} variant="secondary" className="rounded-full text-xs">
+                      <Tag className="h-3 w-3 me-1 opacity-70" />
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {author && (
+                <div className="flex items-center gap-2 text-sm">
+                  <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-muted-foreground">{t("admin.cloudron.appstore.details.author")}:</span>
+                  <span className="font-medium">{author}</span>
+                </div>
+              )}
+              {website && /^https?:\/\//i.test(website) && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Globe className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-muted-foreground">{t("admin.cloudron.appstore.details.website")}:</span>
+                  <a
+                    href={website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-primary hover:underline flex items-center gap-1"
+                  >
+                    {website.replace(/^https?:\/\//i, "")}
+                    <ExternalLink className="h-3 w-3 opacity-70" />
+                  </a>
+                </div>
+              )}
+              {documentationUrl && /^https?:\/\//i.test(documentationUrl) && (
+                <div className="flex items-center gap-2 text-sm">
+                  <BookOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-muted-foreground">{t("admin.cloudron.appstore.details.docs")}:</span>
+                  <a
+                    href={documentationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-primary hover:underline flex items-center gap-1"
+                  >
+                    {t("admin.cloudron.appstore.details.docsLink")}
+                    <ExternalLink className="h-3 w-3 opacity-70" />
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </ScrollArea>
+
+        <div className="px-6 py-4 border-t border-border shrink-0 flex items-center justify-between gap-3">
+          <Button variant="outline" onClick={onClose}>{t("btn.cancel")}</Button>
+          <Button onClick={handleInstall}>
+            <Download className="h-4 w-4 me-2" />
+            {t("admin.cloudron.appstore.details.installBtn")}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => void }) {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
+  const [detailsApp, setDetailsApp] = useState<AppStoreListing | null>(null);
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<AppStoreResult>({
     queryKey: ["cloudron-appstore"],
@@ -718,21 +905,38 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm leading-tight">{title}</p>
+                      <button
+                        type="button"
+                        className="font-medium text-sm leading-tight hover:underline text-start"
+                        onClick={() => setDetailsApp(app)}
+                      >
+                        {title}
+                      </button>
                       {tagline && (
                         <p className="text-xs text-muted-foreground mt-0.5 truncate">{tagline}</p>
                       )}
                       <p className="text-xs text-muted-foreground/70 mt-0.5 font-mono">{app.id}</p>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="shrink-0"
-                      onClick={() => onInstall(app.id)}
-                    >
-                      <Download className="h-3.5 w-3.5 me-1.5" />
-                      {t("admin.cloudron.appstore.install")}
-                    </Button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="shrink-0"
+                        onClick={() => setDetailsApp(app)}
+                      >
+                        <Info className="h-3.5 w-3.5 me-1.5" />
+                        {t("admin.cloudron.appstore.details")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={() => onInstall(app.id)}
+                      >
+                        <Download className="h-3.5 w-3.5 me-1.5" />
+                        {t("admin.cloudron.appstore.install")}
+                      </Button>
+                    </div>
                   </div>
                 );
               })}
@@ -740,6 +944,11 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
           </div>
         )}
       </CardContent>
+      <AppDetailsModal
+        app={detailsApp}
+        onClose={() => setDetailsApp(null)}
+        onInstall={onInstall}
+      />
     </Card>
   );
 }
