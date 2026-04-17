@@ -54,6 +54,7 @@ import {
   Globe,
   BookOpen,
   ImageOff,
+  X,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ReactMarkdown from "react-markdown";
@@ -814,6 +815,7 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
   const { t } = useI18n();
   const [search, setSearch] = useState("");
   const [detailsApp, setDetailsApp] = useState<AppStoreListing | null>(null);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<AppStoreResult>({
     queryKey: ["cloudron-appstore"],
@@ -825,14 +827,22 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
 
   const allApps = data?.apps ?? [];
 
+  const allTags = Array.from(
+    new Set(allApps.flatMap((app) => app.manifest?.tags ?? []))
+  ).sort((a, b) => a.localeCompare(b));
+
   const filtered = allApps.filter((app) => {
+    const appTags = app.manifest?.tags ?? [];
+    if (selectedTag && !appTags.includes(selectedTag)) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     const title = (app.manifest?.title ?? app.id).toLowerCase();
     const tagline = (app.manifest?.tagline ?? "").toLowerCase();
-    const tags = (app.manifest?.tags ?? []).join(" ").toLowerCase();
+    const tags = appTags.join(" ").toLowerCase();
     return title.includes(q) || tagline.includes(q) || app.id.toLowerCase().includes(q) || tags.includes(q);
   });
+
+  const isFiltered = search.trim() !== "" || selectedTag !== null;
 
   return (
     <Card>
@@ -853,6 +863,42 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
             className="ps-9"
           />
         </div>
+        {allTags.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Tag className="h-3.5 w-3.5" />
+              <span>{t("admin.cloudron.appstore.filterByTag")}</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSelectedTag(null)}
+                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors ${
+                  selectedTag === null
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background text-muted-foreground border-border hover:bg-muted"
+                }`}
+              >
+                {t("admin.cloudron.appstore.filterAll")}
+              </button>
+              {allTags.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors ${
+                    selectedTag === tag
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-muted-foreground border-border hover:bg-muted"
+                  }`}
+                >
+                  {tag}
+                  {selectedTag === tag && <X className="h-3 w-3" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </CardHeader>
       <CardContent className="p-0">
         {isLoading ? (
@@ -876,7 +922,7 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
           </div>
         ) : (
           <div>
-            {search.trim() && (
+            {isFiltered && (
               <p className="text-xs text-muted-foreground px-6 pb-3">
                 {filtered.length} {t("admin.cloudron.appstore.apps")}
               </p>
@@ -886,6 +932,7 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
                 const title = app.manifest?.title ?? app.id;
                 const tagline = app.manifest?.tagline ?? "";
                 const icon = app.iconUrl;
+                const appTags = app.manifest?.tags ?? [];
                 return (
                   <div key={app.id} className="flex items-center gap-4 px-6 py-3 hover:bg-muted/40 transition-colors">
                     <div className="shrink-0">
@@ -916,6 +963,24 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
                         <p className="text-xs text-muted-foreground mt-0.5 truncate">{tagline}</p>
                       )}
                       <p className="text-xs text-muted-foreground/70 mt-0.5 font-mono">{app.id}</p>
+                      {appTags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {appTags.map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => setSelectedTag(tag)}
+                              className={`inline-flex rounded-full px-2 py-px text-[10px] font-medium border transition-colors ${
+                                selectedTag === tag
+                                  ? "bg-primary/10 text-primary border-primary/30"
+                                  : "bg-muted text-muted-foreground border-transparent hover:border-border"
+                              }`}
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <Button
