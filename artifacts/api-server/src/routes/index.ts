@@ -10,6 +10,7 @@ import billingRouter from "./billing";
 import pricingRouter from "./pricing";
 import subscriptionRouter from "./subscription";
 import cloudronRouter from "./cloudron";
+import cloudronClientRouter from "./cloudron-client";
 
 const router: IRouter = Router();
 
@@ -33,5 +34,8 @@ router.use("/admin", adminRouter);
 
 // Cloudron integration — admin-only, isolated module
 router.use("/cloudron", cloudronRouter);
+
+// Client-facing Cloudron portal — permission-gated per user
+router.use("/cloudron-client", cloudronClientRouter);
 
 export default router;

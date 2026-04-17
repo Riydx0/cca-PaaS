@@ -26,6 +26,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
     { href: "/services", label: t("nav.services"), icon: Server },
     { href: "/my-services", label: t("nav.myServices"), icon: Layers },
+    { href: "/my-cloudron", label: t("nav.myCloudron"), icon: Cloud },
     { href: "/orders", label: t("nav.orders"), icon: Receipt },
     { href: "/billing", label: t("nav.billing"), icon: CreditCard },
     { href: "/pricing", label: t("nav.pricing"), icon: Sparkles },
