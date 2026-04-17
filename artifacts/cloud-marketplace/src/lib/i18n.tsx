@@ -625,6 +625,9 @@ const translations = {
 
     // ---- Admin Cloudron ----
     "admin.nav.cloudron": "Cloudron Apps",
+    "admin.nav.cloudronIndicator.connected": "Cloudron: Connected",
+    "admin.nav.cloudronIndicator.disconnected": "Cloudron: Disconnected",
+    "admin.nav.cloudronIndicator.disabled": "Cloudron: Disabled",
     "admin.cloudron.title": "Cloudron Apps",
     "admin.cloudron.subtitle": "View installed apps and trigger new installations from the Cloudron App Store.",
     "admin.cloudron.refresh": "Refresh",
@@ -1428,6 +1431,9 @@ const translations = {
 
     // ---- Admin Cloudron ----
     "admin.nav.cloudron": "تطبيقات Cloudron",
+    "admin.nav.cloudronIndicator.connected": "Cloudron: متصل",
+    "admin.nav.cloudronIndicator.disconnected": "Cloudron: غير متصل",
+    "admin.nav.cloudronIndicator.disabled": "Cloudron: معطّل",
     "admin.cloudron.title": "تطبيقات Cloudron",
     "admin.cloudron.subtitle": "عرض التطبيقات المثبتة وتشغيل عمليات التثبيت الجديدة من متجر تطبيقات Cloudron.",
     "admin.cloudron.refresh": "تحديث",

@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import React, { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/contexts/AuthContext";
@@ -37,13 +37,47 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const [subsOpen, setSubsOpen] = useState(isInSubscriptionsGroup);
   const [settingsOpen, setSettingsOpen] = useState(isInSettingsGroup);
 
-  const navItems = [
+  type CloudronStatus = { enabled: boolean; configured: boolean; connected: boolean } | null;
+  const [cloudronStatus, setCloudronStatus] = useState<CloudronStatus>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/system/cloudron-status", { credentials: "include" })
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((data: CloudronStatus) => setCloudronStatus(data))
+      .catch(() => {});
+  }, []);
+
+  const cloudronIndicatorTitle =
+    cloudronStatus?.connected
+      ? t("admin.nav.cloudronIndicator.connected")
+      : cloudronStatus?.enabled && cloudronStatus?.configured
+        ? t("admin.nav.cloudronIndicator.disconnected")
+        : t("admin.nav.cloudronIndicator.disabled");
+
+  const cloudronDotColor =
+    cloudronStatus === null
+      ? "bg-transparent"
+      : cloudronStatus.connected
+        ? "bg-green-400"
+        : cloudronStatus.enabled && cloudronStatus.configured
+          ? "bg-red-400"
+          : "bg-gray-400";
+
+  const CloudronDot = () => (
+    <span
+      className={`inline-block w-2 h-2 rounded-full shrink-0 ${cloudronDotColor}`}
+      title={cloudronStatus !== null ? cloudronIndicatorTitle : undefined}
+      aria-label={cloudronStatus !== null ? cloudronIndicatorTitle : undefined}
+    />
+  );
+
+  const navItems: { href: string; label: string; icon: React.ElementType; indicator?: React.ReactNode }[] = [
     { href: "/admin/dashboard",         label: t("admin.nav.dashboard"),         icon: LayoutDashboard },
     { href: "/admin/users",             label: t("admin.nav.users"),             icon: Users },
     { href: "/admin/orders",            label: t("admin.nav.orders"),            icon: Receipt },
     { href: "/admin/services",          label: t("admin.nav.services"),          icon: Server },
     { href: "/admin/service-instances", label: t("admin.nav.serviceInstances"),  icon: Layers },
-    { href: "/admin/cloudron",          label: t("admin.nav.cloudron"),          icon: AppWindow },
+    { href: "/admin/cloudron",          label: t("admin.nav.cloudron"),          icon: AppWindow, indicator: <CloudronDot /> },
     { href: "/admin/audit-logs",        label: t("admin.nav.auditLogs"),         icon: Activity },
   ];
 
@@ -178,7 +212,8 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             }`}
           >
             <item.icon className="h-5 w-5 shrink-0" />
-            <span>{item.label}</span>
+            <span className="flex-1">{item.label}</span>
+            {item.indicator}
           </Link>
         );
       })}
