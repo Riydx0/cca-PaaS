@@ -267,4 +267,26 @@ router.get("/tasks/:id", requireAdmin, async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/cloudron/appstore
+ * Proxies the Cloudron App Store catalogue from cloudron.io.
+ * Returns: { apps: AppStoreListing[] }
+ */
+router.get("/appstore", requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const response = await fetch("https://api.cloudron.io/api/v1/apps", {
+      headers: { "Accept": "application/json" },
+    });
+    if (!response.ok) {
+      res.status(response.status).json({ error: `App Store returned ${response.status}` });
+      return;
+    }
+    const data = await response.json() as unknown;
+    res.json(data);
+  } catch (err) {
+    console.error("[cloudron/appstore]", err);
+    res.status(502).json({ error: "Failed to reach Cloudron App Store" });
+  }
+});
+
 export default router;

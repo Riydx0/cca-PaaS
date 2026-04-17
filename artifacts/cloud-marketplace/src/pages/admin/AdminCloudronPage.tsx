@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +41,9 @@ import {
   Trash2,
   RotateCcw,
   Server,
+  Search,
+  Store,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -110,6 +114,28 @@ interface ActiveTask {
   label: string;
 }
 
+interface AppStoreListing {
+  id: string;
+  iconUrl?: string;
+  manifest?: {
+    title?: string;
+    tagline?: string;
+    description?: string;
+    icon?: string;
+    version?: string;
+    author?: string;
+    website?: string;
+    tags?: string[];
+  };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface AppStoreResult {
+  apps?: AppStoreListing[];
+  error?: string;
+}
+
 async function fetchInstances(): Promise<CloudronInstancesResult> {
   return adminFetch<CloudronInstancesResult>("/api/cloudron/instances");
 }
@@ -159,6 +185,10 @@ async function postRestart(appId: string): Promise<AppActionResult> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });
+}
+
+async function fetchAppStore(): Promise<AppStoreResult> {
+  return adminFetch<AppStoreResult>("/api/cloudron/appstore");
 }
 
 function RunStateBadge({ state }: { state?: string }) {
@@ -264,14 +294,23 @@ function InstallModal({
   open,
   onClose,
   onTaskStarted,
+  initialAppStoreId,
 }: {
   open: boolean;
   onClose: () => void;
   onTaskStarted: (task: ActiveTask) => void;
+  initialAppStoreId?: string;
 }) {
   const { t } = useI18n();
-  const [appStoreId, setAppStoreId] = useState("");
+  const [appStoreId, setAppStoreId] = useState(initialAppStoreId ?? "");
   const [location, setLocation] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setAppStoreId(initialAppStoreId ?? "");
+      setLocation("");
+    }
+  }, [open, initialAppStoreId]);
 
   const mutation = useMutation({
     mutationFn: postInstall,
@@ -488,10 +527,130 @@ function ConfirmActionDialog({
   );
 }
 
+function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => void }) {
+  const { t } = useI18n();
+  const [search, setSearch] = useState("");
+
+  const { data, isLoading, isError, refetch, isFetching } = useQuery<AppStoreResult>({
+    queryKey: ["cloudron-appstore"],
+    queryFn: fetchAppStore,
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
+  });
+
+  const allApps = data?.apps ?? [];
+
+  const filtered = allApps.filter((app) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    const title = (app.manifest?.title ?? app.id).toLowerCase();
+    const tagline = (app.manifest?.tagline ?? "").toLowerCase();
+    const tags = (app.manifest?.tags ?? []).join(" ").toLowerCase();
+    return title.includes(q) || tagline.includes(q) || app.id.toLowerCase().includes(q) || tags.includes(q);
+  });
+
+  return (
+    <Card>
+      <CardHeader className="pb-4">
+        <div className="flex items-center gap-2">
+          <Store className="h-5 w-5 text-primary" />
+          <div>
+            <CardTitle className="text-base">{t("admin.cloudron.appstore.title")}</CardTitle>
+            <CardDescription className="mt-0.5">{t("admin.cloudron.appstore.subtitle")}</CardDescription>
+          </div>
+        </div>
+        <div className="relative mt-3">
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder={t("admin.cloudron.appstore.search")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="ps-9"
+          />
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="text-sm">{t("admin.cloudron.appstore.loading")}</span>
+          </div>
+        ) : isError ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-6">
+            <XCircle className="h-10 w-10 text-destructive opacity-60" />
+            <p className="text-sm text-muted-foreground">{t("admin.cloudron.appstore.error")}</p>
+            <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}>
+              <RefreshCw className={`h-4 w-4 me-2 ${isFetching ? "animate-spin" : ""}`} />
+              {t("admin.cloudron.appstore.retry")}
+            </Button>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
+            <Store className="h-10 w-10 opacity-30" />
+            <p className="text-sm">{t("admin.cloudron.appstore.empty")}</p>
+          </div>
+        ) : (
+          <div>
+            {search.trim() && (
+              <p className="text-xs text-muted-foreground px-6 pb-3">
+                {filtered.length} {t("admin.cloudron.appstore.apps")}
+              </p>
+            )}
+            <div className="divide-y divide-border">
+              {filtered.map((app) => {
+                const title = app.manifest?.title ?? app.id;
+                const tagline = app.manifest?.tagline ?? "";
+                const icon = app.iconUrl;
+                return (
+                  <div key={app.id} className="flex items-center gap-4 px-6 py-3 hover:bg-muted/40 transition-colors">
+                    <div className="shrink-0">
+                      {icon ? (
+                        <img
+                          src={icon}
+                          alt={title}
+                          className="h-10 w-10 rounded-lg object-contain border border-border bg-background"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <div className="h-10 w-10 rounded-lg border border-border bg-muted flex items-center justify-center">
+                          <AppWindow className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm leading-tight">{title}</p>
+                      {tagline && (
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{tagline}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground/70 mt-0.5 font-mono">{app.id}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => onInstall(app.id)}
+                    >
+                      <Download className="h-3.5 w-3.5 me-1.5" />
+                      {t("admin.cloudron.appstore.install")}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function AdminCloudronPage() {
   const { t } = useI18n();
   const qc = useQueryClient();
   const [installOpen, setInstallOpen] = useState(false);
+  const [installAppStoreId, setInstallAppStoreId] = useState<string | undefined>(undefined);
   const [addInstanceOpen, setAddInstanceOpen] = useState(false);
   const [activeTasks, setActiveTasks] = useState<ActiveTask[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<CloudronInstance | null>(null);
@@ -536,6 +695,11 @@ export function AdminCloudronPage() {
     void refetch();
   };
 
+  function openInstall(appStoreId?: string) {
+    setInstallAppStoreId(appStoreId);
+    setInstallOpen(true);
+  }
+
   const configured = appsData?.configured !== false;
   const apps = appsData?.apps ?? [];
   const isLoading = instancesLoading || (hasInstances && appsLoading);
@@ -553,7 +717,7 @@ export function AdminCloudronPage() {
             {t("admin.cloudron.refresh")}
           </Button>
           {hasInstances && (
-            <Button size="sm" onClick={() => setInstallOpen(true)}>
+            <Button size="sm" onClick={() => openInstall()}>
               <Plus className="h-4 w-4 me-2" />
               {t("admin.cloudron.installApp")}
             </Button>
@@ -638,7 +802,7 @@ export function AdminCloudronPage() {
         </CardContent>
       </Card>
 
-      {/* Connection error alert — show when instances exist but apps fetch fails or reports not configured */}
+      {/* Connection error alert */}
       {!isLoading && hasInstances && (configured === false || !!appsError) && (
         <Alert variant="destructive">
           <XCircle className="h-4 w-4" />
@@ -674,114 +838,130 @@ export function AdminCloudronPage() {
         </div>
       )}
 
-      {/* Apps table — only shown when instances are configured */}
-      {hasInstances && (
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex items-center gap-2">
-              <AppWindow className="h-5 w-5 text-primary" />
-              <CardTitle className="text-base">{t("admin.cloudron.apps.title")}</CardTitle>
-            </div>
-            <CardDescription>{t("admin.cloudron.apps.subtitle")}</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                <span className="text-sm">{t("admin.cloudron.loading")}</span>
-              </div>
-            ) : apps.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
-                <AppWindow className="h-10 w-10 opacity-30" />
-                <p className="text-sm">{t("admin.cloudron.apps.empty")}</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("admin.cloudron.col.app")}</TableHead>
-                    <TableHead>{t("admin.cloudron.col.location")}</TableHead>
-                    <TableHead>{t("admin.cloudron.col.fqdn")}</TableHead>
-                    <TableHead>{t("admin.cloudron.col.runState")}</TableHead>
-                    <TableHead>{t("admin.cloudron.col.installState")}</TableHead>
-                    <TableHead className="text-end">{t("admin.cloudron.col.actions")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {apps.map((app) => {
-                    const title = app.manifest?.title ?? app.appStoreId ?? app.id;
-                    const isBusy = app.installationState === "installing" ||
-                      app.installationState?.startsWith("pending_");
-                    return (
-                      <TableRow key={app.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {app.manifest?.icon ? (
-                              <img src={app.manifest.icon} alt={title} className="h-6 w-6 rounded object-contain shrink-0" />
-                            ) : (
-                              <AppWindow className="h-5 w-5 text-muted-foreground shrink-0" />
-                            )}
-                            <div>
-                              <p className="font-medium text-sm leading-none">{title}</p>
-                              {app.manifest?.version && (
-                                <p className="text-xs text-muted-foreground mt-0.5">v{app.manifest.version}</p>
-                              )}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{app.location ?? "—"}</code>
-                        </TableCell>
-                        <TableCell>
-                          {app.domain ? (
-                            <a href={`https://${app.domain}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
-                              {app.domain}
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell><RunStateBadge state={app.runState} /></TableCell>
-                        <TableCell><InstallStateBadge state={app.installationState} /></TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
-                              disabled={isBusy}
-                              onClick={() => setConfirmAction({ type: "restart", app })}
-                            >
-                              <RotateCcw className="h-3.5 w-3.5 me-1" />
-                              {t("admin.cloudron.restart.btn")}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 px-2 text-xs text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
-                              disabled={isBusy}
-                              onClick={() => setConfirmAction({ type: "uninstall", app })}
-                            >
-                              <Trash2 className="h-3.5 w-3.5 me-1" />
-                              {t("admin.cloudron.uninstall.btn")}
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {/* Tabs: Installed Apps + Browse App Store */}
+      <Tabs defaultValue="installed">
+        <TabsList className="mb-4">
+          <TabsTrigger value="installed" className="flex items-center gap-2">
+            <AppWindow className="h-4 w-4" />
+            {t("admin.cloudron.tab.installed")}
+          </TabsTrigger>
+          <TabsTrigger value="appstore" className="flex items-center gap-2">
+            <Store className="h-4 w-4" />
+            {t("admin.cloudron.tab.appstore")}
+          </TabsTrigger>
+        </TabsList>
 
-      <InstallModal
-        open={installOpen}
-        onClose={() => setInstallOpen(false)}
-        onTaskStarted={handleTaskStarted}
-      />
+        <TabsContent value="installed">
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <AppWindow className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base">{t("admin.cloudron.apps.title")}</CardTitle>
+              </div>
+              <CardDescription>{t("admin.cloudron.apps.subtitle")}</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {!hasInstances ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground text-center px-6">
+                  <CloudOff className="h-10 w-10 opacity-30" />
+                  <p className="text-sm">{t("admin.cloudron.notConfigured.body")}</p>
+                </div>
+              ) : isLoading ? (
+                <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="text-sm">{t("admin.cloudron.loading")}</span>
+                </div>
+              ) : apps.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
+                  <AppWindow className="h-10 w-10 opacity-30" />
+                  <p className="text-sm">{t("admin.cloudron.apps.empty")}</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("admin.cloudron.col.app")}</TableHead>
+                      <TableHead>{t("admin.cloudron.col.location")}</TableHead>
+                      <TableHead>{t("admin.cloudron.col.fqdn")}</TableHead>
+                      <TableHead>{t("admin.cloudron.col.runState")}</TableHead>
+                      <TableHead>{t("admin.cloudron.col.installState")}</TableHead>
+                      <TableHead className="text-end">{t("admin.cloudron.col.actions")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {apps.map((app) => {
+                      const title = app.manifest?.title ?? app.appStoreId ?? app.id;
+                      const isBusy = app.installationState === "installing" ||
+                        app.installationState?.startsWith("pending_");
+                      return (
+                        <TableRow key={app.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {app.manifest?.icon ? (
+                                <img src={app.manifest.icon} alt={title} className="h-6 w-6 rounded object-contain shrink-0" />
+                              ) : (
+                                <AppWindow className="h-5 w-5 text-muted-foreground shrink-0" />
+                              )}
+                              <div>
+                                <p className="font-medium text-sm leading-none">{title}</p>
+                                {app.manifest?.version && (
+                                  <p className="text-xs text-muted-foreground mt-0.5">v{app.manifest.version}</p>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{app.location ?? "—"}</code>
+                          </TableCell>
+                          <TableCell>
+                            {app.domain ? (
+                              <a href={`https://${app.domain}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+                                {app.domain}
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell><RunStateBadge state={app.runState} /></TableCell>
+                          <TableCell><InstallStateBadge state={app.installationState} /></TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                disabled={isBusy}
+                                onClick={() => setConfirmAction({ type: "restart", app })}
+                              >
+                                <RotateCcw className="h-3.5 w-3.5 me-1" />
+                                {t("admin.cloudron.restart.btn")}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                                disabled={isBusy}
+                                onClick={() => setConfirmAction({ type: "uninstall", app })}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 me-1" />
+                                {t("admin.cloudron.uninstall.btn")}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="appstore">
+          <AppStoreBrowser onInstall={(appStoreId) => openInstall(appStoreId)} />
+        </TabsContent>
+      </Tabs>
 
       <AddInstanceModal
         open={addInstanceOpen}
@@ -790,6 +970,13 @@ export function AdminCloudronPage() {
           void qc.invalidateQueries({ queryKey: ["cloudron-instances"] });
           void qc.invalidateQueries({ queryKey: ["cloudron-apps"] });
         }}
+      />
+
+      <InstallModal
+        open={installOpen}
+        onClose={() => setInstallOpen(false)}
+        onTaskStarted={handleTaskStarted}
+        initialAppStoreId={installAppStoreId}
       />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
