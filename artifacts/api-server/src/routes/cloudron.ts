@@ -56,8 +56,14 @@ router.get("/apps", requireAdmin, async (_req: Request, res: Response) => {
  * Queues an app installation from the Cloudron App Store.
  * Body: { appStoreId: string, location?: string }
  * Returns: { taskId, appId } immediately — does NOT wait for install to complete.
+ * Returns: { enabled: false } when integration is disabled.
  */
 router.post("/apps/install", requireAdmin, async (req: Request, res: Response) => {
+  if (process.env.CLOUDRON_ENABLED !== "true") {
+    res.json({ enabled: false });
+    return;
+  }
+
   const { appStoreId, location, portBindings, accessRestriction } = req.body as {
     appStoreId?: string;
     location?: string;
@@ -101,9 +107,14 @@ router.get("/tasks", requireAdmin, async (_req: Request, res: Response) => {
  * GET /api/cloudron/tasks/:id
  * Gets the live status of a specific Cloudron task.
  * Also returns cached install-registry data if available.
- * Returns: CloudronTask
+ * Returns: CloudronTask — or { enabled: false } when integration is disabled.
  */
 router.get("/tasks/:id", requireAdmin, async (req: Request, res: Response) => {
+  if (process.env.CLOUDRON_ENABLED !== "true") {
+    res.json({ enabled: false });
+    return;
+  }
+
   const taskId = req.params.id;
 
   try {
