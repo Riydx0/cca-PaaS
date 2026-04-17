@@ -67,10 +67,10 @@ export class CloudronClient {
     if (!response.ok) {
       let message = `Cloudron API error (HTTP ${response.status})`;
       try {
-        const body = await response.json();
-        if (body?.message) message = body.message;
+        const body = (await response.json()) as { message?: string };
+        if (typeof body?.message === "string") message = body.message;
       } catch {
-        // ignore parse error
+        // ignore parse error — keep generic message
       }
       throw new CloudronError(message, response.status, "API_ERROR");
     }

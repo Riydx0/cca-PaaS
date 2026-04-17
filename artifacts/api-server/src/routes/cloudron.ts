@@ -115,7 +115,7 @@ router.get("/tasks/:id", requireAdmin, async (req: Request, res: Response) => {
     return;
   }
 
-  const taskId = req.params.id;
+  const taskId = String(req.params.id);
 
   try {
     const task = await cloudronService.getTask(taskId);
