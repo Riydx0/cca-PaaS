@@ -277,6 +277,25 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
     );
   }
 
+  function isKnownPerm(p: string): p is typeof ALL_CLOUDRON_PERMS[number] {
+    return (ALL_CLOUDRON_PERMS as readonly string[]).includes(p);
+  }
+
+  const PERM_LABELS: Record<typeof ALL_CLOUDRON_PERMS[number], string> = {
+    view_cloudron: t("admin.user.cloudron.perm.view_cloudron"),
+    view_apps: t("admin.user.cloudron.perm.view_apps"),
+    install_apps: t("admin.user.cloudron.perm.install_apps"),
+    restart_apps: t("admin.user.cloudron.perm.restart_apps"),
+    uninstall_apps: t("admin.user.cloudron.perm.uninstall_apps"),
+    stop_apps: t("admin.user.cloudron.perm.stop_apps"),
+    start_apps: t("admin.user.cloudron.perm.start_apps"),
+    view_app_store: t("admin.user.cloudron.perm.view_app_store"),
+    view_mail: t("admin.user.cloudron.perm.view_mail"),
+    create_mailboxes: t("admin.user.cloudron.perm.create_mailboxes"),
+    edit_mailboxes: t("admin.user.cloudron.perm.edit_mailboxes"),
+    delete_mailboxes: t("admin.user.cloudron.perm.delete_mailboxes"),
+  };
+
   const displayNotes = notes !== null ? notes : (user?.adminNotes ?? "");
 
   const saveNotesMutation = useMutation({
@@ -672,7 +691,7 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
                       {accessQuery.isLoading ? (
                         <div className="flex items-center gap-2 py-6 text-muted-foreground justify-center">
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          <span className="text-sm">Loading…</span>
+                          <span className="text-sm">{t("admin.user.cloudron.loading")}</span>
                         </div>
                       ) : !accessQuery.data?.access && !cloudronEditMode ? (
                         <div className="rounded-xl border border-dashed border-border py-10 flex flex-col items-center gap-3 text-muted-foreground">
@@ -708,7 +727,7 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
                                 {isSuperAdmin && (
                                   <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={() => setCloudronEditMode(true)}>
                                     <RefreshCw className="h-3.5 w-3.5" />
-                                    Edit
+                                    {t("admin.user.cloudron.editBtn")}
                                   </Button>
                                 )}
                               </div>
@@ -716,10 +735,10 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
                                 <p className="text-xs font-semibold text-muted-foreground mb-2">{t("admin.user.cloudron.permissions")}</p>
                                 <div className="flex flex-wrap gap-1.5">
                                   {accessQuery.data.access.permissions.length === 0 ? (
-                                    <span className="text-xs text-muted-foreground">No permissions granted</span>
+                                    <span className="text-xs text-muted-foreground">{t("admin.user.cloudron.noPermissions")}</span>
                                   ) : accessQuery.data.access.permissions.map((perm) => (
                                     <Badge key={perm} variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400">
-                                      {t(`admin.user.cloudron.perm.${perm}` as any)}
+                                      {isKnownPerm(perm) ? PERM_LABELS[perm] : perm}
                                     </Badge>
                                   ))}
                                 </div>
@@ -787,7 +806,7 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
                                         className="shrink-0"
                                       />
                                       <span className="text-xs font-medium leading-tight">
-                                        {t(`admin.user.cloudron.perm.${perm}` as any)}
+                                        {PERM_LABELS[perm]}
                                       </span>
                                     </label>
                                   ))}

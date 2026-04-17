@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { requireSuperAdmin } from "../../middlewares/requireRole";
 import { db } from "@workspace/db";
 import {
@@ -6,8 +6,15 @@ import {
   cloudronInstancesTable,
   usersTable,
   CLOUDRON_PERMISSIONS,
+  type CloudronPermission,
 } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+
+function isCloudronPermission(p: string): p is CloudronPermission {
+  return (CLOUDRON_PERMISSIONS as readonly string[]).includes(p);
+}
+
+type UserIdParams = { userId: string };
 
 const router = Router({ mergeParams: true });
 
@@ -25,7 +32,7 @@ function buildAccessResponse(
   };
 }
 
-router.get("/", requireSuperAdmin, async (req, res) => {
+router.get("/", requireSuperAdmin, async (req: Request<UserIdParams>, res: Response) => {
   const userId = parseInt(req.params.userId, 10);
   if (isNaN(userId)) { res.status(400).json({ error: "Invalid user ID" }); return; }
 
@@ -48,7 +55,7 @@ router.get("/", requireSuperAdmin, async (req, res) => {
   }
 });
 
-router.post("/", requireSuperAdmin, async (req, res) => {
+router.post("/", requireSuperAdmin, async (req: Request<UserIdParams>, res: Response) => {
   const userId = parseInt(req.params.userId, 10);
   if (isNaN(userId)) { res.status(400).json({ error: "Invalid user ID" }); return; }
 
@@ -58,9 +65,7 @@ router.post("/", requireSuperAdmin, async (req, res) => {
     res.status(400).json({ error: "instanceId is required" }); return;
   }
   const validPerms = Array.isArray(permissions)
-    ? permissions.filter((p): p is typeof CLOUDRON_PERMISSIONS[number] =>
-        CLOUDRON_PERMISSIONS.includes(p as any)
-      )
+    ? permissions.filter(isCloudronPermission)
     : [];
 
   try {
@@ -86,7 +91,7 @@ router.post("/", requireSuperAdmin, async (req, res) => {
   }
 });
 
-router.patch("/", requireSuperAdmin, async (req, res) => {
+router.patch("/", requireSuperAdmin, async (req: Request<UserIdParams>, res: Response) => {
   const userId = parseInt(req.params.userId, 10);
   if (isNaN(userId)) { res.status(400).json({ error: "Invalid user ID" }); return; }
 
@@ -110,9 +115,7 @@ router.patch("/", requireSuperAdmin, async (req, res) => {
     }
 
     if (Array.isArray(permissions)) {
-      updateData.permissions = permissions.filter((p): p is typeof CLOUDRON_PERMISSIONS[number] =>
-        CLOUDRON_PERMISSIONS.includes(p as any)
-      );
+      updateData.permissions = permissions.filter(isCloudronPermission);
     }
 
     const [updated] = await db
@@ -134,7 +137,7 @@ router.patch("/", requireSuperAdmin, async (req, res) => {
   }
 });
 
-router.delete("/", requireSuperAdmin, async (req, res) => {
+router.delete("/", requireSuperAdmin, async (req: Request<UserIdParams>, res: Response) => {
   const userId = parseInt(req.params.userId, 10);
   if (isNaN(userId)) { res.status(400).json({ error: "Invalid user ID" }); return; }
 

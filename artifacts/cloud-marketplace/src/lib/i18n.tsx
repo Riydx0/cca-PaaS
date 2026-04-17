@@ -540,6 +540,9 @@ const translations = {
     "admin.user.cloudron.perm.create_mailboxes": "Create Mailboxes",
     "admin.user.cloudron.perm.edit_mailboxes": "Edit Mailboxes",
     "admin.user.cloudron.perm.delete_mailboxes": "Delete Mailboxes",
+    "admin.user.cloudron.noPermissions": "No permissions granted",
+    "admin.user.cloudron.loading": "Loading…",
+    "admin.user.cloudron.editBtn": "Edit",
 
     // ---- Set Password Page ----
     "setPassword.titleSetup": "Set Your Password",
@@ -628,7 +631,6 @@ const translations = {
     "admin.cloudron.disabled.title": "Cloudron Integration Disabled",
     "admin.cloudron.disabled.body": "Set CLOUDRON_ENABLED=true in your server environment to activate the Cloudron integration.",
     "admin.cloudron.connectionError.title": "Cannot Connect to Cloudron",
-    "admin.cloudron.connectionError.body": "Check your CLOUDRON_URL and CLOUDRON_TOKEN environment variables.",
     "admin.cloudron.apps.title": "Installed Apps",
     "admin.cloudron.apps.subtitle": "All apps currently installed on your Cloudron instance.",
     "admin.cloudron.apps.empty": "No apps installed yet.",
@@ -1251,6 +1253,9 @@ const translations = {
     "admin.user.cloudron.perm.create_mailboxes": "إنشاء صناديق بريد",
     "admin.user.cloudron.perm.edit_mailboxes": "تعديل صناديق البريد",
     "admin.user.cloudron.perm.delete_mailboxes": "حذف صناديق البريد",
+    "admin.user.cloudron.noPermissions": "لم تُمنَح أي صلاحيات",
+    "admin.user.cloudron.loading": "جارٍ التحميل…",
+    "admin.user.cloudron.editBtn": "تعديل",
 
     // ---- صفحة تعيين كلمة المرور ----
     "setPassword.titleSetup": "تعيين كلمة المرور",
@@ -1339,7 +1344,6 @@ const translations = {
     "admin.cloudron.disabled.title": "تكامل Cloudron معطّل",
     "admin.cloudron.disabled.body": "قم بتعيين CLOUDRON_ENABLED=true في بيئة الخادم لتفعيل تكامل Cloudron.",
     "admin.cloudron.connectionError.title": "تعذّر الاتصال بـ Cloudron",
-    "admin.cloudron.connectionError.body": "تحقق من متغيرات البيئة CLOUDRON_URL و CLOUDRON_TOKEN.",
     "admin.cloudron.apps.title": "التطبيقات المثبتة",
     "admin.cloudron.apps.subtitle": "جميع التطبيقات المثبتة حالياً على نسخة Cloudron الخاصة بك.",
     "admin.cloudron.apps.empty": "لم يتم تثبيت أي تطبيقات بعد.",
