@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useI18n } from "@/lib/i18n";
 import { adminFetch } from "@/lib/adminFetch";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   RefreshCw, Download, CheckCircle2, AlertCircle, FileText,
   Loader2, ArrowRight, Rocket, ServerCrash, RotateCcw, Timer,
+  Plug, PlugZap, Info,
 } from "lucide-react";
 
 interface VersionInfo {
@@ -27,6 +28,14 @@ interface UpdateLog {
   message: string | null;
   createdAt: string;
   completedAt: string | null;
+}
+
+interface CloudronStatus {
+  enabled: boolean;
+  configured: boolean;
+  connected: boolean;
+  baseUrl?: string;
+  error?: string;
 }
 
 type CheckStatus = "idle" | "checking" | "up_to_date" | "update_available" | "check_failed";
@@ -58,6 +67,150 @@ const logStatusColors: Record<string, string> = {
   completed: "bg-emerald-500/10 text-emerald-700 border-emerald-200",
   failed: "bg-red-500/10 text-red-700 border-red-200",
 };
+
+function CloudronStatusCard() {
+  const { t } = useI18n();
+  const [testing, setTesting] = useState(false);
+
+  const { data, isLoading, refetch } = useQuery<CloudronStatus>({
+    queryKey: ["admin", "system", "cloudron-status"],
+    queryFn: () => adminFetch("/api/admin/system/cloudron-status"),
+    refetchInterval: 60000,
+  });
+
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      await refetch();
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const missingVars: string[] = [];
+  if (data && !data.enabled) missingVars.push("CLOUDRON_ENABLED=true");
+  if (data && data.enabled && !data.configured) {
+    if (!data.baseUrl) missingVars.push("CLOUDRON_BASE_URL");
+    missingVars.push("CLOUDRON_API_TOKEN");
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <PlugZap className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <CardTitle className="text-base">{t("admin.system.cloudronStatus")}</CardTitle>
+              <CardDescription className="mt-0.5">{t("admin.system.cloudronStatusDesc")}</CardDescription>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 shrink-0"
+            onClick={handleTest}
+            disabled={testing || isLoading}
+          >
+            {testing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            {testing ? t("admin.system.cloudronTesting") : t("admin.system.cloudronTestBtn")}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <div className="flex gap-3">
+            <Skeleton className="h-6 w-20" />
+            <Skeleton className="h-6 w-24" />
+            <Skeleton className="h-6 w-24" />
+          </div>
+        ) : data ? (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                variant="outline"
+                className={
+                  data.enabled
+                    ? "bg-emerald-500/10 text-emerald-700 border-emerald-300"
+                    : "bg-secondary text-secondary-foreground border-border"
+                }
+              >
+                {data.enabled ? t("admin.system.cloudronEnabled") : t("admin.system.cloudronDisabled")}
+              </Badge>
+              <Badge
+                variant="outline"
+                className={
+                  data.configured
+                    ? "bg-emerald-500/10 text-emerald-700 border-emerald-300"
+                    : "bg-amber-500/10 text-amber-700 border-amber-300"
+                }
+              >
+                {data.configured ? t("admin.system.cloudronConfigured") : t("admin.system.cloudronNotConfigured")}
+              </Badge>
+              <Badge
+                variant="outline"
+                className={
+                  data.connected
+                    ? "bg-emerald-500/10 text-emerald-700 border-emerald-300"
+                    : "bg-red-500/10 text-red-700 border-red-300"
+                }
+              >
+                {data.connected ? (
+                  <span className="flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    {t("admin.system.cloudronConnected")}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <Plug className="h-3 w-3" />
+                    {t("admin.system.cloudronNotConnected")}
+                  </span>
+                )}
+              </Badge>
+            </div>
+
+            {data.baseUrl && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="font-medium">{t("admin.system.cloudronBaseUrl")}:</span>
+                <code className="text-xs bg-muted px-2 py-0.5 rounded break-all">{data.baseUrl}</code>
+              </div>
+            )}
+
+            {data.error && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-2">
+                <div className="flex items-start gap-2 text-amber-700 dark:text-amber-400">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <p className="text-sm">{data.error}</p>
+                </div>
+                {missingVars.length > 0 && (
+                  <div className="pl-6 space-y-1">
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                      <Info className="h-3 w-3" />
+                      {t("admin.system.cloudronMissingVarsDesc")}
+                    </p>
+                    <ul className="space-y-0.5">
+                      {missingVars.map((v) => (
+                        <li key={v}>
+                          <code className="text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded font-mono">
+                            {v}
+                          </code>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
 
 function StepRow({ step, index }: { step: StepState; index: number }) {
   return (
@@ -358,6 +511,8 @@ export function AdminSystemUpdates() {
           </CardContent>
         </Card>
       </div>
+
+      <CloudronStatusCard />
 
       {/* Update Status Banner */}
       {updatePhase === "idle" && (
