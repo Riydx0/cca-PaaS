@@ -61,8 +61,8 @@ router.post("/", requireSuperAdmin, async (req: Request<UserIdParams>, res: Resp
 
   const { instanceId, permissions } = req.body as { instanceId?: number; permissions?: string[] };
 
-  if (!instanceId || typeof instanceId !== "number") {
-    res.status(400).json({ error: "instanceId is required" }); return;
+  if (!instanceId || typeof instanceId !== "number" || !Number.isInteger(instanceId) || instanceId <= 0) {
+    res.status(400).json({ error: "instanceId must be a positive integer" }); return;
   }
   const validPerms = Array.isArray(permissions)
     ? permissions.filter(isCloudronPermission)
@@ -97,6 +97,10 @@ router.patch("/", requireSuperAdmin, async (req: Request<UserIdParams>, res: Res
 
   const { instanceId, permissions } = req.body as { instanceId?: number; permissions?: string[] };
 
+  if (instanceId === undefined && !Array.isArray(permissions)) {
+    res.status(400).json({ error: "At least one of instanceId or permissions is required" }); return;
+  }
+
   try {
     const [existing] = await db
       .select()
@@ -109,6 +113,9 @@ router.patch("/", requireSuperAdmin, async (req: Request<UserIdParams>, res: Res
     const updateData: Partial<typeof cloudronClientAccessTable.$inferInsert> = {};
 
     if (instanceId !== undefined) {
+      if (typeof instanceId !== "number" || !Number.isInteger(instanceId) || instanceId <= 0) {
+        res.status(400).json({ error: "instanceId must be a positive integer" }); return;
+      }
       const [inst] = await db.select().from(cloudronInstancesTable).where(eq(cloudronInstancesTable.id, instanceId)).limit(1);
       if (!inst) { res.status(404).json({ error: "Cloudron instance not found" }); return; }
       updateData.instanceId = instanceId;
