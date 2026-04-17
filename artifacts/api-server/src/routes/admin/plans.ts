@@ -218,6 +218,8 @@ router.delete("/:id", async (req: any, res) => {
 router.get("/:id/features", async (req, res) => {
   try {
     const planId = Number(req.params.id);
+    const [plan] = await db.select({ id: subscriptionPlansTable.id }).from(subscriptionPlansTable).where(eq(subscriptionPlansTable.id, planId));
+    if (!plan) { res.status(404).json({ error: "Plan not found" }); return; }
     const features = await db
       .select()
       .from(subscriptionPlanFeaturesTable)
