@@ -9,6 +9,7 @@ import adminRouter from "./admin/index";
 import billingRouter from "./billing";
 import pricingRouter from "./pricing";
 import subscriptionRouter from "./subscription";
+import cloudronRouter from "./cloudron";
 
 const router: IRouter = Router();
 
@@ -29,5 +30,8 @@ router.use("/billing", billingRouter);
 router.use("/pricing", pricingRouter);
 router.use("/subscription", subscriptionRouter);
 router.use("/admin", adminRouter);
+
+// Cloudron integration — admin-only, isolated module
+router.use("/cloudron", cloudronRouter);
 
 export default router;
