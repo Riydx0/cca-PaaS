@@ -6,12 +6,11 @@
  */
 
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, desc, and, inArray, sql } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   cloudronInstancesTable,
   auditLogsTable,
-  usersTable,
   insertCloudronInstanceSchema,
   updateCloudronInstanceSchema,
 } from "@workspace/db/schema";
@@ -344,39 +343,6 @@ function buildActivityMessage(action: string, entityId: string | null): string {
   return map[action] ?? action;
 }
 
-interface NormalizedLog {
-  id: number;
-  action: string;
-  entityType: string;
-  entityId: string | null;
-  status: "success" | "failed" | "info";
-  message: string;
-  userId: number | null;
-  userName: string | null;
-  userEmail: string | null;
-  createdAt: string;
-}
-
-function normalizeLog(
-  row: typeof auditLogsTable.$inferSelect,
-  user: { name: string; email: string } | null
-): NormalizedLog {
-  const det = row.details as Record<string, unknown> | null;
-  const status = ((det?.status as string) === "failed" ? "failed" : "success") as NormalizedLog["status"];
-  return {
-    id: row.id,
-    action: row.action,
-    entityType: row.entityType,
-    entityId: row.entityId ?? null,
-    status,
-    message: buildActivityMessage(row.action, row.entityId ?? null),
-    userId: row.userId ?? null,
-    userName: user?.name ?? null,
-    userEmail: user?.email ?? null,
-    createdAt: row.createdAt.toISOString(),
-  };
-}
-
 // ─── Admin action logging ─────────────────────────────────────────────────────
 
 interface LogAdminActionOptions {
@@ -389,13 +355,22 @@ interface LogAdminActionOptions {
 
 function logAdminCloudronAction(opts: LogAdminActionOptions): void {
   const { userId, instanceId, action, appId, details } = opts;
+  const entityId = appId ?? String(instanceId);
+  const message = buildActivityMessage(action, appId ?? null);
   db.insert(auditLogsTable)
     .values({
       userId,
       action,
       entityType: "cloudron_app",
-      entityId: appId ?? String(instanceId),
-      details: { instanceId, ...(appId ? { appId } : {}), ...details },
+      entityId,
+      details: {
+        instanceId,
+        clientId: userId,
+        status: "success",
+        message,
+        ...(appId ? { appId } : {}),
+        ...details,
+      },
     })
     .catch((err) => {
       logger.warn({ err }, "[cloudron] Failed to write admin activity log");
@@ -423,45 +398,6 @@ function fireAdminLog(req: Request, action: string, appId?: string): void {
     if (instanceId) logAdminCloudronAction({ userId, instanceId, action, appId });
   }).catch(() => {});
 }
-
-// ─── Admin activity log ───────────────────────────────────────────────────────
-
-/**
- * GET /api/cloudron/instances/:id/activity
- * Returns the last 100 Cloudron activity log entries for a specific instance.
- * Admins only. Filters at the DB level on details.instanceId; joins users for name.
- */
-router.get("/instances/:id/activity", requireAdmin, async (req: Request, res: Response) => {
-  const id = parseInt(String(req.params.id), 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid instance ID" }); return; }
-
-  try {
-    const rows = await db
-      .select({
-        log: auditLogsTable,
-        userName: usersTable.name,
-        userEmail: usersTable.email,
-      })
-      .from(auditLogsTable)
-      .leftJoin(usersTable, eq(auditLogsTable.userId, usersTable.id))
-      .where(
-        and(
-          inArray(auditLogsTable.entityType, ["cloudron_app", "cloudron_mailbox"]),
-          sql`(${auditLogsTable.details}->>'instanceId')::integer = ${id}`
-        )
-      )
-      .orderBy(desc(auditLogsTable.createdAt))
-      .limit(100);
-
-    const logs = rows.map((r) =>
-      normalizeLog(r.log, r.userName ? { name: r.userName, email: r.userEmail ?? "" } : null)
-    );
-
-    res.json({ logs });
-  } catch (err) {
-    handleCloudronError(err, res);
-  }
-});
 
 // ─── App Store catalogue cache ────────────────────────────────────────────────
 

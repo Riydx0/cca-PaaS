@@ -114,6 +114,7 @@ function logCloudronAction(opts: LogCloudronActionOptions): void {
   const { userId, instanceId, action, appId, mailboxName, details } = opts;
   const entityType = mailboxName ? "cloudron_mailbox" : "cloudron_app";
   const entityId = appId ?? mailboxName ?? String(instanceId);
+  const message = buildClientMessage(action, entityId);
 
   db.insert(auditLogsTable)
     .values({
@@ -123,6 +124,9 @@ function logCloudronAction(opts: LogCloudronActionOptions): void {
       entityId,
       details: {
         instanceId,
+        clientId: userId,
+        status: "success",
+        message,
         ...(appId ? { appId } : {}),
         ...(mailboxName ? { mailboxName } : {}),
         ...details,
