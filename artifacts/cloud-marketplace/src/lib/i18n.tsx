@@ -789,6 +789,10 @@ const translations = {
     "cloudron.client.task.starting": "Starting...",
     "cloudron.client.task.pollError": "Failed to track task progress.",
     "cloudron.client.loading": "Loading...",
+    "cloudron.client.instance": "Instance",
+    "cloudron.client.address": "Address",
+    "cloudron.client.error.title": "Unable to Load",
+    "cloudron.client.error.desc": "Could not load your Cloudron data. Please try again later.",
   },
   ar: {
     // Nav
@@ -1576,6 +1580,10 @@ const translations = {
     "cloudron.client.task.starting": "جارٍ البدء...",
     "cloudron.client.task.pollError": "تعذّر تتبع تقدم المهمة.",
     "cloudron.client.loading": "جارٍ التحميل...",
+    "cloudron.client.instance": "النسخة",
+    "cloudron.client.address": "العنوان",
+    "cloudron.client.error.title": "تعذّر التحميل",
+    "cloudron.client.error.desc": "تعذّر تحميل بيانات Cloudron الخاصة بك. يرجى المحاولة مرة أخرى لاحقًا.",
   },
 };
 

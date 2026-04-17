@@ -725,7 +725,7 @@ function MailboxesTab({ permissions }: { permissions: string[] }) {
             <TableHeader>
               <TableRow className="bg-muted/40">
                 <TableHead>{t("cloudron.client.mailboxes.name")}</TableHead>
-                {domain && <TableHead>Address</TableHead>}
+                {domain && <TableHead>{t("cloudron.client.address")}</TableHead>}
                 <TableHead className="text-end">{t("admin.cloudron.col.actions")}</TableHead>
               </TableRow>
             </TableHeader>
@@ -859,7 +859,9 @@ export function MyCloudronPage() {
     },
   });
 
-  const is403 = (summaryQuery.error as { status?: number } | null)?.status === 403;
+  const errStatus = (summaryQuery.error as { status?: number } | null)?.status;
+  const is403 = errStatus === 403;
+  const isGenericError = summaryQuery.isError && !is403;
 
   function addTask(task: ActiveTask) {
     setActiveTasks((prev) => [...prev.filter((t) => t.taskId !== task.taskId), task]);
@@ -875,6 +877,18 @@ export function MyCloudronPage() {
       <div className="flex items-center justify-center py-24 text-muted-foreground gap-2">
         <Loader2 className="h-6 w-6 animate-spin" />
         <span>{t("cloudron.client.loading")}</span>
+      </div>
+    );
+  }
+
+  if (isGenericError) {
+    return (
+      <div className="max-w-lg mx-auto mt-16">
+        <Alert variant="destructive">
+          <XCircle className="h-4 w-4" />
+          <AlertTitle>{t("cloudron.client.error.title")}</AlertTitle>
+          <AlertDescription>{t("cloudron.client.error.desc")}</AlertDescription>
+        </Alert>
       </div>
     );
   }
@@ -897,7 +911,7 @@ export function MyCloudronPage() {
   const perms = summary.permissions;
 
   const hasApps = perms.includes("view_apps");
-  const hasAppStore = perms.includes("view_app_store");
+  const hasAppStore = perms.includes("view_app_store") || perms.includes("install_apps");
   const canInstall = perms.includes("install_apps");
   const hasMail = perms.includes("view_mail");
 
@@ -921,9 +935,10 @@ export function MyCloudronPage() {
         <CardContent className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Instance</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">{t("cloudron.client.instance")}</p>
               <p className="font-medium">{summary.instanceName}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
+                <span className="me-1 text-[10px] uppercase tracking-wider font-semibold">{t("cloudron.client.address")}:</span>
                 <a href={summary.baseUrl} target="_blank" rel="noopener noreferrer" className="hover:underline underline-offset-2">
                   {summary.baseUrl}
                 </a>
