@@ -67,8 +67,8 @@ export class CloudronClient {
     if (!response.ok) {
       let message = `Cloudron API error (HTTP ${response.status})`;
       try {
-        const body = (await response.json()) as { message?: string };
-        if (typeof body?.message === "string") message = body.message;
+        const errBody = (await response.json()) as { message?: string };
+        if (typeof errBody?.message === "string") message = errBody.message;
       } catch {
         // ignore parse error — keep generic message
       }
@@ -87,23 +87,10 @@ export class CloudronClient {
   }
 }
 
-/** Singleton factory — reads env vars at call time (not at module load). */
-let _client: CloudronClient | null = null;
-
-export function getCloudronClient(): CloudronClient {
-  if (!_client) {
-    const baseUrl = process.env.CLOUDRON_BASE_URL;
-    const token = process.env.CLOUDRON_API_TOKEN;
-
-    if (!baseUrl || !token) {
-      throw new CloudronError(
-        "CLOUDRON_BASE_URL and CLOUDRON_API_TOKEN must be set",
-        500,
-        "MISCONFIGURED"
-      );
-    }
-
-    _client = new CloudronClient({ baseUrl, token });
-  }
-  return _client;
+/**
+ * Factory function — creates a CloudronClient from explicit credentials.
+ * Credentials come from the DB, never from env vars.
+ */
+export function createCloudronClient(baseUrl: string, token: string): CloudronClient {
+  return new CloudronClient({ baseUrl, token });
 }

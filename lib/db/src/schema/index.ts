@@ -11,3 +11,4 @@ export * from "./auditLogs";
 export * from "./passwordResetTokens";
 export * from "./subscriptionPlans";
 export * from "./userSubscriptions";
+export * from "./cloudronInstances";

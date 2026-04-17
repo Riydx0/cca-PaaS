@@ -1,8 +1,9 @@
 /**
  * Cloudron Apps Module
  * Wraps the /api/v1/apps endpoints for listing and installing applications.
+ * Functions accept a CloudronClient instance (injected from DB credentials).
  */
-import { getCloudronClient } from "./client";
+import type { CloudronClient } from "./client";
 
 export interface CloudronApp {
   id: string;
@@ -52,8 +53,7 @@ export interface InstallAppResponse {
 }
 
 /** List all installed apps on the Cloudron. */
-export async function listApps(): Promise<CloudronApp[]> {
-  const client = getCloudronClient();
+export async function listApps(client: CloudronClient): Promise<CloudronApp[]> {
   const response = await client.get<CloudronAppsResponse>("/apps");
   return response.apps ?? [];
 }
@@ -62,8 +62,10 @@ export async function listApps(): Promise<CloudronApp[]> {
  * Install a new app from the Cloudron App Store.
  * Returns immediately with the taskId — does NOT wait for completion.
  */
-export async function installApp(params: InstallAppParams): Promise<InstallAppResponse> {
-  const client = getCloudronClient();
+export async function installApp(
+  client: CloudronClient,
+  params: InstallAppParams
+): Promise<InstallAppResponse> {
   return client.post<InstallAppResponse>("/apps/install", {
     appStoreId: params.appStoreId,
     location: params.location ?? "",
