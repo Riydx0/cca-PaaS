@@ -43,6 +43,7 @@ import { SubscriptionPage } from "@/pages/SubscriptionPage";
 import { MyServicesPage } from "@/pages/MyServicesPage";
 import { ServerDetailsPage } from "@/pages/ServerDetailsPage";
 import { AdminServiceInstancesPage } from "@/pages/admin/AdminServiceInstancesPage";
+import { AdminCloudronPage } from "@/pages/admin/AdminCloudronPage";
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -251,6 +252,9 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
       </Route>
       <Route path="/admin/service-instances">
         <AdminRoute component={AdminServiceInstancesPage} />
+      </Route>
+      <Route path="/admin/cloudron">
+        <AdminRoute component={AdminCloudronPage} />
       </Route>
 
       <Route component={NotFound} />

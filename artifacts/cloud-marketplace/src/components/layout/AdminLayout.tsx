@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   LayoutDashboard, Users, Receipt, Server, Settings, Menu, LogOut,
   ShieldCheck, ArrowLeft, CreditCard, Activity, FileText, Palette,
-  Sparkles, BadgeCheck, ChevronDown, ChevronRight, Layers,
+  Sparkles, BadgeCheck, ChevronDown, ChevronRight, Layers, AppWindow,
 } from "lucide-react";
 
 export function AdminLayout({ children }: { children: ReactNode }) {
@@ -43,6 +43,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     { href: "/admin/orders",            label: t("admin.nav.orders"),            icon: Receipt },
     { href: "/admin/services",          label: t("admin.nav.services"),          icon: Server },
     { href: "/admin/service-instances", label: t("admin.nav.serviceInstances"),  icon: Layers },
+    { href: "/admin/cloudron",          label: t("admin.nav.cloudron"),          icon: AppWindow },
     { href: "/admin/audit-logs",        label: t("admin.nav.auditLogs"),         icon: Activity },
   ];
 
