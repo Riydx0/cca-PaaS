@@ -126,6 +126,9 @@ const { default: app } = await import("./app.js");
 const { cloudronHealthMonitor } = await import("./services/CloudronHealthMonitor.js");
 cloudronHealthMonitor.start();
 
+const { cloudronSyncService } = await import("./services/CloudronSyncService.js");
+cloudronSyncService.start();
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {

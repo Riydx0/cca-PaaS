@@ -9,6 +9,7 @@ export const cloudronInstancesTable = pgTable("cloudron_instances", {
   apiToken: text("api_token").notNull(),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastSyncAt: timestamp("last_sync_at"),
 });
 
 export const insertCloudronInstanceSchema = createInsertSchema(cloudronInstancesTable).omit({

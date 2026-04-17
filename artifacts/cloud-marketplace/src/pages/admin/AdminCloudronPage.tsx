@@ -67,6 +67,7 @@ interface CloudronInstance {
   apiToken: string;
   isActive: boolean;
   createdAt: string;
+  lastSyncAt?: string | null;
 }
 
 interface CloudronInstancesResult {
@@ -225,6 +226,100 @@ async function postUpdate(appId: string): Promise<AppActionResult> {
 
 async function fetchAppStore(): Promise<AppStoreResult> {
   return adminFetch<AppStoreResult>("/api/cloudron/appstore");
+}
+
+interface ActivityLog {
+  id: number;
+  userId: number | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  details: Record<string, unknown> | null;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
+async function fetchInstanceActivity(instanceId: number): Promise<{ logs: ActivityLog[] }> {
+  return adminFetch<{ logs: ActivityLog[] }>(`/api/cloudron/instances/${instanceId}/activity`);
+}
+
+function actionLabel(action: string): string {
+  const map: Record<string, string> = {
+    cloudron_install: "Install",
+    cloudron_restart: "Restart",
+    cloudron_stop: "Stop",
+    cloudron_start: "Start",
+    cloudron_uninstall: "Uninstall",
+    cloudron_create_mailbox: "Create Mailbox",
+    cloudron_edit_mailbox: "Edit Mailbox",
+    cloudron_delete_mailbox: "Delete Mailbox",
+    cloudron_sync: "Background Sync",
+  };
+  return map[action] ?? action;
+}
+
+function AdminActivityTab({ instanceId }: { instanceId: number }) {
+  const { t } = useI18n();
+  const { data, isLoading } = useQuery({
+    queryKey: ["cloudron-activity", instanceId],
+    queryFn: () => fetchInstanceActivity(instanceId),
+    staleTime: 30_000,
+  });
+
+  const logs = data?.logs ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span className="text-sm">{t("admin.cloudron.activity.loading")}</span>
+      </div>
+    );
+  }
+
+  if (logs.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
+        <Clock className="h-10 w-10 opacity-30" />
+        <p className="text-sm">{t("admin.cloudron.activity.empty")}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-border overflow-hidden">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/40">
+            <TableHead>{t("admin.cloudron.activity.col.action")}</TableHead>
+            <TableHead>{t("admin.cloudron.activity.col.entity")}</TableHead>
+            <TableHead>{t("admin.cloudron.activity.col.user")}</TableHead>
+            <TableHead>{t("admin.cloudron.activity.col.date")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {logs.map((log) => (
+            <TableRow key={log.id}>
+              <TableCell>
+                <Badge variant="outline" className="font-mono text-xs">
+                  {actionLabel(log.action)}
+                </Badge>
+              </TableCell>
+              <TableCell className="font-mono text-xs text-muted-foreground">
+                {log.entityId ?? log.entityType}
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                {log.userId ?? "—"}
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                {new Date(log.createdAt).toLocaleString()}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
 }
 
 function RunStateBadge({ state }: { state?: string }) {
@@ -1137,6 +1232,7 @@ export function AdminCloudronPage() {
                   <TableHead>{t("admin.cloudron.instances.col.name")}</TableHead>
                   <TableHead>{t("admin.cloudron.instances.col.url")}</TableHead>
                   <TableHead>{t("admin.cloudron.instances.col.status")}</TableHead>
+                  <TableHead>{t("admin.cloudron.instances.col.lastSync")}</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -1155,6 +1251,11 @@ export function AdminCloudronPage() {
                         : "bg-secondary text-secondary-foreground border-border"}>
                         {inst.isActive ? t("admin.cloudron.instances.active") : t("admin.cloudron.instances.inactive")}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {inst.lastSyncAt
+                        ? new Date(inst.lastSyncAt).toLocaleString()
+                        : t("admin.cloudron.instances.neverSynced")}
                     </TableCell>
                     <TableCell className="text-end">
                       <Button
@@ -1210,7 +1311,7 @@ export function AdminCloudronPage() {
         </div>
       )}
 
-      {/* Tabs: Installed Apps + Browse App Store */}
+      {/* Tabs: Installed Apps + Browse App Store + Activity Log */}
       <Tabs defaultValue="installed">
         <TabsList className="mb-4">
           <TabsTrigger value="installed" className="flex items-center gap-2">
@@ -1221,6 +1322,12 @@ export function AdminCloudronPage() {
             <Store className="h-4 w-4" />
             {t("admin.cloudron.tab.appstore")}
           </TabsTrigger>
+          {hasInstances && (
+            <TabsTrigger value="activity" className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              {t("admin.cloudron.tab.activity")}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="installed">
@@ -1367,6 +1474,22 @@ export function AdminCloudronPage() {
         <TabsContent value="appstore">
           <AppStoreBrowser onInstall={(appStoreId) => openInstall(appStoreId)} />
         </TabsContent>
+
+        {hasInstances && (
+          <TabsContent value="activity">
+            <Card>
+              <CardHeader className="pb-4">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-primary" />
+                  <CardTitle className="text-base">{t("admin.cloudron.activity.title")}</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <AdminActivityTab instanceId={instances[0].id} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
 
       <AddInstanceModal

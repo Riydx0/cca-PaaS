@@ -740,6 +740,16 @@ const translations = {
     "admin.cloudron.update.confirm.title": "Update App",
     "admin.cloudron.update.confirm.body": "Update \"{name}\" to the latest available version? The app may be briefly unavailable during the update.",
     "admin.cloudron.update.confirm.submit": "Yes, Update",
+    "admin.cloudron.tab.activity": "Activity Log",
+    "admin.cloudron.activity.title": "Instance Activity Log",
+    "admin.cloudron.activity.empty": "No activity recorded yet.",
+    "admin.cloudron.activity.loading": "Loading activity…",
+    "admin.cloudron.activity.col.action": "Action",
+    "admin.cloudron.activity.col.entity": "Entity",
+    "admin.cloudron.activity.col.date": "Date",
+    "admin.cloudron.activity.col.user": "User",
+    "admin.cloudron.instances.col.lastSync": "Last Sync",
+    "admin.cloudron.instances.neverSynced": "Never synced",
 
     // ---- Client Cloudron Portal ----
     "cloudron.client.noAccess": "No Cloudron Access",
@@ -808,6 +818,12 @@ const translations = {
     "cloudron.client.address": "Address",
     "cloudron.client.error.title": "Unable to Load",
     "cloudron.client.error.desc": "Could not load your Cloudron data. Please try again later.",
+    "cloudron.client.tab.activity": "Activity",
+    "cloudron.client.activity.empty": "No activity recorded yet.",
+    "cloudron.client.activity.loading": "Loading activity…",
+    "cloudron.client.activity.col.action": "Action",
+    "cloudron.client.activity.col.entity": "Entity",
+    "cloudron.client.activity.col.date": "Date",
   },
   ar: {
     // Nav
@@ -1546,6 +1562,16 @@ const translations = {
     "admin.cloudron.update.confirm.title": "تحديث التطبيق",
     "admin.cloudron.update.confirm.body": "تحديث \"{name}\" إلى أحدث إصدار متاح؟ قد يتوقف التطبيق مؤقتًا أثناء التحديث.",
     "admin.cloudron.update.confirm.submit": "نعم، تحديث",
+    "admin.cloudron.tab.activity": "سجل النشاط",
+    "admin.cloudron.activity.title": "سجل نشاط النسخة",
+    "admin.cloudron.activity.empty": "لا يوجد نشاط مسجّل بعد.",
+    "admin.cloudron.activity.loading": "جارٍ تحميل السجل…",
+    "admin.cloudron.activity.col.action": "الإجراء",
+    "admin.cloudron.activity.col.entity": "الكيان",
+    "admin.cloudron.activity.col.date": "التاريخ",
+    "admin.cloudron.activity.col.user": "المستخدم",
+    "admin.cloudron.instances.col.lastSync": "آخر مزامنة",
+    "admin.cloudron.instances.neverSynced": "لم تتم مزامنة بعد",
 
     // ---- بوابة Cloudron للعميل ----
     "cloudron.client.noAccess": "لا يوجد وصول إلى Cloudron",
@@ -1614,6 +1640,12 @@ const translations = {
     "cloudron.client.address": "العنوان",
     "cloudron.client.error.title": "تعذّر التحميل",
     "cloudron.client.error.desc": "تعذّر تحميل بيانات Cloudron الخاصة بك. يرجى المحاولة مرة أخرى لاحقًا.",
+    "cloudron.client.tab.activity": "النشاط",
+    "cloudron.client.activity.empty": "لا يوجد نشاط مسجّل بعد.",
+    "cloudron.client.activity.loading": "جارٍ تحميل السجل…",
+    "cloudron.client.activity.col.action": "الإجراء",
+    "cloudron.client.activity.col.entity": "الكيان",
+    "cloudron.client.activity.col.date": "التاريخ",
   },
 };
 

@@ -6,10 +6,11 @@
  */
 
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   cloudronInstancesTable,
+  auditLogsTable,
   insertCloudronInstanceSchema,
   updateCloudronInstanceSchema,
 } from "@workspace/db/schema";
@@ -310,6 +311,46 @@ router.get("/tasks/:id", requireAdmin, async (req: Request, res: Response) => {
     const task = await cloudronService.getTask(taskId);
     const cached = cloudronService.getInstallStatus(taskId);
     res.json({ ...task, _installRecord: cached ?? undefined });
+  } catch (err) {
+    handleCloudronError(err, res);
+  }
+});
+
+// ─── Admin activity log ───────────────────────────────────────────────────────
+
+/**
+ * GET /api/cloudron/instances/:id/activity
+ * Returns the last 100 Cloudron activity log entries for a specific instance.
+ * Admins only.
+ */
+router.get("/instances/:id/activity", requireAdmin, async (req: Request, res: Response) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid instance ID" }); return; }
+
+  try {
+    const appLogs = await db
+      .select()
+      .from(auditLogsTable)
+      .where(eq(auditLogsTable.entityType, "cloudron_app"))
+      .orderBy(desc(auditLogsTable.createdAt))
+      .limit(200);
+
+    const mailboxLogs = await db
+      .select()
+      .from(auditLogsTable)
+      .where(eq(auditLogsTable.entityType, "cloudron_mailbox"))
+      .orderBy(desc(auditLogsTable.createdAt))
+      .limit(200);
+
+    const all = [...appLogs, ...mailboxLogs]
+      .filter((r) => {
+        const det = r.details as Record<string, unknown> | null;
+        return det?.instanceId === id;
+      })
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 100);
+
+    res.json({ logs: all });
   } catch (err) {
     handleCloudronError(err, res);
   }

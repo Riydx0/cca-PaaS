@@ -45,6 +45,7 @@ import {
   Cloud,
   RefreshCw,
   Pencil,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -83,6 +84,30 @@ interface Mailbox {
   name: string;
   memberId?: string;
   groupIds?: string[];
+}
+
+interface ActivityLog {
+  id: number;
+  userId: number | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+function activityLabel(action: string): string {
+  const map: Record<string, string> = {
+    cloudron_install: "Install",
+    cloudron_restart: "Restart",
+    cloudron_stop: "Stop",
+    cloudron_start: "Start",
+    cloudron_uninstall: "Uninstall",
+    cloudron_create_mailbox: "Create Mailbox",
+    cloudron_edit_mailbox: "Edit Mailbox",
+    cloudron_delete_mailbox: "Delete Mailbox",
+  };
+  return map[action] ?? action;
 }
 
 interface TaskResult {
@@ -128,6 +153,10 @@ async function fetchMailboxes(): Promise<{ mailboxes: Mailbox[]; domain: string 
 
 async function fetchTask(taskId: string): Promise<CloudronTask> {
   return clientFetch<CloudronTask>(`/api/cloudron-client/tasks/${taskId}`);
+}
+
+async function fetchActivity(): Promise<{ logs: ActivityLog[] }> {
+  return clientFetch<{ logs: ActivityLog[] }>("/api/cloudron-client/activity");
 }
 
 async function postInstall(body: { appStoreId: string; location?: string }): Promise<TaskResult> {
@@ -633,6 +662,66 @@ function AppStoreTab({
   );
 }
 
+function ClientActivityTab() {
+  const { t } = useI18n();
+  const { data, isLoading } = useQuery({
+    queryKey: ["client-cloudron-activity"],
+    queryFn: fetchActivity,
+    staleTime: 30_000,
+  });
+
+  const logs = data?.logs ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span className="text-sm">{t("cloudron.client.activity.loading")}</span>
+      </div>
+    );
+  }
+
+  if (logs.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+        <Clock className="h-10 w-10 mx-auto mb-3 opacity-30" />
+        <p className="text-sm">{t("cloudron.client.activity.empty")}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-border overflow-hidden">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/40">
+            <TableHead>{t("cloudron.client.activity.col.action")}</TableHead>
+            <TableHead>{t("cloudron.client.activity.col.entity")}</TableHead>
+            <TableHead>{t("cloudron.client.activity.col.date")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {logs.map((log) => (
+            <TableRow key={log.id}>
+              <TableCell>
+                <Badge variant="outline" className="font-mono text-xs">
+                  {activityLabel(log.action)}
+                </Badge>
+              </TableCell>
+              <TableCell className="font-mono text-xs text-muted-foreground">
+                {log.entityId ?? log.entityType}
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                {new Date(log.createdAt).toLocaleString()}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 function MailboxesTab({ permissions }: { permissions: string[] }) {
   const { t } = useI18n();
   const qc = useQueryClient();
@@ -917,6 +1006,8 @@ export function MyCloudronPage() {
 
   const showTabs = hasApps || hasAppStore || hasMail;
 
+  const defaultTab = hasApps ? "apps" : hasAppStore ? "appstore" : hasMail ? "mailboxes" : "activity";
+
   return (
     <div className="space-y-6">
       <div>
@@ -963,50 +1054,55 @@ export function MyCloudronPage() {
       </Card>
 
       {/* Tabs */}
-      {showTabs && (
-        <Tabs defaultValue={hasApps ? "apps" : hasAppStore ? "appstore" : "mailboxes"}>
-          <TabsList className="w-full justify-start gap-0.5">
-            {hasApps && (
-              <TabsTrigger value="apps" className="gap-1.5">
-                <Cloud className="h-4 w-4" />{t("cloudron.client.tab.apps")}
-              </TabsTrigger>
-            )}
-            {hasAppStore && (
-              <TabsTrigger value="appstore" className="gap-1.5">
-                <Store className="h-4 w-4" />{t("cloudron.client.tab.appstore")}
-              </TabsTrigger>
-            )}
-            {hasMail && (
-              <TabsTrigger value="mailboxes" className="gap-1.5">
-                <Mail className="h-4 w-4" />{t("cloudron.client.tab.mailboxes")}
-              </TabsTrigger>
-            )}
-          </TabsList>
-
+      <Tabs defaultValue={defaultTab}>
+        <TabsList className="w-full justify-start gap-0.5">
           {hasApps && (
-            <TabsContent value="apps" className="mt-4">
-              <MyAppsTab
-                permissions={perms}
-                activeTasks={activeTasks}
-                onTaskStarted={addTask}
-                onTaskDone={removeTask}
-              />
-            </TabsContent>
+            <TabsTrigger value="apps" className="gap-1.5">
+              <Cloud className="h-4 w-4" />{t("cloudron.client.tab.apps")}
+            </TabsTrigger>
           )}
-
           {hasAppStore && (
-            <TabsContent value="appstore" className="mt-4">
-              <AppStoreTab canInstall={canInstall} onTaskStarted={addTask} />
-            </TabsContent>
+            <TabsTrigger value="appstore" className="gap-1.5">
+              <Store className="h-4 w-4" />{t("cloudron.client.tab.appstore")}
+            </TabsTrigger>
           )}
-
           {hasMail && (
-            <TabsContent value="mailboxes" className="mt-4">
-              <MailboxesTab permissions={perms} />
-            </TabsContent>
+            <TabsTrigger value="mailboxes" className="gap-1.5">
+              <Mail className="h-4 w-4" />{t("cloudron.client.tab.mailboxes")}
+            </TabsTrigger>
           )}
-        </Tabs>
-      )}
+          <TabsTrigger value="activity" className="gap-1.5">
+            <Clock className="h-4 w-4" />{t("cloudron.client.tab.activity")}
+          </TabsTrigger>
+        </TabsList>
+
+        {hasApps && (
+          <TabsContent value="apps" className="mt-4">
+            <MyAppsTab
+              permissions={perms}
+              activeTasks={activeTasks}
+              onTaskStarted={addTask}
+              onTaskDone={removeTask}
+            />
+          </TabsContent>
+        )}
+
+        {hasAppStore && (
+          <TabsContent value="appstore" className="mt-4">
+            <AppStoreTab canInstall={canInstall} onTaskStarted={addTask} />
+          </TabsContent>
+        )}
+
+        {hasMail && (
+          <TabsContent value="mailboxes" className="mt-4">
+            <MailboxesTab permissions={perms} />
+          </TabsContent>
+        )}
+
+        <TabsContent value="activity" className="mt-4">
+          <ClientActivityTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

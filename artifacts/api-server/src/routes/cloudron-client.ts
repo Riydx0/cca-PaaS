@@ -11,8 +11,9 @@ import { db } from "@workspace/db";
 import {
   cloudronClientAccessTable,
   cloudronInstancesTable,
+  auditLogsTable,
 } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireRole";
 import { createCloudronClient, CloudronError } from "../cloudron/client";
 import {
@@ -23,6 +24,7 @@ import {
   startApp,
   uninstallApp,
 } from "../cloudron/apps";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -79,7 +81,7 @@ async function withPermission(
   req: Request,
   res: Response,
   perm: string,
-  handler: (access: ClientAccessResult) => Promise<void>
+  handler: (access: ClientAccessResult, userId: number) => Promise<void>
 ): Promise<void> {
   const userId = getCurrentUserId(req);
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
@@ -89,10 +91,45 @@ async function withPermission(
     if (!access || !hasPermission(access.permissions, perm)) {
       res.status(403).json({ error: "Forbidden", missing: perm }); return;
     }
-    await handler(access);
+    await handler(access, userId);
   } catch (err) {
     handleCloudronError(err, res);
   }
+}
+
+// ─── Activity logging helper ───────────────────────────────────────────────────
+
+interface LogCloudronActionOptions {
+  userId: number;
+  instanceId: number;
+  action: string;
+  appId?: string;
+  mailboxName?: string;
+  details?: Record<string, unknown>;
+}
+
+/** Fire-and-forget: logs a Cloudron action to audit_logs. Never throws. */
+function logCloudronAction(opts: LogCloudronActionOptions): void {
+  const { userId, instanceId, action, appId, mailboxName, details } = opts;
+  const entityType = mailboxName ? "cloudron_mailbox" : "cloudron_app";
+  const entityId = appId ?? mailboxName ?? String(instanceId);
+
+  db.insert(auditLogsTable)
+    .values({
+      userId,
+      action,
+      entityType,
+      entityId,
+      details: {
+        instanceId,
+        ...(appId ? { appId } : {}),
+        ...(mailboxName ? { mailboxName } : {}),
+        ...details,
+      },
+    })
+    .catch((err) => {
+      logger.warn({ err }, "[cloudron-client] Failed to write activity log");
+    });
 }
 
 // ─── Summary ───────────────────────────────────────────────────────────────────
@@ -110,6 +147,52 @@ router.get("/summary", requireAuth, async (req: Request, res: Response) => {
       linkedAt: access.linkedAt.toISOString(),
       permissions: access.permissions,
     });
+  });
+});
+
+// ─── Activity log ──────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/cloudron-client/activity
+ * Returns the last 50 Cloudron activity log entries for the current user's instance.
+ * Required permission: view_cloudron
+ */
+router.get("/activity", requireAuth, async (req: Request, res: Response) => {
+  await withPermission(req, res, "view_cloudron", async (access, userId) => {
+    const rows = await db
+      .select()
+      .from(auditLogsTable)
+      .where(
+        and(
+          eq(auditLogsTable.userId, userId),
+          eq(auditLogsTable.entityType, "cloudron_app")
+        )
+      )
+      .orderBy(desc(auditLogsTable.createdAt))
+      .limit(50);
+
+    // Also include mailbox entries
+    const mailboxRows = await db
+      .select()
+      .from(auditLogsTable)
+      .where(
+        and(
+          eq(auditLogsTable.userId, userId),
+          eq(auditLogsTable.entityType, "cloudron_mailbox")
+        )
+      )
+      .orderBy(desc(auditLogsTable.createdAt))
+      .limit(50);
+
+    const all = [...rows, ...mailboxRows]
+      .filter((r) => {
+        const det = r.details as Record<string, unknown> | null;
+        return det?.instanceId === access.instance.id;
+      })
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 50);
+
+    res.json({ logs: all });
   });
 });
 
@@ -135,13 +218,20 @@ router.get("/apps", requireAuth, async (req: Request, res: Response) => {
  * Body: { appStoreId, location? }
  */
 router.post("/apps/install", requireAuth, async (req: Request, res: Response) => {
-  await withPermission(req, res, "install_apps", async (access) => {
+  await withPermission(req, res, "install_apps", async (access, userId) => {
     const { appStoreId, location } = req.body as { appStoreId?: string; location?: string };
     if (!appStoreId || typeof appStoreId !== "string") {
       res.status(400).json({ error: "appStoreId is required" }); return;
     }
     const client = createCloudronClient(access.instance.baseUrl, access.instance.apiToken);
     const result = await installApp(client, { appStoreId, location });
+    logCloudronAction({
+      userId,
+      instanceId: access.instance.id,
+      action: "cloudron_install",
+      appId: appStoreId,
+      details: { location, taskId: (result as Record<string, unknown>).taskId },
+    });
     res.status(202).json(result);
   });
 });
@@ -152,10 +242,11 @@ router.post("/apps/install", requireAuth, async (req: Request, res: Response) =>
  * Required permission: restart_apps
  */
 router.post("/apps/:id/restart", requireAuth, async (req: Request, res: Response) => {
-  await withPermission(req, res, "restart_apps", async (access) => {
+  await withPermission(req, res, "restart_apps", async (access, userId) => {
     const appId = String(req.params.id);
     const client = createCloudronClient(access.instance.baseUrl, access.instance.apiToken);
     const result = await restartApp(client, appId);
+    logCloudronAction({ userId, instanceId: access.instance.id, action: "cloudron_restart", appId });
     res.status(202).json(result);
   });
 });
@@ -166,10 +257,11 @@ router.post("/apps/:id/restart", requireAuth, async (req: Request, res: Response
  * Required permission: stop_apps
  */
 router.post("/apps/:id/stop", requireAuth, async (req: Request, res: Response) => {
-  await withPermission(req, res, "stop_apps", async (access) => {
+  await withPermission(req, res, "stop_apps", async (access, userId) => {
     const appId = String(req.params.id);
     const client = createCloudronClient(access.instance.baseUrl, access.instance.apiToken);
     const result = await stopApp(client, appId);
+    logCloudronAction({ userId, instanceId: access.instance.id, action: "cloudron_stop", appId });
     res.status(202).json(result);
   });
 });
@@ -180,10 +272,11 @@ router.post("/apps/:id/stop", requireAuth, async (req: Request, res: Response) =
  * Required permission: start_apps
  */
 router.post("/apps/:id/start", requireAuth, async (req: Request, res: Response) => {
-  await withPermission(req, res, "start_apps", async (access) => {
+  await withPermission(req, res, "start_apps", async (access, userId) => {
     const appId = String(req.params.id);
     const client = createCloudronClient(access.instance.baseUrl, access.instance.apiToken);
     const result = await startApp(client, appId);
+    logCloudronAction({ userId, instanceId: access.instance.id, action: "cloudron_start", appId });
     res.status(202).json(result);
   });
 });
@@ -194,10 +287,11 @@ router.post("/apps/:id/start", requireAuth, async (req: Request, res: Response) 
  * Required permission: uninstall_apps
  */
 router.post("/apps/:id/uninstall", requireAuth, async (req: Request, res: Response) => {
-  await withPermission(req, res, "uninstall_apps", async (access) => {
+  await withPermission(req, res, "uninstall_apps", async (access, userId) => {
     const appId = String(req.params.id);
     const client = createCloudronClient(access.instance.baseUrl, access.instance.apiToken);
     const result = await uninstallApp(client, appId);
+    logCloudronAction({ userId, instanceId: access.instance.id, action: "cloudron_uninstall", appId });
     res.status(202).json(result);
   });
 });
@@ -262,7 +356,7 @@ router.get("/mailboxes", requireAuth, async (req: Request, res: Response) => {
  * Body: { name, password }
  */
 router.post("/mailboxes", requireAuth, async (req: Request, res: Response) => {
-  await withPermission(req, res, "create_mailboxes", async (access) => {
+  await withPermission(req, res, "create_mailboxes", async (access, userId) => {
     const { name, password } = req.body as { name?: string; password?: string };
     if (!name || !password) {
       res.status(400).json({ error: "name and password are required" }); return;
@@ -277,6 +371,13 @@ router.post("/mailboxes", requireAuth, async (req: Request, res: Response) => {
       name,
       password,
     });
+    logCloudronAction({
+      userId,
+      instanceId: access.instance.id,
+      action: "cloudron_create_mailbox",
+      mailboxName: name,
+      details: { domain },
+    });
     res.status(201).json(data);
   });
 });
@@ -288,7 +389,7 @@ router.post("/mailboxes", requireAuth, async (req: Request, res: Response) => {
  * Body: { password }
  */
 router.patch("/mailboxes/:name", requireAuth, async (req: Request, res: Response) => {
-  await withPermission(req, res, "edit_mailboxes", async (access) => {
+  await withPermission(req, res, "edit_mailboxes", async (access, userId) => {
     const mailboxName = req.params.name;
     const { password } = req.body as { password?: string };
     if (!password) {
@@ -304,6 +405,13 @@ router.patch("/mailboxes/:name", requireAuth, async (req: Request, res: Response
       `/mail/${encodeURIComponent(domain)}/mailboxes/${encodeURIComponent(mailboxName)}`,
       { password }
     );
+    logCloudronAction({
+      userId,
+      instanceId: access.instance.id,
+      action: "cloudron_edit_mailbox",
+      mailboxName,
+      details: { domain },
+    });
     res.json(data);
   });
 });
@@ -314,7 +422,7 @@ router.patch("/mailboxes/:name", requireAuth, async (req: Request, res: Response
  * Required permission: delete_mailboxes
  */
 router.delete("/mailboxes/:name", requireAuth, async (req: Request, res: Response) => {
-  await withPermission(req, res, "delete_mailboxes", async (access) => {
+  await withPermission(req, res, "delete_mailboxes", async (access, userId) => {
     const mailboxName = req.params.name;
     const domain = await getPrimaryMailDomain(
       access.instance.baseUrl,
@@ -325,6 +433,13 @@ router.delete("/mailboxes/:name", requireAuth, async (req: Request, res: Respons
     await client.delete(
       `/mail/${encodeURIComponent(domain)}/mailboxes/${encodeURIComponent(mailboxName)}`
     );
+    logCloudronAction({
+      userId,
+      instanceId: access.instance.id,
+      action: "cloudron_delete_mailbox",
+      mailboxName,
+      details: { domain },
+    });
     res.json({ success: true });
   });
 });
