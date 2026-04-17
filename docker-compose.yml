@@ -30,6 +30,9 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       GITHUB_RAW_VERSION_URL: ${GITHUB_RAW_VERSION_URL:-}
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-cca-paas}
+      CLOUDRON_ENABLED: ${CLOUDRON_ENABLED:-false}
+      CLOUDRON_BASE_URL: ${CLOUDRON_BASE_URL:-}
+      CLOUDRON_API_TOKEN: ${CLOUDRON_API_TOKEN:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - .:/workspace

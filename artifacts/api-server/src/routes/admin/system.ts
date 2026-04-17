@@ -1,11 +1,12 @@
 import { Router } from "express";
-import { requireSuperAdmin } from "../../middlewares/requireRole";
+import { requireSuperAdmin, requireAdmin } from "../../middlewares/requireRole";
 import { db } from "@workspace/db";
 import { systemUpdateLogsTable } from "@workspace/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { execSync } from "child_process";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { cloudronService } from "../../services/CloudronService";
 
 const router = Router();
 
@@ -175,6 +176,58 @@ router.post("/run-update", requireSuperAdmin, async (req: any, res) => {
       .where(eq(systemUpdateLogsTable.id, logRow.id));
 
     res.status(500).json({ success: false, status: "failed", message: errMsg });
+  }
+});
+
+/**
+ * GET /api/admin/system/cloudron-status
+ * Returns Cloudron configuration state and live connectivity check.
+ * Requires admin authentication (not super_admin — any admin can check).
+ *
+ * Response:
+ *   { enabled, configured, connected, baseUrl?, error? }
+ *
+ * configured — all three env vars (CLOUDRON_ENABLED, CLOUDRON_BASE_URL,
+ *              CLOUDRON_API_TOKEN) are present and CLOUDRON_ENABLED=true.
+ * connected  — Cloudron API responded successfully (live check).
+ * error      — human-readable reason when connected=false.
+ */
+router.get("/cloudron-status", requireAdmin, async (_req, res) => {
+  const enabled = process.env.CLOUDRON_ENABLED === "true";
+  const configured =
+    enabled &&
+    Boolean(process.env.CLOUDRON_BASE_URL) &&
+    Boolean(process.env.CLOUDRON_API_TOKEN);
+
+  if (!configured) {
+    res.json({
+      enabled,
+      configured: false,
+      connected: false,
+      error: enabled
+        ? "CLOUDRON_BASE_URL and/or CLOUDRON_API_TOKEN are not set. See .env.example for details."
+        : "Cloudron integration is disabled. Set CLOUDRON_ENABLED=true to activate it.",
+    });
+    return;
+  }
+
+  try {
+    const status = await cloudronService.testConnection();
+    res.json({
+      enabled,
+      configured,
+      baseUrl: process.env.CLOUDRON_BASE_URL,
+      connected: status.connected,
+      error: status.error ?? undefined,
+    });
+  } catch (err: any) {
+    res.json({
+      enabled,
+      configured,
+      baseUrl: process.env.CLOUDRON_BASE_URL,
+      connected: false,
+      error: err?.message ?? "Unexpected error while testing Cloudron connectivity",
+    });
   }
 });
 

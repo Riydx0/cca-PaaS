@@ -101,7 +101,16 @@ router.post("/setup", async (req: any, res) => {
     req.session.userId = adminUser.id;
     req.session.userRole = "super_admin";
 
-    res.json({ success: true });
+    res.json({
+      success: true,
+      nextSteps: {
+        cloudron: {
+          description:
+            "To enable the Cloudron integration, set CLOUDRON_ENABLED=true, CLOUDRON_BASE_URL, and CLOUDRON_API_TOKEN in your environment (see .env.example for details).",
+          testEndpoint: "/api/cloudron/test",
+        },
+      },
+    });
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: "Database error during setup" });
