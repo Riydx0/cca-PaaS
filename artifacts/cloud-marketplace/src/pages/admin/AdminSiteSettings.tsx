@@ -8,18 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Cloud, Palette, Upload, X, Loader2, Save, RefreshCw, FileImage, Server, CheckCircle2, XCircle, WifiOff, Trash2 } from "lucide-react";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Cloud, Palette, Upload, X, Loader2, Save, RefreshCw, FileImage, Server, CheckCircle2, XCircle, WifiOff, Plus, Pencil, Trash2, Star } from "lucide-react";
 
 interface SettingsData {
   siteName: string;
@@ -70,15 +67,20 @@ export function AdminSiteSettings() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const [cloudronInstance, setCloudronInstance] = useState<CloudronInstanceData | null>(null);
-  const [cloudronName, setCloudronName] = useState("");
-  const [cloudronBaseUrl, setCloudronBaseUrl] = useState("");
-  const [cloudronApiToken, setCloudronApiToken] = useState("");
-  const [cloudronEnabled, setCloudronEnabled] = useState(true);
-  const [cloudronSaving, setCloudronSaving] = useState(false);
-  const [cloudronRemoving, setCloudronRemoving] = useState(false);
+  const [cloudronInstances, setCloudronInstances] = useState<CloudronInstanceData[]>([]);
   const [testResult, setTestResult] = useState<TestResult>(null);
   const [testing, setTesting] = useState(false);
+
+  // Dialog state for add/edit
+  const [instanceDialogOpen, setInstanceDialogOpen] = useState(false);
+  const [editingInstance, setEditingInstance] = useState<CloudronInstanceData | null>(null);
+  const [formName, setFormName] = useState("");
+  const [formBaseUrl, setFormBaseUrl] = useState("");
+  const [formApiToken, setFormApiToken] = useState("");
+  const [formIsActive, setFormIsActive] = useState(false);
+  const [formSaving, setFormSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [settingPrimaryId, setSettingPrimaryId] = useState<number | null>(null);
 
   useEffect(() => {
     const loadAll = async () => {
@@ -92,14 +94,7 @@ export function AdminSiteSettings() {
 
       try {
         const { instances } = await apiFetch("/api/cloudron/instances");
-        const primary: CloudronInstanceData | undefined = instances?.[0];
-        if (primary) {
-          setCloudronInstance(primary);
-          setCloudronName(primary.name || "");
-          setCloudronBaseUrl(primary.baseUrl || "");
-          setCloudronApiToken(TOKEN_MASK);
-          setCloudronEnabled(primary.isActive);
-        }
+        setCloudronInstances(instances ?? []);
       } catch {}
 
       setLoading(false);
@@ -215,38 +210,63 @@ export function AdminSiteSettings() {
     }
   };
 
-  const handleCloudronSave = async () => {
-    const trimmedBaseUrl = cloudronBaseUrl.trim();
-    const trimmedName = cloudronName.trim();
-    if (!trimmedBaseUrl || !trimmedName) {
+  const openAddDialog = () => {
+    setEditingInstance(null);
+    setFormName("");
+    setFormBaseUrl("");
+    setFormApiToken("");
+    setFormIsActive(cloudronInstances.length === 0);
+    setInstanceDialogOpen(true);
+  };
+
+  const openEditDialog = (instance: CloudronInstanceData) => {
+    setEditingInstance(instance);
+    setFormName(instance.name);
+    setFormBaseUrl(instance.baseUrl);
+    setFormApiToken(TOKEN_MASK);
+    setFormIsActive(instance.isActive);
+    setInstanceDialogOpen(true);
+  };
+
+  const closeDialog = () => {
+    setInstanceDialogOpen(false);
+    setEditingInstance(null);
+  };
+
+  const handleInstanceSave = async () => {
+    const trimmedName = formName.trim();
+    const trimmedBaseUrl = formBaseUrl.trim();
+    if (!trimmedName || !trimmedBaseUrl) {
       toast({ title: "Required fields missing", description: "Please provide both a name and a Base URL.", variant: "destructive" });
       return;
     }
-    const tokenChanged = cloudronApiToken !== TOKEN_MASK;
-    if (!cloudronInstance && !tokenChanged) {
+    const tokenChanged = formApiToken !== TOKEN_MASK;
+    if (!editingInstance && !tokenChanged) {
       toast({ title: "API Token required", description: "Please enter an API Token.", variant: "destructive" });
       return;
     }
 
-    setCloudronSaving(true);
-    setTestResult(null);
+    setFormSaving(true);
     try {
       const body: Record<string, unknown> = {
         name: trimmedName,
         baseUrl: trimmedBaseUrl,
-        isActive: cloudronEnabled,
+        isActive: formIsActive,
       };
       if (tokenChanged) {
-        body.apiToken = cloudronApiToken.trim();
+        body.apiToken = formApiToken.trim();
       }
 
       let result;
-      if (cloudronInstance) {
-        result = await apiFetch(`/api/cloudron/instances/${cloudronInstance.id}`, {
+      if (editingInstance) {
+        result = await apiFetch(`/api/cloudron/instances/${editingInstance.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
+        setCloudronInstances((prev) =>
+          prev.map((inst) => (inst.id === editingInstance.id ? result.instance : inst))
+        );
       } else {
         if (!body.apiToken) {
           toast({ title: "API Token required", description: "Please enter an API Token.", variant: "destructive" });
@@ -257,19 +277,50 @@ export function AdminSiteSettings() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
+        setCloudronInstances((prev) => [...prev, result.instance]);
       }
 
-      const saved: CloudronInstanceData = result.instance;
-      setCloudronInstance(saved);
-      setCloudronName(saved.name);
-      setCloudronBaseUrl(saved.baseUrl);
-      setCloudronApiToken(TOKEN_MASK);
-      setCloudronEnabled(saved.isActive);
-      toast({ title: "Cloudron settings saved" });
+      toast({ title: editingInstance ? "Instance updated" : "Instance added" });
+      closeDialog();
     } catch (err: any) {
-      toast({ title: "Error", description: err?.message ?? "Failed to save Cloudron settings.", variant: "destructive" });
+      toast({ title: "Error", description: err?.message ?? "Failed to save instance.", variant: "destructive" });
     } finally {
-      setCloudronSaving(false);
+      setFormSaving(false);
+    }
+  };
+
+  const handleDeleteInstance = async (id: number) => {
+    setDeletingId(id);
+    try {
+      await apiFetch(`/api/cloudron/instances/${id}`, { method: "DELETE" });
+      setCloudronInstances((prev) => prev.filter((inst) => inst.id !== id));
+      toast({ title: "Instance removed" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Failed to delete instance.", variant: "destructive" });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleSetPrimary = async (id: number) => {
+    setSettingPrimaryId(id);
+    try {
+      const result = await apiFetch(`/api/cloudron/instances/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: true }),
+      });
+      // Update list: mark this one active, others as inactive
+      setCloudronInstances((prev) =>
+        prev.map((inst) =>
+          inst.id === id ? result.instance : { ...inst, isActive: false }
+        )
+      );
+      toast({ title: "Primary instance updated" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message ?? "Failed to set primary.", variant: "destructive" });
+    } finally {
+      setSettingPrimaryId(null);
     }
   };
 
@@ -513,76 +564,92 @@ export function AdminSiteSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Server className="h-5 w-5 text-blue-500" />
-            Cloudron Integration
-          </CardTitle>
-          <CardDescription>
-            Connect your Cloudron instance to manage apps directly from this panel.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-medium">Integration enabled</p>
-              <p className="text-xs text-muted-foreground">
-                When disabled, Cloudron features will not be available.
-              </p>
+              <CardTitle className="flex items-center gap-2">
+                <Server className="h-5 w-5 text-blue-500" />
+                Cloudron Integration
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Manage one or more Cloudron instances. The primary (active) instance is used by the marketplace.
+              </CardDescription>
             </div>
-            <Switch
-              checked={cloudronEnabled}
-              onCheckedChange={setCloudronEnabled}
-            />
+            <Button size="sm" onClick={openAddDialog} className="shrink-0 gap-1.5">
+              <Plus className="h-4 w-4" />
+              Add instance
+            </Button>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="cloudron-name">Display name</Label>
-            <Input
-              id="cloudron-name"
-              value={cloudronName}
-              onChange={(e) => setCloudronName(e.target.value)}
-              placeholder="My Cloudron"
-              maxLength={80}
-            />
-            <p className="text-xs text-muted-foreground">A label to identify this instance.</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="cloudron-url">Base URL</Label>
-            <Input
-              id="cloudron-url"
-              value={cloudronBaseUrl}
-              onChange={(e) => setCloudronBaseUrl(e.target.value)}
-              placeholder="https://my.cloudron.io"
-              type="url"
-            />
-            <p className="text-xs text-muted-foreground">
-              The root URL of your Cloudron instance, e.g. <code>https://my.example.com</code>.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="cloudron-token">API Token</Label>
-            <Input
-              id="cloudron-token"
-              value={cloudronApiToken}
-              onChange={(e) => setCloudronApiToken(e.target.value)}
-              onFocus={() => {
-                if (cloudronApiToken === TOKEN_MASK) setCloudronApiToken("");
-              }}
-              onBlur={() => {
-                if (cloudronApiToken === "" && cloudronInstance) setCloudronApiToken(TOKEN_MASK);
-              }}
-              placeholder="Enter API token"
-              type="password"
-              autoComplete="off"
-            />
-            {cloudronInstance && cloudronApiToken === TOKEN_MASK && (
-              <p className="text-xs text-muted-foreground">
-                Token is saved. Click to replace it.
-              </p>
-            )}
-          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {cloudronInstances.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-10 text-center">
+              <Server className="h-8 w-8 text-muted-foreground/50 mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">No instances configured</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">Add a Cloudron instance to get started.</p>
+              <Button size="sm" variant="outline" onClick={openAddDialog} className="mt-4 gap-1.5">
+                <Plus className="h-4 w-4" />
+                Add instance
+              </Button>
+            </div>
+          ) : (
+            <div className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+              {cloudronInstances.map((inst) => (
+                <div key={inst.id} className="flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/40 transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium truncate">{inst.name}</span>
+                      {inst.isActive && (
+                        <Badge variant="default" className="text-xs shrink-0">Primary</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{inst.baseUrl}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {!inst.isActive && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleSetPrimary(inst.id)}
+                        disabled={settingPrimaryId === inst.id}
+                        title="Set as primary"
+                        className="gap-1.5 text-xs h-8 px-2"
+                      >
+                        {settingPrimaryId === inst.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Star className="h-3.5 w-3.5" />
+                        )}
+                        Set primary
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => openEditDialog(inst)}
+                      title="Edit instance"
+                      className="h-8 w-8 p-0"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDeleteInstance(inst.id)}
+                      disabled={deletingId === inst.id}
+                      title="Delete instance"
+                      className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                    >
+                      {deletingId === inst.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {testResult && (
             <div className={`flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${
@@ -597,72 +664,105 @@ export function AdminSiteSettings() {
               {testResult.status === "error" && <XCircle className="h-4 w-4 mt-0.5 shrink-0" />}
               <span>
                 {testResult.status === "success" && (
-                  <>Connected successfully{testResult.instanceName ? ` to <strong>${testResult.instanceName}</strong>` : ""}.</>
+                  <>Connected successfully{testResult.instanceName ? ` to ${testResult.instanceName}` : ""}.</>
                 )}
-                {testResult.status === "not_configured" && "No active Cloudron instance is configured. Save your settings first."}
+                {testResult.status === "not_configured" && "No active Cloudron instance is configured."}
                 {testResult.status === "error" && `Connection failed: ${testResult.error}`}
               </span>
             </div>
           )}
 
-          <div className="flex items-center gap-3 pt-1 flex-wrap">
-            <Button onClick={handleCloudronSave} disabled={cloudronSaving} className="gap-2">
-              {cloudronSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {cloudronSaving ? "Saving…" : "Save Cloudron settings"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleTestConnection}
-              disabled={testing || cloudronSaving}
-              className="gap-2"
-            >
-              {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Server className="h-4 w-4" />}
-              {testing ? "Testing…" : "Test connection"}
-            </Button>
-            {cloudronInstance && (
-              <>
-                <Badge variant={cloudronInstance.isActive ? "default" : "secondary"} className="ml-auto">
-                  {cloudronInstance.isActive ? "Active" : "Inactive"}
-                </Badge>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      disabled={cloudronRemoving}
-                      className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                    >
-                      {cloudronRemoving ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
-                      {cloudronRemoving ? "Removing…" : "Remove integration"}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Remove Cloudron integration?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will permanently disconnect <strong>{cloudronInstance.name}</strong> from this panel.
-                        All Cloudron features will be unavailable until a new instance is configured.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleCloudronRemove}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      >
-                        Remove integration
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </>
-            )}
-          </div>
+          {cloudronInstances.length > 0 && (
+            <div className="pt-1">
+              <Button
+                variant="outline"
+                onClick={handleTestConnection}
+                disabled={testing}
+                className="gap-2"
+                size="sm"
+              >
+                {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Server className="h-4 w-4" />}
+                {testing ? "Testing…" : "Test primary connection"}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Add / Edit Instance Dialog */}
+      <Dialog open={instanceDialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingInstance ? "Edit instance" : "Add Cloudron instance"}</DialogTitle>
+            <DialogDescription>
+              {editingInstance
+                ? "Update the configuration for this Cloudron instance."
+                : "Connect a new Cloudron instance to this panel."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="form-name">Display name</Label>
+              <Input
+                id="form-name"
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="My Cloudron"
+                maxLength={80}
+              />
+              <p className="text-xs text-muted-foreground">A label to identify this instance.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="form-url">Base URL</Label>
+              <Input
+                id="form-url"
+                value={formBaseUrl}
+                onChange={(e) => setFormBaseUrl(e.target.value)}
+                placeholder="https://my.cloudron.io"
+                type="url"
+              />
+              <p className="text-xs text-muted-foreground">
+                The root URL of your Cloudron, e.g. <code>https://my.example.com</code>.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="form-token">API Token</Label>
+              <Input
+                id="form-token"
+                value={formApiToken}
+                onChange={(e) => setFormApiToken(e.target.value)}
+                onFocus={() => { if (formApiToken === TOKEN_MASK) setFormApiToken(""); }}
+                onBlur={() => { if (formApiToken === "" && editingInstance) setFormApiToken(TOKEN_MASK); }}
+                placeholder="Enter API token"
+                type="password"
+                autoComplete="off"
+              />
+              {editingInstance && formApiToken === TOKEN_MASK && (
+                <p className="text-xs text-muted-foreground">Token is saved. Click to replace it.</p>
+              )}
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
+              <div>
+                <p className="text-sm font-medium">Set as primary</p>
+                <p className="text-xs text-muted-foreground">This instance will be used by the marketplace.</p>
+              </div>
+              <Switch
+                checked={formIsActive}
+                onCheckedChange={setFormIsActive}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog} disabled={formSaving}>
+              Cancel
+            </Button>
+            <Button onClick={handleInstanceSave} disabled={formSaving} className="gap-2">
+              {formSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {formSaving ? "Saving…" : "Save instance"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
