@@ -89,7 +89,36 @@ type FieldDef = {
   span?: 1 | 2;
 };
 
-const emptyForm: any = {
+interface FormState {
+  productType: ProductType;
+  provider: string;
+  name: string;
+  slug: string;
+  shortDescription: string;
+  fullDescription: string;
+  category: string;
+  billingType: string;
+  priceMonthly: string;
+  priceYearly: string;
+  setupFee: string;
+  badge: string;
+  icon: string;
+  sortOrder: string;
+  isActive: boolean;
+  isVisible: boolean;
+  provisioningType: string;
+  autoProvision: boolean;
+  internalNotes: string;
+  region: string;
+  cpu: string;
+  ramGb: string;
+  storageGb: string;
+  storageType: string;
+  bandwidthTb: string;
+  config: Record<string, unknown>;
+}
+
+const emptyForm: FormState = {
   productType: "server" as ProductType,
   provider: "",
   name: "",
@@ -229,16 +258,20 @@ function getDynamicFields(productType: ProductType, t: (k: string) => string): F
   }
 }
 
-function getNested(obj: any, path: string): any {
-  return path.split(".").reduce((a, k) => (a == null ? a : a[k]), obj);
+function getNested(obj: Record<string, unknown> | null | undefined, path: string): unknown {
+  return path.split(".").reduce<unknown>((a, k) => {
+    if (a == null || typeof a !== "object") return undefined;
+    return (a as Record<string, unknown>)[k];
+  }, obj);
 }
-function setNested(obj: any, path: string, value: any): any {
+function setNested(obj: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
   const keys = path.split(".");
-  const out = { ...obj };
-  let cur: any = out;
+  const out: Record<string, unknown> = { ...obj };
+  let cur: Record<string, unknown> = out;
   for (let i = 0; i < keys.length - 1; i++) {
-    cur[keys[i]] = { ...(cur[keys[i]] ?? {}) };
-    cur = cur[keys[i]];
+    const next = (cur[keys[i]] ?? {}) as Record<string, unknown>;
+    cur[keys[i]] = { ...next };
+    cur = cur[keys[i]] as Record<string, unknown>;
   }
   cur[keys[keys.length - 1]] = value;
   return out;
@@ -250,7 +283,7 @@ export function AdminServices() {
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
-  const [form, setForm] = useState<any>(emptyForm);
+  const [form, setForm] = useState<FormState>(emptyForm);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [filterType, setFilterType] = useState<ProductType | "all">("all");
 
@@ -374,17 +407,17 @@ export function AdminServices() {
     saveService.mutate(data);
   };
 
-  const setField = (key: string, value: any) => {
-    if (key.startsWith("config.")) {
+  const setField = <K extends keyof FormState>(key: K | string, value: unknown) => {
+    if (typeof key === "string" && key.startsWith("config.")) {
       const inner = key.slice("config.".length);
-      setForm((p: any) => ({ ...p, config: setNested(p.config ?? {}, inner, value) }));
+      setForm((p) => ({ ...p, config: setNested(p.config ?? {}, inner, value) as Record<string, unknown> }));
     } else {
-      setForm((p: any) => ({ ...p, [key]: value }));
+      setForm((p) => ({ ...p, [key as keyof FormState]: value } as FormState));
     }
   };
-  const getField = (key: string): any => {
+  const getField = (key: string): unknown => {
     if (key.startsWith("config.")) return getNested(form.config ?? {}, key.slice("config.".length)) ?? "";
-    return (form as any)[key] ?? "";
+    return (form as unknown as Record<string, unknown>)[key] ?? "";
   };
 
   const dynamicFields = getDynamicFields(form.productType as ProductType, t);
