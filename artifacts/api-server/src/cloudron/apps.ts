@@ -44,6 +44,7 @@ export interface CloudronAppsResponse {
 export interface InstallAppParams {
   appStoreId: string;
   location?: string;
+  domain?: string;
   portBindings?: Record<string, unknown>;
   accessRestriction?: { users: string[]; groups: string[] } | null;
 }
@@ -71,12 +72,14 @@ export async function installApp(
   client: CloudronClient,
   params: InstallAppParams
 ): Promise<InstallAppResponse> {
-  return client.post<InstallAppResponse>("/apps/install", {
+  const body: Record<string, unknown> = {
     appStoreId: params.appStoreId,
     location: params.location ?? "",
     portBindings: params.portBindings ?? {},
     accessRestriction: params.accessRestriction ?? null,
-  });
+  };
+  if (params.domain) body.domain = params.domain;
+  return client.post<InstallAppResponse>("/apps/install", body);
 }
 
 /**

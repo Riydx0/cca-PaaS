@@ -6,18 +6,20 @@
  */
 
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, desc, count } from "drizzle-orm";
+import { eq, desc, count, and } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   cloudronInstancesTable,
   cloudronAppsCacheTable,
+  cloudronAppCustomerLinksTable,
   auditLogsTable,
   settingsTable,
+  usersTable,
   insertCloudronInstanceSchema,
   updateCloudronInstanceSchema,
 } from "@workspace/db/schema";
 import { requireAdmin } from "../middlewares/requireRole";
-import { cloudronService } from "../services/CloudronService";
+import { cloudronService, getInstanceById as getInstanceByIdSvc, clientFor as clientForSvc } from "../services/CloudronService";
 import { CloudronError } from "../cloudron/client";
 import { encryptSecret } from "../lib/crypto";
 import pino from "pino";
@@ -209,19 +211,89 @@ router.get("/instances/:id/apps", requireAdmin, async (req: Request, res: Respon
 
 router.post("/instances/:id/apps/install", requireAdmin, async (req: Request, res: Response) => {
   const id = parseInstanceId(req, res); if (id == null) return;
-  const { appStoreId, location, portBindings, accessRestriction } = req.body as {
+  const { appStoreId, location, domain, portBindings, accessRestriction } = req.body as {
     appStoreId?: string;
     location?: string;
+    domain?: string;
     portBindings?: Record<string, unknown>;
     accessRestriction?: { users: string[]; groups: string[] } | null;
   };
   if (!appStoreId) { res.status(400).json({ error: "appStoreId required" }); return; }
   try {
-    const result = await cloudronService.requestInstallFor(id, { appStoreId, location, portBindings, accessRestriction });
+    const result = await cloudronService.requestInstallFor(id, { appStoreId, location, domain, portBindings, accessRestriction });
     logAdminCloudronAction({ userId: getActorUserId(req), instanceId: id, action: "cloudron_install", appId: result.appId });
     res.json(result);
   } catch (err) { handleCloudronError(err, res); }
 });
+
+// ─── Instance domains proxy ───────────────────────────────────────────────────
+
+router.get("/instances/:id/domains", requireAdmin, async (req: Request, res: Response) => {
+  const id = parseInstanceId(req, res); if (id == null) return;
+  try {
+    const inst = await getInstanceByIdSvc(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const client = clientForSvc(inst);
+    const upstream = await client.get<{ domains?: Array<Record<string, unknown>> }>("/domains");
+    res.json({ domains: upstream.domains ?? [] });
+  } catch (err) { handleCloudronError(err, res); }
+});
+
+// ─── Customer ↔ App link (per-instance, per-app) ──────────────────────────────
+
+router.get(
+  "/instances/:id/apps/:appId/customer-link",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const id = parseInstanceId(req, res); if (id == null) return;
+    const appId = String(req.params.appId);
+    try {
+      const [link] = await db
+        .select({
+          userId: cloudronAppCustomerLinksTable.userId,
+          createdAt: cloudronAppCustomerLinksTable.createdAt,
+          userName: usersTable.name,
+          userEmail: usersTable.email,
+        })
+        .from(cloudronAppCustomerLinksTable)
+        .leftJoin(usersTable, eq(cloudronAppCustomerLinksTable.userId, usersTable.id))
+        .where(and(
+          eq(cloudronAppCustomerLinksTable.instanceId, id),
+          eq(cloudronAppCustomerLinksTable.appId, appId),
+        ))
+        .limit(1);
+      res.json({ link: link ?? null });
+    } catch (err) { handleCloudronError(err, res); }
+  },
+);
+
+router.post(
+  "/instances/:id/apps/:appId/customer-link",
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const id = parseInstanceId(req, res); if (id == null) return;
+    const appId = String(req.params.appId);
+    const userId = Number((req.body as { userId?: number }).userId);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      res.status(400).json({ error: "userId required" });
+      return;
+    }
+    try {
+      // Verify user exists
+      const [u] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+      if (!u) { res.status(404).json({ error: "User not found" }); return; }
+
+      await db
+        .insert(cloudronAppCustomerLinksTable)
+        .values({ instanceId: id, appId, userId })
+        .onConflictDoUpdate({
+          target: [cloudronAppCustomerLinksTable.instanceId, cloudronAppCustomerLinksTable.appId],
+          set: { userId, updatedAt: new Date() },
+        });
+      res.json({ success: true });
+    } catch (err) { handleCloudronError(err, res); }
+  },
+);
 
 router.post("/instances/:id/apps/:appId/uninstall", requireAdmin, async (req: Request, res: Response) => {
   const id = parseInstanceId(req, res); if (id == null) return;

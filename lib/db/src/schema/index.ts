@@ -22,5 +22,6 @@ export * from "./cloudronGroupUsers";
 export * from "./cloudronGroupApps";
 export * from "./cloudronMailboxesCache";
 export * from "./cloudronAppMetadata";
+export * from "./cloudronAppCustomerLinks";
 export * from "./cloudronUserMetadata";
 export * from "./moyasarPayments";

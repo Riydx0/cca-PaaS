@@ -1145,7 +1145,7 @@ function AppDetailsModal({
 
 const TAG_VISIBLE_LIMIT = 24;
 
-function AppStoreBrowser({ onInstall, onViewMyApps, instanceId = null }: { onInstall: (appStoreId: string) => void; onViewMyApps?: () => void; instanceId?: number | null }) {
+export function AppStoreBrowser({ onInstall, onViewMyApps, instanceId = null }: { onInstall: (appStoreId: string) => void; onViewMyApps?: () => void; instanceId?: number | null }) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
