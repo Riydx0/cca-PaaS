@@ -855,10 +855,12 @@ function AppDetailsModal({
   app,
   onClose,
   onInstall,
+  onTagClick,
 }: {
   app: AppStoreListing | null;
   onClose: () => void;
   onInstall: (appStoreId: string) => void;
+  onTagClick?: (tag: string) => void;
 }) {
   const { t } = useI18n();
   const [screenshotError, setScreenshotError] = useState<Record<number, boolean>>({});
@@ -945,16 +947,36 @@ function AppDetailsModal({
 
             {tags.length > 0 && (
               <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                  {t("admin.cloudron.appstore.details.tags")}
-                </p>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    {t("admin.cloudron.appstore.details.tags")}
+                  </p>
+                  {onTagClick && (
+                    <p className="text-[10px] text-muted-foreground/60 italic">
+                      {t("admin.cloudron.appstore.details.tagClickHint")}
+                    </p>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="rounded-full text-xs">
-                      <Tag className="h-3 w-3 me-1 opacity-70" />
-                      {tag}
-                    </Badge>
-                  ))}
+                  {tags.map((tag) =>
+                    onTagClick ? (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => { onTagClick(tag); onClose(); }}
+                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium bg-secondary text-secondary-foreground border border-transparent hover:border-primary/40 hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer"
+                        title={t("admin.cloudron.appstore.details.tagClickHint")}
+                      >
+                        <Tag className="h-3 w-3 opacity-70" />
+                        {tag}
+                      </button>
+                    ) : (
+                      <Badge key={tag} variant="secondary" className="rounded-full text-xs">
+                        <Tag className="h-3 w-3 me-1 opacity-70" />
+                        {tag}
+                      </Badge>
+                    )
+                  )}
                 </div>
               </div>
             )}
@@ -1272,6 +1294,10 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
         app={detailsApp}
         onClose={() => setDetailsApp(null)}
         onInstall={onInstall}
+        onTagClick={(tag) => {
+          setSelectedTag(tag);
+          setDetailsApp(null);
+        }}
       />
     </Card>
   );
