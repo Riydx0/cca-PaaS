@@ -158,6 +158,16 @@ router.post("/verify", requireAuth, async (req: Request, res) => {
       return;
     }
 
+    // SDK flow: initiate created the DB record but moyasarPaymentId wasn't set yet.
+    // The Moyasar payment ID is returned by the SDK callback URL — link it now.
+    if (!record.moyasarPaymentId && moyasarPaymentId) {
+      await db
+        .update(moyasarPaymentsTable)
+        .set({ moyasarPaymentId, updatedAt: new Date() })
+        .where(eq(moyasarPaymentsTable.id, record.id));
+      record = { ...record, moyasarPaymentId };
+    }
+
     if (!record.moyasarPaymentId) {
       res.status(400).json({ error: "Payment not yet initiated with Moyasar" });
       return;

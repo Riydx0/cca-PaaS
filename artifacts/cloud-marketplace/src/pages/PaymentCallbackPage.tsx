@@ -16,17 +16,21 @@ export function PaymentCallbackPage() {
   useEffect(() => {
     const params = new URLSearchParams(search);
     const moyasarId = params.get("id") ?? params.get("payment_id");
+    const paymentRecordId = params.get("paymentRecordId");
 
     if (!moyasarId) {
       setStatus("failed");
       return;
     }
 
+    const body: Record<string, unknown> = { moyasarPaymentId: moyasarId };
+    if (paymentRecordId) body.paymentRecordId = Number(paymentRecordId);
+
     fetch("/api/payments/verify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ moyasarPaymentId: moyasarId }),
+      body: JSON.stringify(body),
     })
       .then(async (res) => {
         if (!res.ok) throw new Error("Verify failed");

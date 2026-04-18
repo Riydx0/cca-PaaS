@@ -157,12 +157,18 @@ function buildFeaturesMap(rows: PlanFeatureRow[]): Record<string, { enabled: boo
   return map;
 }
 
+const NUMERIC_LIMIT_KEYS = new Set(["max_apps", "max_mailboxes", "max_cloudron_instances"]);
+
 function featuresMapToPayload(map: Record<string, { enabled: boolean; limitValue: string }>) {
-  return Object.entries(map).map(([featureKey, v]) => ({
-    featureKey,
-    enabled: v.enabled,
-    limitValue: v.limitValue ? Number(v.limitValue) : null,
-  }));
+  return Object.entries(map).map(([featureKey, v]) => {
+    const limitValue = v.limitValue ? Number(v.limitValue) : null;
+    return {
+      featureKey,
+      // Numeric limit keys must always be enabled so the backend enforces the configured limit
+      enabled: NUMERIC_LIMIT_KEYS.has(featureKey) ? true : v.enabled,
+      limitValue,
+    };
+  });
 }
 
 function PlanFeaturesEditor({ planId }: { planId: number }) {
