@@ -30,6 +30,7 @@ export const cloudronClientAccessTable = pgTable(
       .notNull()
       .references(() => cloudronInstancesTable.id, { onDelete: "cascade" }),
     permissions: jsonb("permissions").$type<CloudronPermission[]>().notNull().default([]),
+    installQuota: integer("install_quota"),
     linkedAt: timestamp("linked_at").notNull().defaultNow(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },

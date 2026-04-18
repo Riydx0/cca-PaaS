@@ -163,6 +163,7 @@ interface CloudronAccessData {
   instanceName: string;
   instanceBaseUrl: string;
   permissions: string[];
+  installQuota: number | null;
   linkedAt: string;
 }
 
@@ -196,6 +197,7 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
   const [cloudronEditMode, setCloudronEditMode] = useState(false);
   const [selectedInstanceId, setSelectedInstanceId] = useState("");
   const [selectedPerms, setSelectedPerms] = useState<string[]>([]);
+  const [selectedInstallQuota, setSelectedInstallQuota] = useState<string>("");
 
   const statusLabels: Record<string, string> = {
     active: t("admin.user.status.active"),
@@ -221,6 +223,7 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
     setCloudronEditMode(false);
     setSelectedInstanceId("");
     setSelectedPerms([]);
+    setSelectedInstallQuota("");
   }, [userId]);
 
   const accessQuery = useQuery<{ access: CloudronAccessData | null }>({
@@ -240,18 +243,25 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
     if (access) {
       setSelectedInstanceId(String(access.instanceId));
       setSelectedPerms(access.permissions);
+      setSelectedInstallQuota(access.installQuota != null ? String(access.installQuota) : "");
     } else if (accessQuery.data && !access) {
       setSelectedInstanceId("");
       setSelectedPerms([]);
+      setSelectedInstallQuota("");
     }
   }, [accessQuery.data]);
 
   const saveAccessMutation = useMutation({
     mutationFn: () => {
       const hasExisting = !!accessQuery.data?.access;
+      const parsedQuota = selectedInstallQuota.trim() !== "" ? parseInt(selectedInstallQuota, 10) : null;
       return adminFetch(`/api/admin/users/${userId}/cloudron-access`, {
         method: hasExisting ? "PATCH" : "POST",
-        body: JSON.stringify({ instanceId: parseInt(selectedInstanceId, 10), permissions: selectedPerms }),
+        body: JSON.stringify({
+          instanceId: parseInt(selectedInstanceId, 10),
+          permissions: selectedPerms,
+          installQuota: parsedQuota,
+        }),
       });
     },
     onSuccess: () => {
@@ -270,6 +280,7 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
       setCloudronEditMode(false);
       setSelectedInstanceId("");
       setSelectedPerms([]);
+      setSelectedInstallQuota("");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -747,6 +758,18 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
                                   ))}
                                 </div>
                               </div>
+                              {accessQuery.data.access.permissions.includes("install_apps") && (
+                                <div className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-800 flex items-center justify-between">
+                                  <p className="text-xs font-semibold text-muted-foreground">{t("admin.user.cloudron.installQuota")}</p>
+                                  <span className="text-xs font-medium text-foreground">
+                                    {accessQuery.data.access.installQuota != null
+                                      ? t("admin.user.cloudron.installQuotaView")
+                                          .replace("{used}", "—")
+                                          .replace("{quota}", String(accessQuery.data.access.installQuota))
+                                      : t("admin.user.cloudron.installQuotaPlaceholder")}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -816,6 +839,23 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
                                   ))}
                                 </div>
                               </div>
+
+                              {selectedPerms.includes("install_apps") && (
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                    {t("admin.user.cloudron.installQuota")}
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={selectedInstallQuota}
+                                    onChange={(e) => setSelectedInstallQuota(e.target.value)}
+                                    placeholder={t("admin.user.cloudron.installQuotaPlaceholder")}
+                                    className="h-9 text-sm"
+                                  />
+                                  <p className="text-xs text-muted-foreground">{t("admin.user.cloudron.installQuotaDesc")}</p>
+                                </div>
+                              )}
 
                               <div className="flex gap-2">
                                 <Button

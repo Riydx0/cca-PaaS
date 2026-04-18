@@ -60,6 +60,8 @@ interface CloudronSummary {
   baseUrl: string;
   linkedAt: string;
   permissions: string[];
+  installQuota: number | null;
+  installedAppsCount: number | null;
 }
 
 interface ClientApp {
@@ -310,7 +312,11 @@ function InstallModal({
     },
     onError: (err: Error) => {
       if (err instanceof AdminApiError && err.status === 403) {
-        toast.error(t("cloudron.client.limitReached.apps"));
+        if (err.body?.quotaExceeded) {
+          toast.error(t("cloudron.client.limitReached.quota"));
+        } else {
+          toast.error(t("cloudron.client.limitReached.apps"));
+        }
       } else {
         toast.error(t("cloudron.client.install.error"));
       }
@@ -1221,6 +1227,30 @@ export function MyCloudronPage() {
               <p className="font-medium">{new Date(summary.linkedAt).toLocaleDateString()}</p>
             </div>
           </div>
+          {perms.includes("install_apps") && summary.installQuota != null && (
+            <div className="pt-2 border-t border-primary/10">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{t("admin.user.cloudron.installQuota")}</p>
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <Progress
+                    value={Math.min(100, Math.round(((summary.installedAppsCount ?? 0) / summary.installQuota) * 100))}
+                    className={`h-2 ${
+                      (summary.installedAppsCount ?? 0) >= summary.installQuota
+                        ? "[&>div]:bg-destructive"
+                        : (summary.installedAppsCount ?? 0) / summary.installQuota >= 0.75
+                        ? "[&>div]:bg-amber-500"
+                        : ""
+                    }`}
+                  />
+                </div>
+                <span className="text-xs font-semibold text-foreground shrink-0">
+                  {t("cloudron.client.quota.remaining")
+                    .replace("{remaining}", String(Math.max(0, summary.installQuota - (summary.installedAppsCount ?? 0))))
+                    .replace("{quota}", String(summary.installQuota))}
+                </span>
+              </div>
+            </div>
+          )}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{t("cloudron.client.permissions")}</p>
             <div className="flex flex-wrap gap-1.5">

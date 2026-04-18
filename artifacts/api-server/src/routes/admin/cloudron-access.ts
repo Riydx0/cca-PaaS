@@ -28,6 +28,7 @@ function buildAccessResponse(
     instanceName: instance.name,
     instanceBaseUrl: instance.baseUrl,
     permissions: (access.permissions as string[]) ?? [],
+    installQuota: access.installQuota ?? null,
     linkedAt: access.linkedAt.toISOString(),
   };
 }
@@ -59,7 +60,11 @@ router.post("/", requireSuperAdmin, async (req: Request<UserIdParams>, res: Resp
   const userId = parseInt(req.params.userId, 10);
   if (isNaN(userId)) { res.status(400).json({ error: "Invalid user ID" }); return; }
 
-  const { instanceId, permissions } = req.body as { instanceId?: number; permissions?: string[] };
+  const { instanceId, permissions, installQuota } = req.body as {
+    instanceId?: number;
+    permissions?: string[];
+    installQuota?: number | null;
+  };
 
   if (!instanceId || typeof instanceId !== "number" || !Number.isInteger(instanceId) || instanceId <= 0) {
     res.status(400).json({ error: "instanceId must be a positive integer" }); return;
@@ -67,6 +72,11 @@ router.post("/", requireSuperAdmin, async (req: Request<UserIdParams>, res: Resp
   const validPerms = Array.isArray(permissions)
     ? permissions.filter(isCloudronPermission)
     : [];
+
+  const parsedQuota = parseInstallQuota(installQuota);
+  if (parsedQuota === "invalid") {
+    res.status(400).json({ error: "installQuota must be a positive integer or null" }); return;
+  }
 
   try {
     const [userRow] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
@@ -81,7 +91,7 @@ router.post("/", requireSuperAdmin, async (req: Request<UserIdParams>, res: Resp
 
     const [created] = await db
       .insert(cloudronClientAccessTable)
-      .values({ userId, instanceId, permissions: validPerms })
+      .values({ userId, instanceId, permissions: validPerms, installQuota: parsedQuota })
       .returning();
 
     res.status(201).json({ access: buildAccessResponse(created, instance) });
@@ -95,10 +105,16 @@ router.patch("/", requireSuperAdmin, async (req: Request<UserIdParams>, res: Res
   const userId = parseInt(req.params.userId, 10);
   if (isNaN(userId)) { res.status(400).json({ error: "Invalid user ID" }); return; }
 
-  const { instanceId, permissions } = req.body as { instanceId?: number; permissions?: string[] };
+  const { instanceId, permissions, installQuota } = req.body as {
+    instanceId?: number;
+    permissions?: string[];
+    installQuota?: number | null;
+  };
 
-  if (instanceId === undefined && !Array.isArray(permissions)) {
-    res.status(400).json({ error: "At least one of instanceId or permissions is required" }); return;
+  const hasInstallQuota = "installQuota" in req.body;
+
+  if (instanceId === undefined && !Array.isArray(permissions) && !hasInstallQuota) {
+    res.status(400).json({ error: "At least one of instanceId, permissions, or installQuota is required" }); return;
   }
 
   try {
@@ -123,6 +139,14 @@ router.patch("/", requireSuperAdmin, async (req: Request<UserIdParams>, res: Res
 
     if (Array.isArray(permissions)) {
       updateData.permissions = permissions.filter(isCloudronPermission);
+    }
+
+    if (hasInstallQuota) {
+      const parsedQuota = parseInstallQuota(installQuota);
+      if (parsedQuota === "invalid") {
+        res.status(400).json({ error: "installQuota must be a positive integer or null" }); return;
+      }
+      updateData.installQuota = parsedQuota;
     }
 
     const [updated] = await db
@@ -159,5 +183,11 @@ router.delete("/", requireSuperAdmin, async (req: Request<UserIdParams>, res: Re
     res.status(500).json({ error: "Failed to remove Cloudron access" });
   }
 });
+
+function parseInstallQuota(value: unknown): number | null | "invalid" {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
+  return "invalid";
+}
 
 export default router;

@@ -561,6 +561,10 @@ const translations = {
     "admin.user.cloudron.noPermissions": "No permissions granted",
     "admin.user.cloudron.loading": "Loading…",
     "admin.user.cloudron.editBtn": "Edit",
+    "admin.user.cloudron.installQuota": "App Install Quota",
+    "admin.user.cloudron.installQuotaDesc": "Limit how many apps this client can install. Leave empty for unlimited.",
+    "admin.user.cloudron.installQuotaPlaceholder": "Unlimited",
+    "admin.user.cloudron.installQuotaView": "{used} / {quota} installs used",
 
     // ---- Subscription tab (admin user drawer) ----
     "admin.user.tab.subscription": "Subscription",
@@ -904,6 +908,9 @@ const translations = {
     "cloudron.client.plan.loading": "Loading plan…",
     "cloudron.client.limitReached.apps": "You have reached your app limit. Upgrade your plan to install more apps.",
     "cloudron.client.limitReached.mailboxes": "You have reached your mailbox limit. Upgrade your plan to create more mailboxes.",
+    "cloudron.client.limitReached.quota": "You have reached your install quota. Contact your administrator to increase your limit.",
+    "cloudron.client.quota.remaining": "{remaining} of {quota} installs remaining",
+    "cloudron.client.quota.unlimited": "Unlimited installs",
     "cloudron.client.featureDisabled": "This feature is not included in your current plan. Please upgrade to access it.",
     "cloudron.client.plan.usedOf": "{used} / {limit}",
 
@@ -1487,6 +1494,10 @@ const translations = {
     "admin.user.cloudron.noPermissions": "لم تُمنَح أي صلاحيات",
     "admin.user.cloudron.loading": "جارٍ التحميل…",
     "admin.user.cloudron.editBtn": "تعديل",
+    "admin.user.cloudron.installQuota": "حصة تثبيت التطبيقات",
+    "admin.user.cloudron.installQuotaDesc": "حدد عدد التطبيقات التي يمكن لهذا العميل تثبيتها. اتركه فارغاً للسماح بعدد غير محدود.",
+    "admin.user.cloudron.installQuotaPlaceholder": "غير محدود",
+    "admin.user.cloudron.installQuotaView": "{used} / {quota} تثبيت مستخدم",
 
     // ---- تبويب الاشتراك (درج تفاصيل المستخدم) ----
     "admin.user.tab.subscription": "الاشتراك",
@@ -1830,6 +1841,9 @@ const translations = {
     "cloudron.client.plan.loading": "جارٍ تحميل الخطة…",
     "cloudron.client.limitReached.apps": "لقد وصلت إلى الحد الأقصى لعدد التطبيقات. قم بترقية خطتك لتثبيت المزيد.",
     "cloudron.client.limitReached.mailboxes": "لقد وصلت إلى الحد الأقصى لعدد صناديق البريد. قم بترقية خطتك لإنشاء المزيد.",
+    "cloudron.client.limitReached.quota": "لقد وصلت إلى الحد الأقصى للتثبيتات المسموح بها. تواصل مع المسؤول لزيادة الحصة.",
+    "cloudron.client.quota.remaining": "متبقي {remaining} من أصل {quota} تثبيت",
+    "cloudron.client.quota.unlimited": "تثبيتات غير محدودة",
     "cloudron.client.featureDisabled": "هذه الميزة غير متاحة في خطتك الحالية. يرجى الترقية للوصول إليها.",
     "cloudron.client.plan.usedOf": "{used} / {limit}",
 

@@ -37,6 +37,7 @@ const router = Router();
 interface ClientAccessResult {
   instance: typeof cloudronInstancesTable.$inferSelect;
   permissions: string[];
+  installQuota: number | null;
   linkedAt: Date;
 }
 
@@ -58,6 +59,7 @@ async function getClientAccess(userId: number): Promise<ClientAccessResult | nul
   return {
     instance: row.instance,
     permissions: (row.access.permissions as string[]) ?? [],
+    installQuota: row.access.installQuota ?? null,
     linkedAt: row.access.linkedAt,
   };
 }
@@ -329,16 +331,28 @@ function logCloudronAction(opts: LogCloudronActionOptions): void {
 
 /**
  * GET /api/cloudron-client/summary
- * Returns instance summary + granted permissions.
+ * Returns instance summary + granted permissions + quota info.
  * Required permission: view_cloudron
  */
 router.get("/summary", requireAuth, async (req: Request, res: Response) => {
   await withPermission(req, res, "view_cloudron", async (access) => {
+    let installedAppsCount: number | null = null;
+    if (access.installQuota !== null) {
+      try {
+        const client = createCloudronClient(access.instance.baseUrl, access.instance.apiToken);
+        const apps = await listApps(client);
+        installedAppsCount = apps.length;
+      } catch {
+        // Non-fatal: quota display is best-effort
+      }
+    }
     res.json({
       instanceName: access.instance.name,
       baseUrl: access.instance.baseUrl,
       linkedAt: access.linkedAt.toISOString(),
       permissions: access.permissions,
+      installQuota: access.installQuota,
+      installedAppsCount,
     });
   });
 });
@@ -438,6 +452,28 @@ router.post("/apps/install", requireAuth, async (req: Request, res: Response) =>
     if (!appStoreId || typeof appStoreId !== "string") {
       res.status(400).json({ error: "appStoreId is required" }); return;
     }
+
+    // Per-client install quota check (independent of plan-level limit)
+    if (access.installQuota !== null) {
+      try {
+        const client = createCloudronClient(access.instance.baseUrl, access.instance.apiToken);
+        const apps = await listApps(client);
+        if (apps.length >= access.installQuota) {
+          res.status(403).json({
+            error: `Install quota reached (${apps.length}/${access.installQuota}). Contact your administrator to increase the quota.`,
+            quotaExceeded: true,
+            installed: apps.length,
+            quota: access.installQuota,
+          });
+          return;
+        }
+      } catch (err) {
+        logger.warn({ err }, "[cloudron-client] Failed to verify install quota — blocking action (fail-closed)");
+        res.status(503).json({ error: "Unable to verify install quota at this time. Please try again shortly." });
+        return;
+      }
+    }
+
     const client = createCloudronClient(access.instance.baseUrl, access.instance.apiToken);
     const result = await installApp(client, { appStoreId, location });
     logCloudronAction({
