@@ -187,7 +187,7 @@ export function AdminOrderDetails() {
           {t("admin.orders.orderInformation")}
         </div>
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
-          <DetailRow label={t("admin.col.service")} value={`#${order.id}`} />
+          <DetailRow label={t("admin.orders.orderId")} value={`#${order.id}`} />
           <DetailRow
             label={t("label.status")}
             value={
