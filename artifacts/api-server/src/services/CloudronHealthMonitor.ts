@@ -12,6 +12,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { usersTable, cloudronInstancesTable } from "@workspace/db/schema";
 import { createCloudronClient } from "../cloudron/client";
+import { decryptSecret } from "../lib/crypto";
 import { cloudronService } from "./CloudronService";
 import { EmailService } from "./email_service";
 import { logger } from "../lib/logger";
@@ -131,7 +132,7 @@ class CloudronHealthMonitor {
       instances.map(async (instance) => {
         let healthStatus: "online" | "offline" = "offline";
         try {
-          const client = createCloudronClient(instance.baseUrl, instance.apiToken);
+          const client = createCloudronClient(instance.baseUrl, decryptSecret(instance.apiToken));
           await client.get("/profile");
           healthStatus = "online";
         } catch {

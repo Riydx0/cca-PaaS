@@ -57,7 +57,7 @@ async function deleteInstance(id: number): Promise<{ success: boolean }> {
 
 function HealthBadge({ status }: { status?: CloudronInstance["healthStatus"] }) {
   const { t } = useI18n();
-  if (status === "healthy") {
+  if (status === "healthy" || status === "online") {
     return (
       <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 gap-1">
         <CheckCircle2 className="h-3 w-3" />
@@ -65,7 +65,7 @@ function HealthBadge({ status }: { status?: CloudronInstance["healthStatus"] }) 
       </Badge>
     );
   }
-  if (status === "unhealthy") {
+  if (status === "unhealthy" || status === "offline") {
     return (
       <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-400 gap-1">
         <XCircle className="h-3 w-3" />

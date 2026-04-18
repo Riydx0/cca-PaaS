@@ -1,18 +1,14 @@
 /**
  * CloudronService — Service layer for multi-instance Cloudron operations.
- *
- * - Loads Cloudron instances from the database (cloudron_instances table).
- * - No dependency on CLOUDRON_ENABLED / CLOUDRON_BASE_URL / CLOUDRON_API_TOKEN env vars.
- * - Provides in-memory install-status tracking via background polling.
- * - NEVER exposes the API token to callers.
  */
 
 import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { cloudronInstancesTable, type CloudronInstance } from "@workspace/db/schema";
-import { createCloudronClient, CloudronError } from "../cloudron/client";
+import { createCloudronClient, CloudronError, type CloudronClient } from "../cloudron/client";
 import { listApps, installApp, uninstallApp, restartApp, stopApp, startApp, updateApp, type InstallAppParams } from "../cloudron/apps";
 import { listTasks, getTask } from "../cloudron/tasks";
+import { decryptSecret } from "../lib/crypto";
 
 export interface CloudronStatus {
   configured: boolean;
@@ -21,7 +17,6 @@ export interface CloudronStatus {
   error?: string;
 }
 
-/** In-memory registry of ongoing install tasks (taskId → progress). */
 interface InstallRecord {
   taskId: string;
   appStoreId: string;
@@ -34,10 +29,14 @@ interface InstallRecord {
 }
 
 const installRegistry = new Map<string, InstallRecord>();
-const POLL_INTERVAL_MS = 10_000; // 10 s
-const MAX_POLLS = 60;            // give up after 10 min
+const POLL_INTERVAL_MS = 10_000;
+const MAX_POLLS = 60;
 
-/** Fetch all active Cloudron instances from DB. */
+/** Build a Cloudron client from an instance, decrypting the token. */
+export function clientFor(instance: CloudronInstance): CloudronClient {
+  return createCloudronClient(instance.baseUrl, decryptSecret(instance.apiToken));
+}
+
 async function getActiveInstances(): Promise<CloudronInstance[]> {
   return db
     .select()
@@ -45,22 +44,23 @@ async function getActiveInstances(): Promise<CloudronInstance[]> {
     .where(eq(cloudronInstancesTable.isActive, true));
 }
 
-/** Get the first active Cloudron instance, or null if none. */
 async function getPrimaryInstance(): Promise<CloudronInstance | null> {
   const rows = await getActiveInstances();
   return rows[0] ?? null;
 }
 
+export async function getInstanceById(id: number): Promise<CloudronInstance | null> {
+  const [row] = await db.select().from(cloudronInstancesTable).where(eq(cloudronInstancesTable.id, id)).limit(1);
+  return row ?? null;
+}
+
 class CloudronService {
-  /** Test connectivity to the primary active Cloudron instance. */
   async testConnection(): Promise<CloudronStatus> {
     const instance = await getPrimaryInstance();
-    if (!instance) {
-      return { configured: false, connected: false };
-    }
+    if (!instance) return { configured: false, connected: false };
 
     try {
-      const client = createCloudronClient(instance.baseUrl, instance.apiToken);
+      const client = clientFor(instance);
       await client.get("/profile");
       return { configured: true, connected: true, instanceName: instance.name };
     } catch (err) {
@@ -69,169 +69,106 @@ class CloudronService {
     }
   }
 
-  /** List all installed apps from the primary active instance. */
   async getApps() {
     const instance = await getPrimaryInstance();
     if (!instance) return { configured: false, apps: [] };
-
-    const client = createCloudronClient(instance.baseUrl, instance.apiToken);
+    const client = clientFor(instance);
     const apps = await listApps(client);
     return { configured: true, instanceName: instance.name, instanceBaseUrl: instance.baseUrl, apps };
   }
 
-  /**
-   * Install an app asynchronously on the primary active instance.
-   * Returns the taskId immediately; background polling tracks progress.
-   */
+  async getAppsForInstance(instanceId: number) {
+    const instance = await getInstanceById(instanceId);
+    if (!instance) throw new CloudronError("Instance not found", 404, "NOT_FOUND");
+    const client = clientFor(instance);
+    const apps = await listApps(client);
+    return { instanceName: instance.name, instanceBaseUrl: instance.baseUrl, apps };
+  }
+
   async requestInstall(params: InstallAppParams) {
     const instance = await getPrimaryInstance();
-    if (!instance) {
-      throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
-    }
-
-    const client = createCloudronClient(instance.baseUrl, instance.apiToken);
+    if (!instance) throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
+    const client = clientFor(instance);
     const result = await installApp(client, params);
     const taskId = result.taskId;
-
     const record: InstallRecord = {
-      taskId,
-      appStoreId: params.appStoreId,
+      taskId, appStoreId: params.appStoreId,
       startedAt: new Date().toISOString(),
-      state: "pending",
-      percent: 0,
+      state: "pending", percent: 0,
     };
-
     installRegistry.set(taskId, record);
     this._startPolling(instance, taskId, 0);
-
     return { taskId, appId: result.id };
   }
 
-  /** Get the cached install status for a taskId. */
-  getInstallStatus(taskId: string) {
-    return installRegistry.get(taskId) ?? null;
-  }
+  getInstallStatus(taskId: string) { return installRegistry.get(taskId) ?? null; }
 
-  /** List all Cloudron tasks from the primary active instance. */
   async getTasks() {
     const instance = await getPrimaryInstance();
     if (!instance) return { configured: false, tasks: [] };
-
-    const client = createCloudronClient(instance.baseUrl, instance.apiToken);
+    const client = clientFor(instance);
     const tasks = await listTasks(client);
     return { configured: true, instanceName: instance.name, tasks };
   }
 
-  /** Get a single Cloudron task by ID from the primary active instance. */
   async getTask(taskId: string) {
     const instance = await getPrimaryInstance();
-    if (!instance) {
-      throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
-    }
-    const client = createCloudronClient(instance.baseUrl, instance.apiToken);
-    return getTask(client, taskId);
+    if (!instance) throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
+    return getTask(clientFor(instance), taskId);
   }
 
-  /**
-   * Uninstall an app asynchronously on the primary active instance.
-   * Returns the taskId immediately.
-   */
   async requestUninstall(appId: string) {
     const instance = await getPrimaryInstance();
-    if (!instance) {
-      throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
-    }
-    const client = createCloudronClient(instance.baseUrl, instance.apiToken);
-    return uninstallApp(client, appId);
+    if (!instance) throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
+    return uninstallApp(clientFor(instance), appId);
   }
 
-  /**
-   * Restart an app asynchronously on the primary active instance.
-   * Returns the taskId immediately.
-   */
   async requestRestart(appId: string) {
     const instance = await getPrimaryInstance();
-    if (!instance) {
-      throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
-    }
-    const client = createCloudronClient(instance.baseUrl, instance.apiToken);
-    return restartApp(client, appId);
+    if (!instance) throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
+    return restartApp(clientFor(instance), appId);
   }
 
-  /**
-   * Stop a running app asynchronously on the primary active instance.
-   * Returns the taskId immediately.
-   */
   async requestStop(appId: string) {
     const instance = await getPrimaryInstance();
-    if (!instance) {
-      throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
-    }
-    const client = createCloudronClient(instance.baseUrl, instance.apiToken);
-    return stopApp(client, appId);
+    if (!instance) throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
+    return stopApp(clientFor(instance), appId);
   }
 
-  /**
-   * Start a stopped app asynchronously on the primary active instance.
-   * Returns the taskId immediately.
-   */
   async requestStart(appId: string) {
     const instance = await getPrimaryInstance();
-    if (!instance) {
-      throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
-    }
-    const client = createCloudronClient(instance.baseUrl, instance.apiToken);
-    return startApp(client, appId);
+    if (!instance) throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
+    return startApp(clientFor(instance), appId);
   }
 
-  /**
-   * Update an app to the latest version on the primary active instance.
-   * Returns the taskId immediately.
-   */
   async requestUpdate(appId: string) {
     const instance = await getPrimaryInstance();
-    if (!instance) {
-      throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
-    }
-    const client = createCloudronClient(instance.baseUrl, instance.apiToken);
-    return updateApp(client, appId);
+    if (!instance) throw new CloudronError("No Cloudron instance configured", 503, "NOT_CONFIGURED");
+    return updateApp(clientFor(instance), appId);
   }
 
-  /** Internal polling — updates the in-memory registry every POLL_INTERVAL_MS. */
   private _startPolling(instance: CloudronInstance, taskId: string, pollCount: number) {
     if (pollCount >= MAX_POLLS) {
       const record = installRegistry.get(taskId);
-      if (record) {
-        record.state = "error";
-        record.errorMessage = "Polling timeout — check Cloudron directly";
-      }
+      if (record) { record.state = "error"; record.errorMessage = "Polling timeout"; }
       return;
     }
-
     const timer = setTimeout(async () => {
       const record = installRegistry.get(taskId);
       if (!record) return;
-
       try {
-        const client = createCloudronClient(instance.baseUrl, instance.apiToken);
-        const task = await getTask(client, taskId);
-        record.state = task.state === "success"
-          ? "success"
-          : task.state === "error"
-            ? "error"
-            : "active";
+        const task = await getTask(clientFor(instance), taskId);
+        record.state = task.state === "success" ? "success" : task.state === "error" ? "error" : "active";
         record.percent = task.percent;
         record.message = task.message;
         record.errorMessage = task.errorMessage;
-
-        if (record.state === "active" || record.state === "pending") {
+        if (record.state === "active" || (record.state as string) === "pending") {
           this._startPolling(instance, taskId, pollCount + 1);
         }
       } catch {
         this._startPolling(instance, taskId, pollCount + 1);
       }
     }, POLL_INTERVAL_MS);
-
     const record = installRegistry.get(taskId);
     if (record) record.pollingTimer = timer;
   }

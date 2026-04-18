@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Users, Receipt, Server, Settings, Menu, LogOut,
   ShieldCheck, ArrowLeft, CreditCard, Activity, FileText, Palette,
   Sparkles, BadgeCheck, ChevronDown, ChevronRight, Layers, AppWindow,
-  Database, Plus,
+  Database, Plus, DollarSign, RefreshCw,
 } from "lucide-react";
 
 export function AdminLayout({ children }: { children: ReactNode }) {
@@ -210,16 +210,24 @@ export function AdminLayout({ children }: { children: ReactNode }) {
       {cloudronOpen && (
         <SubList>
           <Link href="/admin/cloudron" onClick={onClick} className={subItemClass(location === "/admin/cloudron")}>
-            <AppWindow className="h-4 w-4 shrink-0" />
-            <span>{t("admin.nav.cloudron")}</span>
+            <LayoutDashboard className="h-4 w-4 shrink-0" />
+            <span>{t("admin.nav.cloudronDashboard")}</span>
           </Link>
-          <Link href="/admin/cloudron/instances" onClick={onClick} className={subItemClass(location === "/admin/cloudron/instances")}>
+          <Link href="/admin/cloudron/instances" onClick={onClick} className={subItemClass(location === "/admin/cloudron/instances" || location.startsWith("/admin/cloudron/instances/"))}>
             <Database className="h-4 w-4 shrink-0" />
             <span>{t("admin.nav.cloudronInstances")}</span>
           </Link>
           <Link href="/admin/cloudron/instances?add=1" onClick={onClick} className={subItemClass(false)}>
             <Plus className="h-4 w-4 shrink-0" />
             <span>{t("admin.nav.cloudronAddInstance")}</span>
+          </Link>
+          <Link href="/admin/cloudron/licenses" onClick={onClick} className={subItemClass(location === "/admin/cloudron/licenses")}>
+            <DollarSign className="h-4 w-4 shrink-0" />
+            <span>{t("admin.nav.cloudronLicenses")}</span>
+          </Link>
+          <Link href="/admin/cloudron/sync-logs" onClick={onClick} className={subItemClass(location === "/admin/cloudron/sync-logs")}>
+            <RefreshCw className="h-4 w-4 shrink-0" />
+            <span>{t("admin.nav.cloudronSyncLogs")}</span>
           </Link>
         </SubList>
       )}

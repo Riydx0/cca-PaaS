@@ -14,6 +14,7 @@ import { db } from "@workspace/db";
 import { cloudronInstancesTable } from "@workspace/db/schema";
 import { createCloudronClient } from "../cloudron/client";
 import { listApps } from "../cloudron/apps";
+import { decryptSecret } from "../lib/crypto";
 import { logger } from "../lib/logger";
 
 const TTL_MS = 60 * 1000;
@@ -66,7 +67,7 @@ async function compute(): Promise<CloudronAggregateSummary> {
   await Promise.all(
     instances.map(async (instance) => {
       try {
-        const client = createCloudronClient(instance.baseUrl, instance.apiToken);
+        const client = createCloudronClient(instance.baseUrl, decryptSecret(instance.apiToken));
         const [apps, mailboxes] = await Promise.all([
           listApps(client).catch(() => null),
           listMailboxesCount(client).catch(() => 0),

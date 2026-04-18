@@ -18,6 +18,7 @@ import {
 import { requireAdmin } from "../middlewares/requireRole";
 import { cloudronService } from "../services/CloudronService";
 import { CloudronError } from "../cloudron/client";
+import { encryptSecret } from "../lib/crypto";
 import pino from "pino";
 
 const logger = pino({ name: "cloudron-routes" });
@@ -67,9 +68,10 @@ router.post("/instances", requireAdmin, async (req: Request, res: Response) => {
   }
 
   try {
+    const values = { ...parsed.data, apiToken: encryptSecret(parsed.data.apiToken) };
     const [row] = await db
       .insert(cloudronInstancesTable)
-      .values(parsed.data)
+      .values(values)
       .returning();
     const { apiToken: _t, ...safe } = row;
     res.status(201).json({ instance: { ...safe, apiToken: TOKEN_MASK } });
@@ -102,9 +104,15 @@ router.patch("/instances/:id", requireAdmin, async (req: Request, res: Response)
   }
 
   try {
+    const values: Record<string, unknown> = { ...parsed.data, updatedAt: new Date() };
+    if (typeof parsed.data.apiToken === "string" && parsed.data.apiToken.length > 0) {
+      values["apiToken"] = encryptSecret(parsed.data.apiToken);
+    } else {
+      delete values["apiToken"];
+    }
     const [row] = await db
       .update(cloudronInstancesTable)
-      .set(parsed.data)
+      .set(values)
       .where(eq(cloudronInstancesTable.id, id))
       .returning();
 

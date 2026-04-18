@@ -47,6 +47,10 @@ import { PaymentCallbackPage } from "@/pages/PaymentCallbackPage";
 import { AdminServiceInstancesPage } from "@/pages/admin/AdminServiceInstancesPage";
 import { AdminCloudronPage } from "@/pages/admin/AdminCloudronPage";
 import { AdminCloudronInstancesPage } from "@/pages/admin/AdminCloudronInstancesPage";
+import { AdminCloudronDashboardPage } from "@/pages/admin/AdminCloudronDashboardPage";
+import { AdminCloudronInstanceDetailsPage } from "@/pages/admin/AdminCloudronInstanceDetailsPage";
+import { AdminCloudronLicensesPage } from "@/pages/admin/AdminCloudronLicensesPage";
+import { AdminCloudronSyncLogsPage } from "@/pages/admin/AdminCloudronSyncLogsPage";
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -263,10 +267,22 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
         <AdminRoute component={AdminServiceInstancesPage} />
       </Route>
       <Route path="/admin/cloudron">
-        <AdminRoute component={AdminCloudronPage} />
+        <AdminRoute component={AdminCloudronDashboardPage} />
       </Route>
       <Route path="/admin/cloudron/instances">
         <AdminRoute component={AdminCloudronInstancesPage} />
+      </Route>
+      <Route path="/admin/cloudron/instances/:id/apps">
+        <AdminRoute component={AdminCloudronPage} />
+      </Route>
+      <Route path="/admin/cloudron/instances/:id">
+        <AdminRoute component={AdminCloudronInstanceDetailsPage} />
+      </Route>
+      <Route path="/admin/cloudron/licenses">
+        <AdminRoute component={AdminCloudronLicensesPage} />
+      </Route>
+      <Route path="/admin/cloudron/sync-logs">
+        <AdminRoute component={AdminCloudronSyncLogsPage} />
       </Route>
 
       <Route component={NotFound} />

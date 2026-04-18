@@ -14,4 +14,6 @@ export * from "./subscriptionPlanFeatures";
 export * from "./userSubscriptions";
 export * from "./cloudronInstances";
 export * from "./cloudronClientAccess";
+export * from "./cloudronSyncLogs";
+export * from "./cloudronAppsCache";
 export * from "./moyasarPayments";

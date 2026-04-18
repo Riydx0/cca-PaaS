@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, jsonb, timestamp, unique } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, jsonb, timestamp, unique, text } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { cloudronInstancesTable } from "./cloudronInstances";
 
@@ -31,6 +31,7 @@ export const cloudronClientAccessTable = pgTable(
       .references(() => cloudronInstancesTable.id, { onDelete: "cascade" }),
     permissions: jsonb("permissions").$type<CloudronPermission[]>().notNull().default([]),
     installQuota: integer("install_quota"),
+    relationshipType: text("relationship_type").notNull().default("primary"), // primary|shared
     linkedAt: timestamp("linked_at").notNull().defaultNow(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
