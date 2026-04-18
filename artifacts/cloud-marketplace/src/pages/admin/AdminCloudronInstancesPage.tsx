@@ -279,45 +279,71 @@ export function AdminCloudronInstancesPage() {
       </Card>
 
       <Dialog open={!!chooserTarget} onOpenChange={(v) => !v && setChooserTarget(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("admin.cloudron.instances.chooser.title")}</DialogTitle>
-            <DialogDescription>
-              {chooserTarget?.name} — {chooserTarget?.baseUrl}
+        <DialogContent className="sm:max-w-lg p-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-4 bg-gradient-to-br from-primary/5 via-background to-background border-b">
+            <DialogTitle className="text-lg">
+              {t("admin.cloudron.instances.chooser.title")}
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="flex items-start gap-3 mt-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Server className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-foreground truncate">
+                      {chooserTarget?.name}
+                    </span>
+                    <HealthBadge status={chooserTarget?.healthStatus} />
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate mt-0.5" dir="ltr">
+                    {chooserTarget?.baseUrl}
+                  </div>
+                </div>
+              </div>
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-            <Button
-              variant="outline"
-              className="h-auto py-4 flex-col gap-2"
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-6 pt-4">
+            <button
+              type="button"
               onClick={() => {
                 if (!chooserTarget) return;
                 const id = chooserTarget.id;
                 setChooserTarget(null);
                 navigate(`/admin/cloudron/instances/${id}`);
               }}
+              className="group flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-5 text-start transition-all hover:border-primary/50 hover:bg-accent hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
-              <Eye className="h-6 w-6 text-primary" />
-              <div className="font-semibold">{t("admin.cloudron.instances.chooser.view")}</div>
-              <div className="text-xs text-muted-foreground text-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+                <Eye className="h-5 w-5" />
+              </div>
+              <div className="font-semibold text-foreground">
+                {t("admin.cloudron.instances.chooser.view")}
+              </div>
+              <div className="text-xs text-muted-foreground leading-relaxed">
                 {t("admin.cloudron.instances.chooser.viewDesc")}
               </div>
-            </Button>
-            <Button
-              className="h-auto py-4 flex-col gap-2"
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 if (!chooserTarget) return;
                 const id = chooserTarget.id;
                 setChooserTarget(null);
                 navigate(`/admin/cloudron/instances/${id}/apps`);
               }}
+              className="group relative flex flex-col items-start gap-2 rounded-xl border border-primary bg-primary p-5 text-start text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
-              <LogIn className="h-6 w-6" />
-              <div className="font-semibold">{t("admin.cloudron.instances.chooser.enter")}</div>
-              <div className="text-xs opacity-90 text-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-foreground/15 text-primary-foreground transition-colors group-hover:bg-primary-foreground/20">
+                <LogIn className="h-5 w-5" />
+              </div>
+              <div className="font-semibold">
+                {t("admin.cloudron.instances.chooser.enter")}
+              </div>
+              <div className="text-xs text-primary-foreground/85 leading-relaxed">
                 {t("admin.cloudron.instances.chooser.enterDesc")}
               </div>
-            </Button>
+            </button>
           </div>
         </DialogContent>
       </Dialog>
