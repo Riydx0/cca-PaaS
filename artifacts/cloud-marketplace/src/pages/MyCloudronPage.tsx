@@ -80,10 +80,37 @@ interface AppStoreListing {
   manifest?: {
     title?: string;
     tagline?: string;
+    description?: string;
+    website?: string;
     icon?: string;
     version?: string;
     tags?: string[];
+    memoryLimit?: number;
+    minBoxMemory?: number;
   };
+}
+
+function deriveInstallDomain(baseUrl: string | undefined): string | null {
+  if (!baseUrl) return null;
+  try {
+    const host = new URL(baseUrl).hostname;
+    if (host.startsWith("my.")) return host.slice(3);
+    return host;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeLocation(input: string): string {
+  return input.toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/-+/g, "-").replace(/^-|-$/g, "");
+}
+
+function formatMemory(bytes: number | undefined): string | null {
+  if (!bytes || bytes <= 0) return null;
+  const gib = bytes / (1024 * 1024 * 1024);
+  if (gib >= 1) return `${gib.toFixed(gib < 10 ? 1 : 0)} GiB`;
+  const mib = bytes / (1024 * 1024);
+  return `${Math.round(mib)} MiB`;
 }
 
 interface Mailbox {
@@ -322,19 +349,46 @@ function InstallModal({
   onClose,
   onTaskStarted,
   initialAppStoreId,
+  initialApp,
+  instanceBaseUrl,
 }: {
   open: boolean;
   onClose: () => void;
   onTaskStarted: (task: ActiveTask) => void;
   initialAppStoreId?: string;
+  initialApp?: AppStoreListing;
+  instanceBaseUrl?: string;
 }) {
   const { t } = useI18n();
-  const [appStoreId, setAppStoreId] = useState(initialAppStoreId ?? "");
+  const seededId = initialApp?.id ?? initialAppStoreId ?? "";
+  const [appStoreId, setAppStoreId] = useState(seededId);
   const [location, setLocation] = useState("");
+  const [locationTouched, setLocationTouched] = useState(false);
+
+  const installDomain = deriveInstallDomain(instanceBaseUrl);
+  const hasBranding = Boolean(initialApp?.manifest);
+  const appTitle = initialApp?.manifest?.title ?? appStoreId;
+  const appIcon = initialApp?.iconUrl ?? initialApp?.manifest?.icon;
+  const appVersion = initialApp?.manifest?.version;
+  const appWebsite = initialApp?.manifest?.website;
+  const appTagline = initialApp?.manifest?.tagline;
+  const appMemory = formatMemory(initialApp?.manifest?.memoryLimit ?? initialApp?.manifest?.minBoxMemory);
 
   useEffect(() => {
-    if (open) { setAppStoreId(initialAppStoreId ?? ""); setLocation(""); }
-  }, [open, initialAppStoreId]);
+    if (open) {
+      setAppStoreId(initialApp?.id ?? initialAppStoreId ?? "");
+      setLocation("");
+      setLocationTouched(false);
+    }
+  }, [open, initialAppStoreId, initialApp?.id]);
+
+  const cleanLocation = sanitizeLocation(location);
+  const locationInvalid = locationTouched && location.length > 0 && cleanLocation !== location.toLowerCase();
+  const previewFqdn = installDomain
+    ? cleanLocation
+      ? `${cleanLocation}.${installDomain}`
+      : installDomain
+    : null;
 
   const mutation = useMutation({
     mutationFn: postInstall,
@@ -360,34 +414,133 @@ function InstallModal({
     },
   });
 
+  const submitDisabled = mutation.isPending || !appStoreId.trim();
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{t("cloudron.client.install.title")}</DialogTitle>
-          <DialogDescription>{t("cloudron.client.install.description")}</DialogDescription>
-        </DialogHeader>
+      <DialogContent className="sm:max-w-lg">
+        {hasBranding ? (
+          <DialogHeader className="space-y-3">
+            <div className="flex items-start gap-4">
+              {appIcon ? (
+                <img
+                  src={appIcon}
+                  alt={appTitle}
+                  className="h-16 w-16 rounded-xl object-contain border border-border bg-background shrink-0"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <div className="h-16 w-16 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Store className="h-8 w-8 text-primary" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0 space-y-1">
+                <DialogTitle className="text-2xl leading-tight">{appTitle}</DialogTitle>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  {appVersion && <span>v{appVersion}</span>}
+                  {appMemory && <span>· {t("cloudron.client.install.memoryNeeded").replace("{memory}", appMemory)}</span>}
+                </div>
+                {appWebsite && (
+                  <a
+                    href={appWebsite}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block text-xs text-primary hover:underline"
+                  >
+                    {appWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                  </a>
+                )}
+              </div>
+            </div>
+            {appTagline && (
+              <DialogDescription className="text-sm">{appTagline}</DialogDescription>
+            )}
+          </DialogHeader>
+        ) : (
+          <DialogHeader>
+            <DialogTitle>{t("cloudron.client.install.title")}</DialogTitle>
+            <DialogDescription>{t("cloudron.client.install.manualHint")}</DialogDescription>
+          </DialogHeader>
+        )}
+
         <form
           onSubmit={(e) => {
             e.preventDefault();
             if (!appStoreId.trim()) return;
-            mutation.mutate({ appStoreId: appStoreId.trim(), location: location.trim() || undefined });
+            const finalLocation = cleanLocation || undefined;
+            mutation.mutate({ appStoreId: appStoreId.trim(), location: finalLocation });
           }}
           className="space-y-4 py-1"
         >
-          <div className="space-y-1.5">
-            <Label htmlFor="appStoreId">{t("cloudron.client.install.appStoreId")}</Label>
-            <Input id="appStoreId" placeholder="io.gitea.www" value={appStoreId} onChange={(e) => setAppStoreId(e.target.value)} required autoFocus />
-          </div>
+          {!hasBranding && (
+            <div className="space-y-1.5">
+              <Label htmlFor="appStoreId">{t("cloudron.client.install.appStoreId")}</Label>
+              <Input
+                id="appStoreId"
+                placeholder="org.wordpress.cloudronapp"
+                value={appStoreId}
+                onChange={(e) => setAppStoreId(e.target.value)}
+                required
+                autoFocus
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("cloudron.client.install.appStoreIdHint")}{" "}
+                <a
+                  href="https://cloudron.io/store/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  cloudron.io/store
+                </a>
+              </p>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label htmlFor="location">{t("cloudron.client.install.location")}</Label>
-            <Input id="location" placeholder="gitea" value={location} onChange={(e) => setLocation(e.target.value)} />
+            <div className="flex items-stretch rounded-md border border-input focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-1 overflow-hidden">
+              <Input
+                id="location"
+                placeholder={t("cloudron.client.install.locationPlaceholder")}
+                value={location}
+                onChange={(e) => { setLocation(e.target.value); setLocationTouched(true); }}
+                className="flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none"
+                autoFocus={hasBranding}
+              />
+              {installDomain && (
+                <div className="px-3 flex items-center text-sm text-muted-foreground bg-muted/60 border-s border-input font-mono whitespace-nowrap">
+                  .{installDomain}
+                </div>
+              )}
+            </div>
+            {previewFqdn && (
+              <p className="text-xs text-muted-foreground">
+                {t("cloudron.client.install.previewLabel")}{" "}
+                <span className="font-mono font-medium text-foreground">{previewFqdn}</span>
+                {!cleanLocation && (
+                  <span className="ms-1 italic">({t("cloudron.client.install.rootDomain")})</span>
+                )}
+              </p>
+            )}
+            {locationInvalid && (
+              <p className="text-xs text-destructive">{t("cloudron.client.install.locationInvalid")}</p>
+            )}
+            {!cleanLocation && (
+              <p className="text-xs text-muted-foreground">{t("cloudron.client.install.locationEmptyHint")}</p>
+            )}
           </div>
+
           <DialogFooter className="pt-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={mutation.isPending}>{t("btn.cancel")}</Button>
-            <Button type="submit" disabled={mutation.isPending || !appStoreId.trim()}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={mutation.isPending}>
+              {t("btn.cancel")}
+            </Button>
+            <Button type="submit" disabled={submitDisabled}>
               {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin me-2" /> : <Plus className="h-4 w-4 me-2" />}
-              {t("cloudron.client.install.submit")}
+              {hasBranding
+                ? t("cloudron.client.install.submitNamed").replace("{name}", appTitle)
+                : t("cloudron.client.install.submit")}
             </Button>
           </DialogFooter>
         </form>
@@ -557,7 +710,7 @@ function MyAppsTab({
                 <TableHead>{t("admin.cloudron.col.app")}</TableHead>
                 <TableHead>{t("admin.cloudron.col.location")}</TableHead>
                 <TableHead>{t("admin.cloudron.col.fqdn")}</TableHead>
-                <TableHead>{t("admin.cloudron.col.status")}</TableHead>
+                <TableHead>{t("admin.cloudron.col.runState")}</TableHead>
                 <TableHead className="text-end">{t("admin.cloudron.col.actions")}</TableHead>
               </TableRow>
             </TableHeader>
@@ -645,13 +798,15 @@ function MyAppsTab({
 function AppStoreTab({
   canInstall,
   onTaskStarted,
+  instanceBaseUrl,
 }: {
   canInstall: boolean;
+  instanceBaseUrl?: string;
   onTaskStarted: (task: ActiveTask) => void;
 }) {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
-  const [installId, setInstallId] = useState<string | undefined>();
+  const [installApp, setInstallApp] = useState<AppStoreListing | undefined>();
   const [installOpen, setInstallOpen] = useState(false);
 
   const storeQuery = useQuery({
@@ -672,8 +827,8 @@ function AppStoreTab({
       })
     : apps;
 
-  function handleInstall(id: string) {
-    setInstallId(id);
+  function handleInstall(app: AppStoreListing) {
+    setInstallApp(app);
     setInstallOpen(true);
   }
 
@@ -722,7 +877,7 @@ function AppStoreTab({
                   )}
                   {canInstall && (
                     <Button size="sm" variant="outline" className="mt-2 h-7 px-2.5 text-xs gap-1"
-                      onClick={() => handleInstall(app.id)}>
+                      onClick={() => handleInstall(app)}>
                       <Plus className="h-3 w-3" />{t("cloudron.client.appstore.install")}
                     </Button>
                   )}
@@ -735,9 +890,10 @@ function AppStoreTab({
 
       <InstallModal
         open={installOpen}
-        onClose={() => { setInstallOpen(false); setInstallId(undefined); }}
+        onClose={() => { setInstallOpen(false); setInstallApp(undefined); }}
         onTaskStarted={onTaskStarted}
-        initialAppStoreId={installId}
+        initialApp={installApp}
+        instanceBaseUrl={instanceBaseUrl}
       />
     </div>
   );
@@ -1353,7 +1509,7 @@ export function MyCloudronPage() {
 
         {hasAppStore && (
           <TabsContent value="appstore" className="mt-4">
-            <AppStoreTab canInstall={canInstall} onTaskStarted={addTask} />
+            <AppStoreTab canInstall={canInstall} onTaskStarted={addTask} instanceBaseUrl={summary.baseUrl} />
           </TabsContent>
         )}
 
