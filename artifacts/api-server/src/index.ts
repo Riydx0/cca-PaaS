@@ -123,6 +123,9 @@ await ensureDefaultSeedData();
 
 const { default: app } = await import("./app.js");
 
+const { loadAppStoreCacheFromDb } = await import("./routes/cloudron.js");
+await loadAppStoreCacheFromDb();
+
 const { cloudronHealthMonitor } = await import("./services/CloudronHealthMonitor.js");
 cloudronHealthMonitor.start();
 

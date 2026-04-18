@@ -11,6 +11,7 @@ import { db } from "@workspace/db";
 import {
   cloudronInstancesTable,
   auditLogsTable,
+  settingsTable,
   insertCloudronInstanceSchema,
   updateCloudronInstanceSchema,
 } from "@workspace/db/schema";
@@ -402,6 +403,7 @@ function fireAdminLog(req: Request, action: string, appId?: string): void {
 // ─── App Store catalogue cache ────────────────────────────────────────────────
 
 const APPSTORE_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const APPSTORE_DB_KEY = "appstore_catalogue_cache";
 
 interface AppStoreCache {
   data: unknown;
@@ -410,6 +412,41 @@ interface AppStoreCache {
 
 let appStoreCache: AppStoreCache | null = null;
 let appStoreFetchInFlight: Promise<unknown> | null = null;
+
+async function persistAppStoreCacheToDb(cache: AppStoreCache): Promise<void> {
+  try {
+    await db
+      .insert(settingsTable)
+      .values({ key: APPSTORE_DB_KEY, value: JSON.stringify(cache) })
+      .onConflictDoUpdate({
+        target: settingsTable.key,
+        set: { value: JSON.stringify(cache), updatedAt: new Date() },
+      });
+  } catch (err) {
+    logger.warn({ err }, "[cloudron/appstore] Failed to persist cache to DB");
+  }
+}
+
+export async function loadAppStoreCacheFromDb(): Promise<void> {
+  try {
+    const [row] = await db
+      .select()
+      .from(settingsTable)
+      .where(eq(settingsTable.key, APPSTORE_DB_KEY));
+    if (!row) return;
+
+    const parsed = JSON.parse(row.value) as AppStoreCache;
+    const age = Date.now() - parsed.fetchedAt;
+    if (age < APPSTORE_CACHE_TTL_MS) {
+      appStoreCache = parsed;
+      logger.info({ ageMs: age }, "[cloudron/appstore] Pre-populated cache from DB");
+    } else {
+      logger.info({ ageMs: age }, "[cloudron/appstore] Stored cache is stale, skipping pre-population");
+    }
+  } catch (err) {
+    logger.warn({ err }, "[cloudron/appstore] Failed to load cache from DB (non-fatal)");
+  }
+}
 
 async function fetchAppStoreCatalogue(): Promise<unknown> {
   if (appStoreFetchInFlight) return appStoreFetchInFlight;
@@ -423,7 +460,9 @@ async function fetchAppStoreCatalogue(): Promise<unknown> {
         throw new Error(`App Store returned ${response.status}`);
       }
       const data = await response.json() as unknown;
-      appStoreCache = { data, fetchedAt: Date.now() };
+      const newCache: AppStoreCache = { data, fetchedAt: Date.now() };
+      appStoreCache = newCache;
+      persistAppStoreCacheToDb(newCache).catch(() => {});
       return data;
     } finally {
       appStoreFetchInFlight = null;
