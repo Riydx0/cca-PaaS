@@ -1068,7 +1068,24 @@ function AppStoreBrowser({ onInstall, onViewMyApps }: { onInstall: (appStoreId: 
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [detailsApp, setDetailsApp] = useState<AppStoreListing | null>(null);
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [selectedTag, setSelectedTagState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem("cloudron_appstore_selected_tag") ?? null;
+    } catch {
+      return null;
+    }
+  });
+  const setSelectedTag = (tag: string | null) => {
+    setSelectedTagState(tag);
+    try {
+      if (tag === null) {
+        localStorage.removeItem("cloudron_appstore_selected_tag");
+      } else {
+        localStorage.setItem("cloudron_appstore_selected_tag", tag);
+      }
+    } catch {
+    }
+  };
   const [tagSearch, setTagSearch] = useState("");
   const [showAllTags, setShowAllTags] = useState(false);
 
