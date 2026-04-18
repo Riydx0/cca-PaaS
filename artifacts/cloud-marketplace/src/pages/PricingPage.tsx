@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { MoyasarCheckout } from "@/components/MoyasarCheckout";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -77,6 +78,10 @@ export function PricingPage() {
   const { t } = useI18n();
   const qc = useQueryClient();
   const [yearly, setYearly] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<{
+    id: number; name: string; price: number; billingCycle: "monthly" | "yearly"; currency: string;
+  } | null>(null);
+  const moyasarEnabled = Boolean(import.meta.env.VITE_MOYASAR_PUBLISHABLE_KEY);
 
   const { data: plans = [], isLoading: plansLoading } = useQuery<Plan[]>({
     queryKey: ["pricing", "plans"],
@@ -306,7 +311,20 @@ export function PricingPage() {
                     ) : (
                       <Button
                         className={`w-full gap-2 ${btnCls}`}
-                        onClick={() => subscribeMutation.mutate({ planId: plan.id, billingCycle })}
+                        onClick={() => {
+                          const priceRaw = yearly ? plan.priceYearly : plan.priceMonthly;
+                          if (moyasarEnabled && priceRaw) {
+                            setCheckoutPlan({
+                              id: plan.id,
+                              name: plan.name,
+                              price: parseFloat(priceRaw),
+                              billingCycle: yearly ? "yearly" : "monthly",
+                              currency: plan.currency ?? "SAR",
+                            });
+                          } else {
+                            subscribeMutation.mutate({ planId: plan.id, billingCycle });
+                          }
+                        }}
                         disabled={subscribeMutation.isPending}
                       >
                         <Sparkles className="h-4 w-4" />
@@ -326,6 +344,18 @@ export function PricingPage() {
         <Shield className="h-4 w-4" />
         <span>{t("pricing.securityNote")}</span>
       </div>
+
+      {checkoutPlan && (
+        <MoyasarCheckout
+          open={Boolean(checkoutPlan)}
+          onOpenChange={(open) => { if (!open) setCheckoutPlan(null); }}
+          planId={checkoutPlan.id}
+          planName={checkoutPlan.name}
+          billingCycle={checkoutPlan.billingCycle}
+          amountSar={checkoutPlan.price}
+          currency={checkoutPlan.currency}
+        />
+      )}
     </div>
   );
 }

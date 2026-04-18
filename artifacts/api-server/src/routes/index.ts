@@ -11,6 +11,7 @@ import pricingRouter from "./pricing";
 import subscriptionRouter from "./subscription";
 import cloudronRouter from "./cloudron";
 import cloudronClientRouter from "./cloudron-client";
+import paymentsRouter from "./payments";
 
 const router: IRouter = Router();
 
@@ -37,5 +38,8 @@ router.use("/cloudron", cloudronRouter);
 
 // Client-facing Cloudron portal — permission-gated per user
 router.use("/cloudron-client", cloudronClientRouter);
+
+// Moyasar payment gateway — initiate, verify, webhook
+router.use("/payments", paymentsRouter);
 
 export default router;

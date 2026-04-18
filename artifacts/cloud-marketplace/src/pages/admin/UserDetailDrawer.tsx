@@ -21,6 +21,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -28,6 +30,7 @@ import {
   Copy, Check, KeyRound, ShoppingCart, AlertCircle, CreditCard,
   Activity, History, X, ChevronRight, Lock, Unlock, UserCog,
   Globe, RefreshCw, Package, Cloud, CloudOff, Loader2, Trash2, Plus,
+  Sparkles,
 } from "lucide-react";
 
 interface AuditEvent {
@@ -495,6 +498,7 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
                       { value: "notes", label: t("admin.user.tab.notes"), icon: FileText },
                       { value: "history", label: t("admin.user.tab.history"), icon: History },
                       { value: "cloudron", label: t("admin.user.tab.cloudron"), icon: Cloud },
+                      { value: "subscription", label: t("admin.user.tab.subscription"), icon: Sparkles },
                     ].map(({ value, label, icon: Icon }) => (
                       <TabsTrigger
                         key={value}
@@ -860,6 +864,8 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
                       )}
                     </TabsContent>
 
+                    <SubscriptionTab userId={user.id} />
+
                   </div>
                 </ScrollArea>
               </Tabs>
@@ -868,5 +874,233 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
         </AnimatePresence>
       </SheetContent>
     </Sheet>
+  );
+}
+
+interface SubscriptionRow {
+  id: number;
+  userId: number;
+  planId: number;
+  billingCycle: "monthly" | "yearly";
+  status: "active" | "trial" | "expired" | "cancelled";
+  startedAt: string;
+  expiresAt: string | null;
+  planName?: string;
+}
+
+interface PlanOption {
+  id: number;
+  name: string;
+  slug: string;
+  isActive: boolean;
+}
+
+function SubscriptionTab({ userId }: { userId: number }) {
+  const { t } = useI18n();
+  const qc = useQueryClient();
+
+  const { data: subData, isLoading: subLoading } = useQuery<{ data: SubscriptionRow[] }>({
+    queryKey: ["admin", "subscriptions", userId],
+    queryFn: () => adminFetch(`/api/admin/subscriptions?userId=${userId}&limit=1`),
+  });
+
+  const { data: plansData } = useQuery<PlanOption[]>({
+    queryKey: ["admin", "plans"],
+    queryFn: () => adminFetch("/api/admin/plans"),
+  });
+
+  const sub = subData?.data?.[0] ?? null;
+  const activePlans = (plansData ?? []).filter((p) => p.isActive);
+
+  const [planId, setPlanId] = useState<string>("");
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
+  const [status, setStatus] = useState<string>("active");
+  const [expiresAt, setExpiresAt] = useState<string>("");
+
+  const prefill = (s: SubscriptionRow) => {
+    setPlanId(String(s.planId));
+    setBillingCycle(s.billingCycle);
+    setStatus(s.status);
+    setExpiresAt(s.expiresAt ? s.expiresAt.slice(0, 10) : "");
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const payload = {
+        userId,
+        planId: Number(planId),
+        billingCycle,
+        status,
+        expiresAt: expiresAt || null,
+      };
+      if (sub) {
+        return adminFetch(`/api/admin/subscriptions/${sub.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+      }
+      return adminFetch("/api/admin/subscriptions", { method: "POST", body: JSON.stringify(payload) });
+    },
+    onSuccess: () => {
+      toast.success(t("admin.user.subscription.saved"));
+      qc.invalidateQueries({ queryKey: ["admin", "subscriptions", userId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: () => adminFetch(`/api/admin/subscriptions/${sub!.id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast.success(t("admin.user.subscription.cancelSuccess"));
+      qc.invalidateQueries({ queryKey: ["admin", "subscriptions", userId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  if (subLoading) {
+    return (
+      <TabsContent value="subscription" className="mt-0 p-4 flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        {t("admin.user.subscription.loading")}
+      </TabsContent>
+    );
+  }
+
+  return (
+    <TabsContent value="subscription" className="mt-0 space-y-5 p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            {t("admin.user.subscription.title")}
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("admin.user.subscription.subtitle")}</p>
+        </div>
+        {sub && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive gap-1">
+                <Trash2 className="h-3 w-3" />
+                {t("admin.user.subscription.cancelBtn")}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t("admin.user.subscription.cancelTitle")}</AlertDialogTitle>
+                <AlertDialogDescription>{t("admin.user.subscription.cancelDesc")}</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => cancelMutation.mutate()}
+                  className="bg-destructive hover:bg-destructive/90 text-white"
+                >
+                  {t("admin.user.subscription.cancelBtn")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </div>
+
+      {/* Current subscription info card */}
+      {sub ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/10 dark:border-emerald-900 p-3 space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-300">
+              {sub.status}
+            </Badge>
+            <span className="text-sm font-medium">{sub.planName ?? `Plan #${sub.planId}`}</span>
+            <span className="text-xs text-muted-foreground">· {sub.billingCycle}</span>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+            <span>{t("admin.user.subscription.startedAt")}: {new Date(sub.startedAt).toLocaleDateString()}</span>
+            {sub.expiresAt && <span>{t("admin.user.subscription.expiresAt")}: {new Date(sub.expiresAt).toLocaleDateString()}</span>}
+          </div>
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto p-0 text-xs text-primary"
+            onClick={() => prefill(sub)}
+          >
+            {t("admin.user.subscription.change")} →
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 p-4 text-center space-y-1">
+          <p className="text-sm font-medium text-muted-foreground">{t("admin.user.subscription.noPlan")}</p>
+          <p className="text-xs text-muted-foreground">{t("admin.user.subscription.noPlanDesc")}</p>
+        </div>
+      )}
+
+      {/* Form */}
+      <div className="space-y-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs">{t("admin.user.subscription.plan")}</Label>
+          <Select value={planId} onValueChange={setPlanId}>
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue placeholder={t("admin.user.subscription.selectPlan")} />
+            </SelectTrigger>
+            <SelectContent>
+              {activePlans.length === 0 ? (
+                <SelectItem value="__none__" disabled>{t("admin.user.subscription.noPlans")}</SelectItem>
+              ) : (
+                activePlans.map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t("admin.user.subscription.billingCycle")}</Label>
+            <Select value={billingCycle} onValueChange={(v) => setBillingCycle(v as "monthly" | "yearly")}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="monthly">{t("admin.user.subscription.monthly")}</SelectItem>
+                <SelectItem value="yearly">{t("admin.user.subscription.yearly")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t("admin.user.subscription.status")}</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="trial">Trial</SelectItem>
+                <SelectItem value="expired">Expired</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">{t("admin.user.subscription.expiresAt")}</Label>
+          <Input
+            type="date"
+            className="h-8 text-sm"
+            value={expiresAt}
+            onChange={(e) => setExpiresAt(e.target.value)}
+          />
+        </div>
+
+        <Button
+          className="w-full h-8 text-sm gap-1.5"
+          disabled={!planId || planId === "__none__" || saveMutation.isPending}
+          onClick={() => saveMutation.mutate()}
+        >
+          {saveMutation.isPending ? (
+            <><Loader2 className="h-3.5 w-3.5 animate-spin" />{t("admin.user.subscription.saving")}</>
+          ) : (
+            <><Check className="h-3.5 w-3.5" />{sub ? t("admin.user.subscription.save") : t("admin.user.subscription.assign")}</>
+          )}
+        </Button>
+      </div>
+    </TabsContent>
   );
 }

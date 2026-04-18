@@ -21,7 +21,7 @@ import {
 import { toast } from "sonner";
 import {
   Sparkles, Plus, Pencil, Trash2, Power, PowerOff, Star, Check,
-  DollarSign, Layers,
+  DollarSign, Layers, ChevronDown, ChevronUp, Loader2, Settings2,
 } from "lucide-react";
 
 interface Plan {
@@ -58,6 +58,38 @@ interface PlanFormData {
   sortOrder: string;
   featuresRaw: string;
 }
+
+interface PlanFeatureRow {
+  id: number;
+  featureKey: string;
+  enabled: boolean;
+  limitValue: number | null;
+}
+
+const BOOLEAN_PERM_KEYS = [
+  "view_cloudron", "view_apps", "install_apps", "restart_apps",
+  "uninstall_apps", "stop_apps", "start_apps", "view_app_store",
+  "view_mail", "create_mailboxes", "edit_mailboxes", "delete_mailboxes",
+] as const;
+
+const NUMERIC_LIMIT_KEYS = [
+  "max_apps", "max_mailboxes", "max_cloudron_instances",
+] as const;
+
+const PERM_LABEL_MAP: Record<string, string> = {
+  view_cloudron: "View Cloudron",
+  view_apps: "View Apps",
+  install_apps: "Install Apps",
+  restart_apps: "Restart Apps",
+  uninstall_apps: "Uninstall Apps",
+  stop_apps: "Stop Apps",
+  start_apps: "Start Apps",
+  view_app_store: "Browse App Store",
+  view_mail: "View Mailboxes",
+  create_mailboxes: "Create Mailboxes",
+  edit_mailboxes: "Edit Mailboxes",
+  delete_mailboxes: "Delete Mailboxes",
+};
 
 const DEFAULT_FORM: PlanFormData = {
   name: "",
@@ -114,12 +146,184 @@ function formToPayload(f: PlanFormData) {
   };
 }
 
+function buildFeaturesMap(rows: PlanFeatureRow[]): Record<string, { enabled: boolean; limitValue: string }> {
+  const map: Record<string, { enabled: boolean; limitValue: string }> = {};
+  for (const r of rows) {
+    map[r.featureKey] = {
+      enabled: r.enabled,
+      limitValue: r.limitValue != null ? String(r.limitValue) : "",
+    };
+  }
+  return map;
+}
+
+function featuresMapToPayload(map: Record<string, { enabled: boolean; limitValue: string }>) {
+  return Object.entries(map).map(([featureKey, v]) => ({
+    featureKey,
+    enabled: v.enabled,
+    limitValue: v.limitValue ? Number(v.limitValue) : null,
+  }));
+}
+
+function PlanFeaturesEditor({ planId, planName }: { planId: number; planName: string }) {
+  const { t } = useI18n();
+  const qc = useQueryClient();
+
+  const { data, isLoading, isError } = useQuery<{ features: PlanFeatureRow[] }>({
+    queryKey: ["admin", "plan-features", planId],
+    queryFn: () => adminFetch(`/api/admin/plans/${planId}/features`),
+    staleTime: 30_000,
+  });
+
+  const [localMap, setLocalMap] = useState<Record<string, { enabled: boolean; limitValue: string }> | null>(null);
+
+  const featuresMap = localMap ?? (data ? buildFeaturesMap(data.features) : null);
+
+  function getVal(key: string) {
+    return featuresMap?.[key] ?? { enabled: false, limitValue: "" };
+  }
+
+  function setEnabled(key: string, val: boolean) {
+    setLocalMap((prev) => ({
+      ...(prev ?? buildFeaturesMap(data?.features ?? [])),
+      [key]: { ...getVal(key), enabled: val },
+    }));
+  }
+
+  function setLimit(key: string, val: string) {
+    setLocalMap((prev) => ({
+      ...(prev ?? buildFeaturesMap(data?.features ?? [])),
+      [key]: { ...getVal(key), limitValue: val },
+    }));
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      if (!featuresMap) throw new Error("No features data");
+      return adminFetch(`/api/admin/plans/${planId}/features`, {
+        method: "PUT",
+        body: JSON.stringify({ features: featuresMapToPayload(featuresMap) }),
+      });
+    },
+    onSuccess: () => {
+      toast.success(t("admin.plans.cloudronFeatures.saved"));
+      qc.invalidateQueries({ queryKey: ["admin", "plan-features", planId] });
+      setLocalMap(null);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 py-4 text-muted-foreground text-sm">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        {t("admin.plans.cloudronFeatures.loading")}
+      </div>
+    );
+  }
+
+  if (isError) {
+    return <p className="text-sm text-destructive py-4">{t("admin.plans.cloudronFeatures.error")}</p>;
+  }
+
+  return (
+    <div className="space-y-5 pt-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          {t("admin.plans.cloudronFeatures.permSection")}
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {BOOLEAN_PERM_KEYS.map((key) => {
+            const val = getVal(key);
+            return (
+              <div
+                key={key}
+                className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 transition-colors ${
+                  val.enabled ? "border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20 dark:border-emerald-800" : "border-border/60 bg-muted/20"
+                }`}
+              >
+                <span className="text-xs font-medium leading-tight text-foreground">
+                  {PERM_LABEL_MAP[key] ?? key}
+                </span>
+                <Switch
+                  checked={val.enabled}
+                  onCheckedChange={(v) => setEnabled(key, v)}
+                  className="shrink-0"
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <Separator className="opacity-40" />
+
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          {t("admin.plans.cloudronFeatures.limitSection")}
+        </p>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t("admin.plans.cloudronFeatures.maxApps")}</Label>
+            <Input
+              type="number"
+              min="0"
+              placeholder={t("admin.plans.cloudronFeatures.limitPlaceholder")}
+              value={getVal("max_apps").limitValue}
+              onChange={(e) => setLimit("max_apps", e.target.value)}
+              className="h-8 text-sm"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t("admin.plans.cloudronFeatures.maxMailboxes")}</Label>
+            <Input
+              type="number"
+              min="0"
+              placeholder={t("admin.plans.cloudronFeatures.limitPlaceholder")}
+              value={getVal("max_mailboxes").limitValue}
+              onChange={(e) => setLimit("max_mailboxes", e.target.value)}
+              className="h-8 text-sm"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t("admin.plans.cloudronFeatures.maxInstances")}</Label>
+            <Input
+              type="number"
+              min="0"
+              placeholder={t("admin.plans.cloudronFeatures.limitPlaceholder")}
+              value={getVal("max_cloudron_instances").limitValue}
+              onChange={(e) => setLimit("max_cloudron_instances", e.target.value)}
+              className="h-8 text-sm"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          className="gap-1.5"
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending}
+        >
+          {saveMutation.isPending ? (
+            <><Loader2 className="h-3.5 w-3.5 animate-spin" />{t("admin.plans.cloudronFeatures.saving")}</>
+          ) : (
+            <><Check className="h-3.5 w-3.5" />{t("admin.plans.cloudronFeatures.save")}</>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function AdminPlansPage() {
   const { t } = useI18n();
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [form, setForm] = useState<PlanFormData>(DEFAULT_FORM);
+  const [expandedFeaturesId, setExpandedFeaturesId] = useState<number | null>(null);
 
   const { data: plans = [], isLoading } = useQuery<Plan[]>({
     queryKey: ["admin", "plans"],
@@ -139,7 +343,7 @@ export function AdminPlansPage() {
   };
 
   const saveMutation = useMutation({
-    mutationFn: (payload: any) => {
+    mutationFn: (payload: ReturnType<typeof formToPayload>) => {
       if (editingPlan) {
         return adminFetch(`/api/admin/plans/${editingPlan.id}`, { method: "PATCH", body: JSON.stringify(payload) });
       }
@@ -181,7 +385,7 @@ export function AdminPlansPage() {
     saveMutation.mutate(formToPayload(form));
   };
 
-  const setField = (key: keyof PlanFormData, value: any) =>
+  const setField = (key: keyof PlanFormData, value: PlanFormData[typeof key]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
   return (
@@ -217,83 +421,103 @@ export function AdminPlansPage() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {plans.map((plan) => (
-            <Card key={plan.id} className={`transition-all ${!plan.isActive ? "opacity-60" : ""}`}>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-4 flex-wrap">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-bold text-base truncate">{plan.name}</h3>
-                      <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{plan.slug}</code>
-                      {plan.isFeatured && (
-                        <Badge variant="outline" className="text-xs bg-violet-500/10 text-violet-700 border-violet-300 gap-1">
-                          <Star className="h-2.5 w-2.5 fill-current" />
-                          {t("admin.plans.featured")}
+          {plans.map((plan) => {
+            const isExpanded = expandedFeaturesId === plan.id;
+            return (
+              <Card key={plan.id} className={`transition-all ${!plan.isActive ? "opacity-60" : ""}`}>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-bold text-base truncate">{plan.name}</h3>
+                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{plan.slug}</code>
+                        {plan.isFeatured && (
+                          <Badge variant="outline" className="text-xs bg-violet-500/10 text-violet-700 border-violet-300 gap-1">
+                            <Star className="h-2.5 w-2.5 fill-current" />
+                            {t("admin.plans.featured")}
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className={`text-xs ${plan.isActive ? "bg-emerald-500/10 text-emerald-700 border-emerald-300" : "bg-muted text-muted-foreground"}`}>
+                          {plan.isActive ? t("admin.plans.active") : t("admin.plans.inactive")}
                         </Badge>
-                      )}
-                      <Badge variant="outline" className={`text-xs ${plan.isActive ? "bg-emerald-500/10 text-emerald-700 border-emerald-300" : "bg-muted text-muted-foreground"}`}>
-                        {plan.isActive ? t("admin.plans.active") : t("admin.plans.inactive")}
-                      </Badge>
+                      </div>
+                      <div className="flex items-center gap-4 mt-1.5 text-sm text-muted-foreground flex-wrap">
+                        {plan.customPricing ? (
+                          <span>{t("admin.plans.customPricing")}</span>
+                        ) : (
+                          <>
+                            {plan.priceMonthly && <span>{plan.priceMonthly} {plan.currency}/{t("pricing.month")}</span>}
+                            {plan.priceYearly && <span>{plan.priceYearly} {plan.currency}/{t("pricing.year")}</span>}
+                          </>
+                        )}
+                        {plan.maxActiveOrders != null && <span>{plan.maxActiveOrders} {t("admin.plans.orders")}</span>}
+                        {plan.prioritySupport && (
+                          <span className="flex items-center gap-1"><Check className="h-3.5 w-3.5 text-emerald-500" />{t("pricing.limits.prioritySupport")}</span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-4 mt-1.5 text-sm text-muted-foreground flex-wrap">
-                      {plan.customPricing ? (
-                        <span>{t("admin.plans.customPricing")}</span>
-                      ) : (
-                        <>
-                          {plan.priceMonthly && <span>{plan.priceMonthly} {plan.currency}/{t("pricing.month")}</span>}
-                          {plan.priceYearly && <span>{plan.priceYearly} {plan.currency}/{t("pricing.year")}</span>}
-                        </>
-                      )}
-                      {plan.maxActiveOrders != null && <span>{plan.maxActiveOrders} {t("admin.plans.orders")}</span>}
-                      {plan.prioritySupport && (
-                        <span className="flex items-center gap-1"><Check className="h-3.5 w-3.5 text-emerald-500" />{t("pricing.limits.prioritySupport")}</span>
-                      )}
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1.5"
+                        onClick={() => setExpandedFeaturesId(isExpanded ? null : plan.id)}
+                      >
+                        <Settings2 className="h-3.5 w-3.5" />
+                        {t("admin.plans.cloudronFeatures.title")}
+                        {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => toggleMutation.mutate(plan.id)}
+                        disabled={toggleMutation.isPending}
+                        title={plan.isActive ? t("admin.plans.deactivate") : t("admin.plans.activate")}
+                      >
+                        {plan.isActive ? <PowerOff className="h-4 w-4 text-muted-foreground" /> : <Power className="h-4 w-4 text-emerald-600" />}
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(plan)}>
+                        <Pencil className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>{t("admin.plans.deleteTitle")}</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {t("admin.plans.deleteConfirm").replace("{name}", plan.name)}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => deleteMutation.mutate(plan.id)}
+                              className="bg-destructive hover:bg-destructive/90 text-white"
+                            >
+                              {t("admin.plans.delete")}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => toggleMutation.mutate(plan.id)}
-                      disabled={toggleMutation.isPending}
-                      title={plan.isActive ? t("admin.plans.deactivate") : t("admin.plans.activate")}
-                    >
-                      {plan.isActive ? <PowerOff className="h-4 w-4 text-muted-foreground" /> : <Power className="h-4 w-4 text-emerald-600" />}
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(plan)}>
-                      <Pencil className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>{t("admin.plans.deleteTitle")}</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            {t("admin.plans.deleteConfirm").replace("{name}", plan.name)}
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => deleteMutation.mutate(plan.id)}
-                            className="bg-destructive hover:bg-destructive/90 text-white"
-                          >
-                            {t("admin.plans.delete")}
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  {isExpanded && (
+                    <>
+                      <Separator className="mt-4 opacity-40" />
+                      <PlanFeaturesEditor planId={plan.id} planName={plan.name} />
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -311,7 +535,6 @@ export function AdminPlansPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            {/* Name + Slug */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>{t("admin.plans.name")} *</Label>
@@ -326,7 +549,6 @@ export function AdminPlansPage() {
               </div>
             </div>
 
-            {/* Description */}
             <div className="space-y-1.5">
               <Label>{t("admin.plans.description")}</Label>
               <Textarea value={form.description} onChange={(e) => setField("description", e.target.value)} rows={2} placeholder={t("admin.plans.descriptionPlaceholder")} />
@@ -334,7 +556,6 @@ export function AdminPlansPage() {
 
             <Separator />
 
-            {/* Pricing */}
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label>{t("admin.plans.priceMonthly")}</Label>
@@ -350,7 +571,6 @@ export function AdminPlansPage() {
               </div>
             </div>
 
-            {/* Limits */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>{t("admin.plans.maxOrders")}</Label>
@@ -362,7 +582,6 @@ export function AdminPlansPage() {
               </div>
             </div>
 
-            {/* Features list */}
             <div className="space-y-1.5">
               <Label>{t("admin.plans.features")}</Label>
               <Textarea
@@ -376,13 +595,11 @@ export function AdminPlansPage() {
 
             <Separator />
 
-            {/* Sort order */}
             <div className="space-y-1.5 w-32">
               <Label>{t("admin.plans.sortOrder")}</Label>
               <Input type="number" min="0" value={form.sortOrder} onChange={(e) => setField("sortOrder", e.target.value)} />
             </div>
 
-            {/* Toggles */}
             <div className="grid grid-cols-2 gap-3">
               {[
                 { key: "isActive" as keyof PlanFormData, label: t("admin.plans.active") },

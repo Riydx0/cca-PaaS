@@ -43,6 +43,7 @@ import { SubscriptionPage } from "@/pages/SubscriptionPage";
 import { MyServicesPage } from "@/pages/MyServicesPage";
 import { MyCloudronPage } from "@/pages/MyCloudronPage";
 import { ServerDetailsPage } from "@/pages/ServerDetailsPage";
+import { PaymentCallbackPage } from "@/pages/PaymentCallbackPage";
 import { AdminServiceInstancesPage } from "@/pages/admin/AdminServiceInstancesPage";
 import { AdminCloudronPage } from "@/pages/admin/AdminCloudronPage";
 
@@ -208,6 +209,9 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
       </Route>
       <Route path="/my-cloudron">
         <ProtectedRoute component={MyCloudronPage} />
+      </Route>
+      <Route path="/payment/callback">
+        <ProtectedRoute component={PaymentCallbackPage} />
       </Route>
       {/* Legacy route redirects for backward URL compatibility */}
       <Route path="/dashboard/my-services">

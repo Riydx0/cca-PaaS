@@ -46,7 +46,11 @@ import {
   RefreshCw,
   Pencil,
   Clock,
+  Sparkles,
+  Check,
+  X,
 } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -959,6 +963,131 @@ function MailboxesTab({ permissions }: { permissions: string[] }) {
   );
 }
 
+// ─── Your Plan Card ─────────────────────────────────────────────────────────────
+
+interface MySubscriptionData {
+  subscription: {
+    id: number;
+    planId: number;
+    planName: string;
+    status: string;
+    features: Array<{
+      featureKey: string;
+      enabled: boolean;
+      limitValue: number | null;
+    }>;
+  } | null;
+}
+
+const LIMIT_KEYS_PLAN = ["max_apps", "max_mailboxes", "max_cloudron_instances"] as const;
+const LIMIT_LABELS: Record<string, string> = {
+  max_apps: "cloudron.client.plan.apps",
+  max_mailboxes: "cloudron.client.plan.mailboxes",
+  max_cloudron_instances: "cloudron.client.plan.instances",
+};
+
+function PlanCard() {
+  const { t } = useI18n();
+  const { data, isLoading } = useQuery<MySubscriptionData>({
+    queryKey: ["client-my-subscription"],
+    queryFn: () => clientFetch<MySubscriptionData>("/api/cloudron-client/my-subscription"),
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <Card className="border-border/50">
+        <CardContent className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          {t("cloudron.client.plan.loading")}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const sub = data?.subscription;
+
+  if (!sub) {
+    return (
+      <Card className="border-dashed border-border/50">
+        <CardContent className="py-4 text-center space-y-1">
+          <p className="text-sm font-medium text-muted-foreground">{t("cloudron.client.plan.noPlan")}</p>
+          <p className="text-xs text-muted-foreground">{t("cloudron.client.plan.noPlanDesc")}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const boolPerms = sub.features.filter((f) => !LIMIT_KEYS_PLAN.includes(f.featureKey as typeof LIMIT_KEYS_PLAN[number]));
+  const limits = sub.features.filter((f) => LIMIT_KEYS_PLAN.includes(f.featureKey as typeof LIMIT_KEYS_PLAN[number]));
+
+  return (
+    <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-2 text-base">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            {t("cloudron.client.plan.title")}
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-300">
+              {sub.status}
+            </Badge>
+            <span className="text-sm font-bold">{sub.planName}</span>
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {boolPerms.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{t("cloudron.client.plan.features")}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {boolPerms.map((f) => (
+                <Badge
+                  key={f.featureKey}
+                  variant="outline"
+                  className={`text-xs gap-1 ${f.enabled ? "bg-emerald-500/10 text-emerald-700 border-emerald-300" : "bg-muted text-muted-foreground border-border/50 opacity-60"}`}
+                >
+                  {f.enabled ? <Check className="h-2.5 w-2.5" /> : <X className="h-2.5 w-2.5" />}
+                  {f.featureKey.replace(/_/g, " ")}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {limits.length > 0 && (
+          <>
+            {boolPerms.length > 0 && <Separator className="opacity-40" />}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">{t("cloudron.client.plan.limits")}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {limits.map((f) => {
+                  const labelKey = LIMIT_LABELS[f.featureKey] ?? f.featureKey;
+                  return (
+                    <div key={f.featureKey} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium text-muted-foreground">{t(labelKey as Parameters<typeof t>[0])}</span>
+                        <span className="font-bold text-foreground">
+                          {f.limitValue != null ? f.limitValue : t("cloudron.client.plan.unlimited")}
+                        </span>
+                      </div>
+                      {f.limitValue != null && (
+                        <Progress value={0} className="h-1.5" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Main page ──────────────────────────────────────────────────────────────────
 
 export function MyCloudronPage() {
@@ -1079,6 +1208,9 @@ export function MyCloudronPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Your Plan Card */}
+      <PlanCard />
 
       {/* Tabs */}
       <Tabs defaultValue={defaultTab}>
