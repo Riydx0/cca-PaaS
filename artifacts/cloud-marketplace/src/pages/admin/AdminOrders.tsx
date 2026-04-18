@@ -1,24 +1,18 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { Link } from "wouter";
 import { useI18n } from "@/lib/i18n";
 import { adminFetch } from "@/lib/adminFetch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Receipt, MapPin, Calendar, Cloud } from "lucide-react";
+import { Receipt, MapPin, Calendar, Cloud, Search, Eye, User } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
 const ALL_STATUSES = ["Pending", "Provisioning", "Active", "Failed", "Cancelled"];
-
-const statusColors: Record<string, string> = {
-  Active: "bg-emerald-500/10 text-emerald-700 border-emerald-200",
-  Pending: "bg-amber-500/10 text-amber-700 border-amber-200",
-  Provisioning: "bg-blue-500/10 text-blue-700 border-blue-200",
-  Failed: "bg-red-500/10 text-red-700 border-red-200",
-  Cancelled: "bg-secondary text-secondary-foreground border-border",
-};
 
 const statusDot: Record<string, string> = {
   Active: "bg-emerald-500",
@@ -28,16 +22,56 @@ const statusDot: Record<string, string> = {
   Cancelled: "bg-muted-foreground",
 };
 
+interface OrderRow {
+  id: number;
+  userId: string;
+  status: string;
+  requestedRegion: string;
+  createdAt: string;
+  cloudService: { name: string; provider: string } | null;
+  user: { id: number; name: string; email: string; role: string } | null;
+}
+
 export function AdminOrders() {
   const { t } = useI18n();
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("all");
+  const [providerFilter, setProviderFilter] = useState("all");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
 
-  const { data: orders, isLoading } = useQuery<any[]>({
-    queryKey: ["admin", "orders", statusFilter],
-    queryFn: () =>
-      adminFetch(`/api/admin/orders${statusFilter !== "all" ? `?status=${statusFilter}` : ""}`),
+  useEffect(() => {
+    const id = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(id);
+  }, [searchInput]);
+
+  const queryString = useMemo(() => {
+    const params = new URLSearchParams();
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (providerFilter !== "all") params.set("provider", providerFilter);
+    if (search) params.set("search", search);
+    const qs = params.toString();
+    return qs ? `?${qs}` : "";
+  }, [statusFilter, providerFilter, search]);
+
+  const { data: orders, isLoading } = useQuery<OrderRow[]>({
+    queryKey: ["admin", "orders", statusFilter, providerFilter, search],
+    queryFn: () => adminFetch(`/api/admin/orders${queryString}`),
   });
+
+  // Provider list — fetch unfiltered orders to populate filter options.
+  const { data: allOrdersForProviders } = useQuery<OrderRow[]>({
+    queryKey: ["admin", "orders", "providers-source"],
+    queryFn: () => adminFetch(`/api/admin/orders`),
+    staleTime: 60_000,
+  });
+  const providers = useMemo(() => {
+    const set = new Set<string>();
+    (allOrdersForProviders ?? []).forEach((o) => {
+      if (o.cloudService?.provider) set.add(o.cloudService.provider);
+    });
+    return Array.from(set).sort();
+  }, [allOrdersForProviders]);
 
   const updateStatus = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
@@ -70,15 +104,35 @@ export function AdminOrders() {
         <p className="text-muted-foreground mt-1">{t("admin.page.ordersDesc")}</p>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder={t("admin.orders.searchPlaceholder")}
+            className="ps-9 bg-card"
+          />
+        </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48 bg-card">
+          <SelectTrigger className="w-full sm:w-44 bg-card">
             <SelectValue placeholder={t("label.status")} />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("admin.filter.allStatuses")}</SelectItem>
             {ALL_STATUSES.map((s) => (
               <SelectItem key={s} value={s}>{getStatusLabel(s)}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={providerFilter} onValueChange={setProviderFilter}>
+          <SelectTrigger className="w-full sm:w-44 bg-card">
+            <SelectValue placeholder={t("admin.orders.providerFilter")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("admin.orders.providerFilter")}</SelectItem>
+            {providers.map((p) => (
+              <SelectItem key={p} value={p}>{p}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -101,12 +155,15 @@ export function AdminOrders() {
           </div>
         ) : (
           <>
-            <div className="hidden md:grid grid-cols-[1fr_160px_140px_140px_160px] gap-4 px-5 py-3 bg-muted/40 border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {/* Desktop / tablet header */}
+            <div className="hidden md:grid grid-cols-[1.4fr_1.4fr_140px_120px_120px_150px_110px] gap-4 px-5 py-3 bg-muted/40 border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span>{t("admin.orders.customer")}</span>
               <span>{t("admin.col.service")}</span>
               <span>{t("label.provider")}</span>
               <span>{t("label.region")}</span>
               <span>{t("admin.col.date")}</span>
               <span>{t("label.status")}</span>
+              <span className="text-end">{t("admin.col.actions")}</span>
             </div>
             <div className="divide-y divide-border">
               {orders.map((order, i) => (
@@ -115,14 +172,34 @@ export function AdminOrders() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: i * 0.02 }}
-                  className="grid grid-cols-1 md:grid-cols-[1fr_160px_140px_140px_160px] gap-3 md:gap-4 items-center px-5 py-4 hover:bg-muted/30 transition-colors"
+                  className="grid grid-cols-1 md:grid-cols-[1.4fr_1.4fr_140px_120px_120px_150px_110px] gap-3 md:gap-4 md:items-center px-5 py-4 hover:bg-muted/30 transition-colors"
                 >
-                  <div className="flex items-center gap-3">
+                  {/* Customer */}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="bg-primary/10 p-2 rounded-md hidden sm:block shrink-0">
+                      <User className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="min-w-0">
+                      {order.user ? (
+                        <>
+                          <p className="font-semibold truncate">{order.user.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{order.user.email}</p>
+                        </>
+                      ) : (
+                        <p className="text-xs italic text-muted-foreground truncate">
+                          {t("admin.orders.unknownUser")} ({order.userId})
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Service */}
+                  <div className="flex items-center gap-3 min-w-0">
                     <div className="bg-primary/10 p-2 rounded-md hidden sm:block shrink-0">
                       <Receipt className="h-4 w-4 text-primary" />
                     </div>
                     <div className="min-w-0">
-                      <p className="font-semibold truncate">{order.cloudService?.name ?? "Unknown"}</p>
+                      <p className="font-medium truncate">{order.cloudService?.name ?? "Unknown"}</p>
                       <p className="text-xs text-muted-foreground">#{order.id}</p>
                     </div>
                   </div>
@@ -164,6 +241,15 @@ export function AdminOrders() {
                       ))}
                     </SelectContent>
                   </Select>
+
+                  <div className="flex md:justify-end">
+                    <Link href={`/admin/orders/${order.id}`}>
+                      <Button variant="outline" size="sm" className="h-8 gap-1.5 w-full md:w-auto">
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>{t("admin.orders.viewDetails")}</span>
+                      </Button>
+                    </Link>
+                  </div>
                 </motion.div>
               ))}
             </div>

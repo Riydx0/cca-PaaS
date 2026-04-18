@@ -29,6 +29,7 @@ import { SetPasswordPage } from "@/pages/SetPasswordPage";
 import { AdminDashboard } from "@/pages/admin/AdminDashboard";
 import { AdminUsers } from "@/pages/admin/AdminUsers";
 import { AdminOrders } from "@/pages/admin/AdminOrders";
+import { AdminOrderDetails } from "@/pages/admin/AdminOrderDetails";
 import { AdminServices } from "@/pages/admin/AdminServices";
 import { AdminSystemUpdates } from "@/pages/admin/AdminSystemUpdates";
 import { AdminBillingPage } from "@/pages/admin/AdminBillingPage";
@@ -235,6 +236,9 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
       </Route>
       <Route path="/admin/orders">
         <AdminRoute component={AdminOrders} />
+      </Route>
+      <Route path="/admin/orders/:id">
+        <AdminRoute component={AdminOrderDetails} />
       </Route>
       <Route path="/admin/services">
         <AdminRoute component={AdminServices} />
