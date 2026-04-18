@@ -1,3 +1,6 @@
+import nodemailer from "nodemailer";
+import { Resend } from "resend";
+
 export interface SendEmailParams {
   to: string;
   toName: string;
@@ -9,6 +12,61 @@ export interface SendEmailParams {
 export interface SendPasswordLinkResult {
   sent: boolean;
   plainLink?: string;
+}
+
+/**
+ * Delivers an email via the first available transport:
+ *   1. Resend — if RESEND_API_KEY is set
+ *   2. SMTP   — if SMTP_HOST is set (uses SMTP_PORT / SMTP_USER / SMTP_PASS)
+ *   3. Console fallback — logs to stdout (no-op in production)
+ */
+async function deliverEmail(params: SendEmailParams): Promise<boolean> {
+  const resendKey = process.env.RESEND_API_KEY;
+  const smtpHost = process.env.SMTP_HOST;
+  const from = process.env.EMAIL_FROM ?? `"CloudMarket" <noreply@cloudmarket.app>`;
+
+  if (resendKey) {
+    const resend = new Resend(resendKey);
+    const { data, error } = await resend.emails.send({
+      from,
+      to: params.to,
+      subject: params.subject,
+      html: params.html,
+      text: params.text,
+    });
+    if (error || !data) {
+      throw new Error(`Resend delivery failed: ${error?.message ?? "unknown error"}`);
+    }
+    return true;
+  }
+
+  if (smtpHost) {
+    const port = parseInt(process.env.SMTP_PORT ?? "587", 10);
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port,
+      secure: port === 465,
+      auth: user && pass ? { user, pass } : undefined,
+    });
+
+    await transporter.sendMail({
+      from,
+      to: params.to,
+      subject: params.subject,
+      html: params.html,
+      text: params.text,
+    });
+    return true;
+  }
+
+  console.log(
+    `[EmailService] No email transport configured (set RESEND_API_KEY or SMTP_HOST). ` +
+      `Would send "${params.subject}" to ${params.to}.\n${params.text}`
+  );
+  return false;
 }
 
 export class EmailService {
@@ -41,12 +99,7 @@ export class EmailService {
 
     const text = `Cloudron Connection Lost\n\nHello ${params.toName},\n\nThe Cloudron instance "${params.instanceName}" became unreachable at ${detectedStr}.\n${params.error ? `\nError: ${params.error}\n` : ""}\nPlease check your Cloudron server and network connectivity.\n\nYou are receiving this alert because you are a super admin of ${siteName}. Alerts are rate-limited to at most once per hour.`;
 
-    const smtpHost = process.env.SMTP_HOST;
-    if (smtpHost) {
-      console.log(`[EmailService] SMTP configured but not wired — would send Cloudron alert to ${params.to}`);
-    } else {
-      console.log(`[EmailService] No SMTP configured. Cloudron alert for ${params.to}:\n${text}`);
-    }
+    await deliverEmail({ to: params.to, toName: params.toName, subject, html, text });
   }
 
   static async sendPasswordLink(params: {
@@ -89,19 +142,10 @@ export class EmailService {
         : "Use the link below to reset your password:"
     }\n\n${params.link}\n\nThis link expires in 60 minutes and can only be used once.`;
 
-    // TODO: wire up real SMTP or Resend when SMTP_HOST / RESEND_API_KEY env vars are set
-    const smtpHost = process.env.SMTP_HOST;
-    if (smtpHost) {
-      // TODO: implement nodemailer transport here
-      // const transporter = nodemailer.createTransport({ host: smtpHost, ... });
-      // await transporter.sendMail({ from, to: params.to, subject, html, text });
-      console.log(`[EmailService] SMTP configured but not wired — would send to ${params.to}`);
-    } else {
-      console.log(`[EmailService] No SMTP configured. Password link for ${params.to}:\n${params.link}`);
-    }
+    const sent = await deliverEmail({ to: params.to, toName: params.toName, subject, html, text });
 
     return {
-      sent: !!smtpHost,
+      sent,
       plainLink: params.link,
     };
   }
