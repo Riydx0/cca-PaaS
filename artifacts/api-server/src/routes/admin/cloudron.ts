@@ -625,4 +625,91 @@ router.put("/instances/:id/apps/:appId/metadata", requireAdmin, async (req, res)
 
 function round2(n: number): number { return Math.round(n * 100) / 100; }
 
+/**
+ * POST /api/admin/cloudron/instances/:id/apps/:appId/sync
+ * Re-fetches a single app from the upstream Cloudron instance and upserts the
+ * cache row, without touching unrelated apps. Returns the refreshed cache row.
+ */
+router.post("/instances/:id/apps/:appId/sync", requireAdmin, async (req, res) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid instance ID" }); return; }
+  const appId = String(req.params.appId);
+
+  try {
+    const [inst] = await db
+      .select()
+      .from(cloudronInstancesTable)
+      .where(eq(cloudronInstancesTable.id, id))
+      .limit(1);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+
+    const { createCloudronClient } = await import("../../cloudron/client");
+    const { decryptSecret } = await import("../../lib/crypto");
+    const client = createCloudronClient(inst.baseUrl, decryptSecret(inst.apiToken));
+
+    interface UpstreamApp {
+      id: string;
+      appStoreId?: string;
+      manifest?: { title?: string; version?: string; icon?: string };
+      location?: string;
+      domain?: string;
+      fqdn?: string;
+      health?: string;
+      runState?: string;
+      installationState?: string;
+    }
+
+    let app: UpstreamApp | null = null;
+    try {
+      app = await client.get<UpstreamApp>(`/apps/${encodeURIComponent(appId)}`);
+    } catch (err: any) {
+      const status = err?.status ?? err?.response?.status;
+      if (status === 404) {
+        await db
+          .delete(cloudronAppsCacheTable)
+          .where(and(
+            eq(cloudronAppsCacheTable.instanceId, id),
+            eq(cloudronAppsCacheTable.appId, appId),
+          ));
+        res.status(404).json({ error: "App no longer exists upstream; cache entry removed." });
+        return;
+      }
+      throw err;
+    }
+
+    if (!app || !app.id) {
+      res.status(502).json({ error: "Upstream returned an invalid app payload" });
+      return;
+    }
+
+    const now = new Date();
+    const values = {
+      instanceId: id,
+      appId: app.id,
+      manifestTitle: app.manifest?.title ?? null,
+      location: app.location ?? null,
+      domain: app.fqdn ?? app.domain ?? null,
+      version: app.manifest?.version ?? null,
+      health: app.health ?? null,
+      runState: app.runState ?? null,
+      installState: app.installationState ?? null,
+      iconUrl: app.manifest?.icon ?? null,
+      rawJson: app as unknown as Record<string, unknown>,
+      lastSeenAt: now,
+    };
+    await db
+      .insert(cloudronAppsCacheTable)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [cloudronAppsCacheTable.instanceId, cloudronAppsCacheTable.appId],
+        set: { ...values, lastSeenAt: now },
+      });
+
+    res.json({ ok: true, syncedAt: now.toISOString(), app: values });
+  } catch (err: any) {
+    console.error("[admin/cloudron] single-app sync error", err);
+    res.status(500).json({ error: err?.message ?? "Failed to sync app" });
+  }
+});
+
 export default router;

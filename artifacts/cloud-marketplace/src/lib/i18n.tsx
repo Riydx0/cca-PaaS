@@ -1004,6 +1004,10 @@ const translations = {
 
     // ---- Cloudron My Apps + App Details ----
     "admin.cloudron.col.lastUpdated": "Last Updated",
+    "admin.cloudron.col.health": "Health",
+    "admin.cloudron.col.installedAt": "Installed",
+    "admin.cloudron.app.toast.syncOk": "App data refreshed.",
+    "admin.cloudron.app.toast.syncFailed": "Could not refresh app data.",
     "admin.cloudron.app.upstreamTitle": "upstream",
     "admin.cloudron.app.notFound": "App not found in cache. Run an instance sync and try again.",
     "admin.cloudron.app.backToApps": "Back to My Apps",
@@ -2221,6 +2225,10 @@ const translations = {
 
     // ---- تطبيقاتي + تفاصيل التطبيق ----
     "admin.cloudron.col.lastUpdated": "آخر تحديث",
+    "admin.cloudron.col.health": "الحالة الصحية",
+    "admin.cloudron.col.installedAt": "تاريخ التثبيت",
+    "admin.cloudron.app.toast.syncOk": "تم تحديث بيانات التطبيق.",
+    "admin.cloudron.app.toast.syncFailed": "تعذّر تحديث بيانات التطبيق.",
     "admin.cloudron.app.upstreamTitle": "الأصلي",
     "admin.cloudron.app.notFound": "لم يتم العثور على التطبيق في الذاكرة المؤقتة. قم بمزامنة النسخة وأعد المحاولة.",
     "admin.cloudron.app.backToApps": "العودة إلى تطبيقاتي",

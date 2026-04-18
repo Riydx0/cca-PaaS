@@ -17,6 +17,19 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 
+interface CloudronAppManifest {
+  title?: string;
+  version?: string;
+  icon?: string;
+}
+
+interface CloudronAppRaw {
+  manifest?: CloudronAppManifest;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
 interface CacheRow {
   id: number;
   instanceId: number;
@@ -29,7 +42,7 @@ interface CacheRow {
   runState: string | null;
   installState: string | null;
   iconUrl: string | null;
-  rawJson: any;
+  rawJson: CloudronAppRaw | null;
   lastSeenAt: string;
 }
 
@@ -252,10 +265,10 @@ function AppDetailsContent({ instanceId, appId }: { instanceId: number; appId: s
   const logsUrl = toolBase ? `${toolBase}/logs` : null;
   const terminalUrl = toolBase ? `${toolBase}/terminal` : null;
 
-  const rawManifest = (cache.rawJson as any)?.manifest ?? {};
+  const rawManifest = cache.rawJson?.manifest ?? {};
   const packageVersion = rawManifest.version ?? cache.version ?? "—";
-  const upstreamCreated = (cache.rawJson as any)?.createdAt as string | undefined;
-  const upstreamUpdated = (cache.rawJson as any)?.updatedAt as string | undefined;
+  const upstreamCreated = cache.rawJson?.createdAt;
+  const upstreamUpdated = cache.rawJson?.updatedAt;
 
   return (
     <div className="space-y-6">

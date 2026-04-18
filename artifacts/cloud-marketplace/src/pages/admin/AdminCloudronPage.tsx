@@ -489,6 +489,29 @@ function InstallStateBadge({ state }: { state?: string }) {
   );
 }
 
+function HealthDot({ health }: { health?: string | null }) {
+  const { t } = useI18n();
+  const h = (health ?? "unknown").toLowerCase();
+  const isHealthy = h === "healthy" || h === "online" || h === "ok";
+  const isUnhealthy = h === "unhealthy" || h === "error" || h === "offline" || h === "dead";
+  const dotClass = isHealthy
+    ? "bg-emerald-500"
+    : isUnhealthy
+      ? "bg-red-500"
+      : "bg-muted-foreground/40";
+  const labelKey = isHealthy
+    ? "admin.cloudron.health.online"
+    : isUnhealthy
+      ? "admin.cloudron.health.offline"
+      : "admin.cloudron.health.unknown";
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`h-2 w-2 rounded-full ${dotClass}`} />
+      <span className="text-xs text-muted-foreground">{t(labelKey)}</span>
+    </span>
+  );
+}
+
 const MAX_POLL_ERRORS = 3;
 
 function TaskProgressStrip({ taskId, label, onDone, onTerminal, instanceId = null }: { taskId: string; label: string; onDone: () => void; onTerminal?: () => void; instanceId?: number | null }) {
@@ -1573,6 +1596,25 @@ export function AdminCloudronPage() {
   });
   const overrides = metadataBulk?.items ?? {};
 
+  const [syncingAppId, setSyncingAppId] = useState<string | null>(null);
+  const syncAppMutation = useMutation({
+    mutationFn: async (appId: string) =>
+      adminFetch<{ ok: boolean; syncedAt: string }>(
+        `/api/admin/cloudron/instances/${instanceId}/apps/${encodeURIComponent(appId)}/sync`,
+        { method: "POST" },
+      ),
+    onMutate: (appId: string) => { setSyncingAppId(appId); },
+    onSettled: () => { setSyncingAppId(null); },
+    onSuccess: () => {
+      toast.success(t("admin.cloudron.app.toast.syncOk"));
+      void refetch();
+      void queryClient.invalidateQueries({ queryKey: ["cloudron-apps-metadata-bulk", instanceId ?? "primary"] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.message ?? t("admin.cloudron.app.toast.syncFailed"));
+    },
+  });
+
   const scopedInstance = instanceId ? instances.find((i) => i.id === instanceId) ?? null : null;
 
   const deleteMutation = useMutation({
@@ -1840,6 +1882,8 @@ export function AdminCloudronPage() {
                       <TableHead>{t("admin.cloudron.col.fqdn")}</TableHead>
                       <TableHead>{t("admin.cloudron.col.runState")}</TableHead>
                       <TableHead>{t("admin.cloudron.col.installState")}</TableHead>
+                      <TableHead>{t("admin.cloudron.col.health")}</TableHead>
+                      <TableHead className="whitespace-nowrap">{t("admin.cloudron.col.installedAt")}</TableHead>
                       <TableHead className="whitespace-nowrap">{t("admin.cloudron.col.lastUpdated")}</TableHead>
                       <TableHead className="text-end">{t("admin.cloudron.col.actions")}</TableHead>
                     </TableRow>
@@ -1901,6 +1945,10 @@ export function AdminCloudronPage() {
                           </TableCell>
                           <TableCell><RunStateBadge state={app.runState} transition={appTransition} /></TableCell>
                           <TableCell><InstallStateBadge state={app.installationState} /></TableCell>
+                          <TableCell><HealthDot health={app.health} /></TableCell>
+                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                            {app.createdAt ? new Date(app.createdAt).toLocaleDateString() : "—"}
+                          </TableCell>
                           <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                             {lastUpdated ? new Date(lastUpdated).toLocaleDateString() : "—"}
                           </TableCell>
@@ -1949,12 +1997,12 @@ export function AdminCloudronPage() {
                                 variant="outline"
                                 size="sm"
                                 className="h-7 px-2 text-xs"
-                                disabled={isLoading}
-                                onClick={() => { void refetch(); }}
+                                disabled={syncingAppId === app.id || !instanceId}
+                                onClick={() => syncAppMutation.mutate(app.id)}
                                 data-testid={`button-sync-app-${app.id}`}
                                 title={t("admin.cloudron.app.btn.syncHint")}
                               >
-                                <RefreshCw className={`h-3.5 w-3.5 me-1 ${isLoading ? "animate-spin" : ""}`} />
+                                <RefreshCw className={`h-3.5 w-3.5 me-1 ${syncingAppId === app.id ? "animate-spin" : ""}`} />
                                 {t("admin.cloudron.app.btn.sync")}
                               </Button>
                               {app.runState === "running" && (
