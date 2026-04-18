@@ -470,6 +470,7 @@ function MyAppsTab({
     queryKey: ["client-cloudron-apps"],
     queryFn: fetchApps,
     staleTime: 30_000,
+    refetchInterval: activeTasks.length > 0 ? 5_000 : false,
   });
 
   const apps = appsQuery.data?.apps ?? [];
