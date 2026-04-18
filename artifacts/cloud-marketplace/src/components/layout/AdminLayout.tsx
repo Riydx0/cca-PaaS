@@ -10,6 +10,7 @@ import {
   LayoutDashboard, Users, Receipt, Server, Settings, Menu, LogOut,
   ShieldCheck, ArrowLeft, CreditCard, Activity, FileText, Palette,
   Sparkles, BadgeCheck, ChevronDown, ChevronRight, Layers, AppWindow,
+  Database, Plus,
 } from "lucide-react";
 
 export function AdminLayout({ children }: { children: ReactNode }) {
@@ -33,9 +34,12 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const isInSettingsGroup =
     location.startsWith("/admin/system") || location.startsWith("/admin/settings");
 
+  const isInCloudronGroup = location.startsWith("/admin/cloudron");
+
   const [billingOpen, setBillingOpen] = useState(isInBillingGroup);
   const [subsOpen, setSubsOpen] = useState(isInSubscriptionsGroup);
   const [settingsOpen, setSettingsOpen] = useState(isInSettingsGroup);
+  const [cloudronOpen, setCloudronOpen] = useState(isInCloudronGroup);
 
   type CloudronStatus = { enabled: boolean; configured: boolean; connected: boolean } | null;
   const [cloudronStatus, setCloudronStatus] = useState<CloudronStatus>(null);
@@ -77,7 +81,6 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     { href: "/admin/orders",            label: t("admin.nav.orders"),            icon: Receipt },
     { href: "/admin/services",          label: t("admin.nav.services"),          icon: Server },
     { href: "/admin/service-instances", label: t("admin.nav.serviceInstances"),  icon: Layers },
-    { href: "/admin/cloudron",          label: t("admin.nav.cloudron"),          icon: AppWindow, indicator: <CloudronDot /> },
     { href: "/admin/audit-logs",        label: t("admin.nav.auditLogs"),         icon: Activity },
   ];
 
@@ -196,6 +199,33 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     );
   };
 
+  const CloudronGroup = ({ onClick }: { onClick?: () => void }) => (
+    <div>
+      <button onClick={() => setCloudronOpen((o) => !o)} className={groupButtonClass(isInCloudronGroup)}>
+        <AppWindow className="h-5 w-5 shrink-0" />
+        <span className="flex-1 text-start">{t("admin.nav.cloudronGroup")}</span>
+        <CloudronDot />
+        <Chevron open={cloudronOpen} />
+      </button>
+      {cloudronOpen && (
+        <SubList>
+          <Link href="/admin/cloudron" onClick={onClick} className={subItemClass(location === "/admin/cloudron")}>
+            <AppWindow className="h-4 w-4 shrink-0" />
+            <span>{t("admin.nav.cloudron")}</span>
+          </Link>
+          <Link href="/admin/cloudron/instances" onClick={onClick} className={subItemClass(location === "/admin/cloudron/instances")}>
+            <Database className="h-4 w-4 shrink-0" />
+            <span>{t("admin.nav.cloudronInstances")}</span>
+          </Link>
+          <Link href="/admin/cloudron/instances?add=1" onClick={onClick} className={subItemClass(false)}>
+            <Plus className="h-4 w-4 shrink-0" />
+            <span>{t("admin.nav.cloudronAddInstance")}</span>
+          </Link>
+        </SubList>
+      )}
+    </div>
+  );
+
   const NavLinks = ({ onClick }: { onClick?: () => void }) => (
     <>
       {navItems.map((item) => {
@@ -217,6 +247,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           </Link>
         );
       })}
+      <CloudronGroup onClick={onClick} />
       <BillingGroup onClick={onClick} />
       <SubscriptionsGroup onClick={onClick} />
       <SettingsGroup onClick={onClick} />

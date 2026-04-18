@@ -1355,6 +1355,103 @@ function AppStoreBrowser({ onInstall, onViewMyApps }: { onInstall: (appStoreId: 
   );
 }
 
+interface CloudronDashboardStats {
+  cloudron?: {
+    totalInstances: number;
+    onlineInstances: number;
+    offlineInstances: number;
+    unknownInstances: number;
+    totalApps: number;
+    runningApps: number;
+    stoppedApps: number;
+    totalMailboxes: number;
+    sampledAt?: string;
+    stale?: boolean;
+  };
+}
+
+function CloudronMiniStats() {
+  const { t } = useI18n();
+  const { data, isLoading } = useQuery<CloudronDashboardStats>({
+    queryKey: ["admin-dashboard-cloudron"],
+    queryFn: () => adminFetch<CloudronDashboardStats>("/api/admin/dashboard"),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const c = data?.cloudron;
+  const cards = [
+    {
+      label: t("admin.cloudron.stat.instances"),
+      value: c ? `${c.onlineInstances}/${c.totalInstances}` : "—",
+      hint: t("admin.cloudron.stat.instances.hint"),
+      icon: Server,
+      color: "text-emerald-600",
+    },
+    {
+      label: t("admin.cloudron.stat.apps"),
+      value: c ? String(c.totalApps) : "—",
+      hint: c ? `${c.runningApps} ${t("admin.cloudron.stat.running")}` : "",
+      icon: AppWindow,
+      color: "text-blue-600",
+    },
+    {
+      label: t("admin.cloudron.stat.mailboxes"),
+      value: c ? String(c.totalMailboxes) : "—",
+      hint: t("admin.cloudron.stat.mailboxes.hint"),
+      icon: Globe,
+      color: "text-purple-600",
+    },
+    {
+      label: t("admin.cloudron.stat.health"),
+      value:
+        c
+          ? c.offlineInstances > 0
+            ? t("admin.cloudron.stat.health.degraded")
+            : c.onlineInstances === c.totalInstances && c.totalInstances > 0
+              ? t("admin.cloudron.stat.health.ok")
+              : t("admin.cloudron.stat.health.unknown")
+          : "—",
+      hint: c?.stale ? t("admin.cloudron.stat.stale") : "",
+      icon: c && c.offlineInstances > 0 ? XCircle : CheckCircle2,
+      color:
+        c && c.offlineInstances > 0
+          ? "text-red-600"
+          : c && c.onlineInstances === c.totalInstances && c.totalInstances > 0
+            ? "text-emerald-600"
+            : "text-muted-foreground",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {cards.map((card) => {
+        const Icon = card.icon;
+        return (
+          <Card key={card.label} className="p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground font-medium truncate">
+                  {card.label}
+                </p>
+                <p className="text-2xl font-bold mt-1 leading-none">
+                  {isLoading ? <Loader2 className="h-5 w-5 animate-spin inline" /> : card.value}
+                </p>
+                {card.hint && (
+                  <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                    {card.hint}
+                  </p>
+                )}
+              </div>
+              <Icon className={`h-5 w-5 ${card.color} shrink-0`} />
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 export function AdminCloudronPage() {
   const { t } = useI18n();
   const qc = useQueryClient();
@@ -1434,6 +1531,9 @@ export function AdminCloudronPage() {
           )}
         </div>
       </div>
+
+      <CloudronMiniStats />
+
 
       {/* Instances management card */}
       <Card>
