@@ -484,17 +484,29 @@ function InstallModal({
                 autoFocus
                 className="font-mono text-sm"
               />
-              <p className="text-xs text-muted-foreground">
-                {t("cloudron.client.install.appStoreIdHint")}{" "}
-                <a
-                  href="https://cloudron.io/store/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  cloudron.io/store
-                </a>
-              </p>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>
+                  {t("cloudron.client.install.appStoreIdHint")}{" "}
+                  <a
+                    href="https://cloudron.io/store/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    cloudron.io/store
+                  </a>
+                </p>
+                <p>
+                  {t("cloudron.client.install.appStoreIdFormat")}{" "}
+                  <code className="font-mono text-foreground">&lt;reverse-domain&gt;.cloudronapp</code>
+                </p>
+                <p>
+                  {t("cloudron.client.install.appStoreIdExamples")}{" "}
+                  <code className="font-mono text-foreground">org.wordpress.cloudronapp</code>,{" "}
+                  <code className="font-mono text-foreground">com.gitea.cloudronapp</code>,{" "}
+                  <code className="font-mono text-foreground">com.nextcloud.cloudronapp</code>
+                </p>
+              </div>
             </div>
           )}
 
@@ -834,14 +846,27 @@ function AppStoreTab({
 
   return (
     <div className="space-y-4">
-      <div className="relative">
-        <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          className="ps-9"
-          placeholder={t("cloudron.client.appstore.search")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            className="ps-9"
+            placeholder={t("cloudron.client.appstore.search")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        {canInstall && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={() => { setInstallApp(undefined); setInstallOpen(true); }}
+          >
+            <Plus className="h-4 w-4" />
+            {t("cloudron.client.install.btn")}
+          </Button>
+        )}
       </div>
 
       {storeQuery.isLoading ? (
