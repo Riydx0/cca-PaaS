@@ -34,10 +34,10 @@ export function CloudronStatusBanner() {
 
   if (!data || data.state !== "unreachable") return null;
 
-  // Suppress banner only if the admin already dismissed this exact outage event.
-  const isDismissed =
-    dismissedOutageAt !== null &&
-    dismissedOutageAt === data.lastUnreachableAt;
+  // Use lastUnreachableAt as a per-outage key; fall back to a sentinel when null
+  // so dismiss still works even if the backend hasn't set a timestamp yet.
+  const outageKey = data.lastUnreachableAt ?? "__unknown__";
+  const isDismissed = dismissedOutageAt !== null && dismissedOutageAt === outageKey;
 
   if (isDismissed) return null;
 
@@ -65,7 +65,7 @@ export function CloudronStatusBanner() {
         </p>
       </div>
       <button
-        onClick={() => setDismissedOutageAt(data.lastUnreachableAt)}
+        onClick={() => setDismissedOutageAt(outageKey)}
         className="shrink-0 rounded-md p-1 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
         aria-label="Dismiss alert"
       >
