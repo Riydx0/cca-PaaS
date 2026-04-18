@@ -864,7 +864,7 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
                       )}
                     </TabsContent>
 
-                    <SubscriptionTab userId={user.id} />
+                    <SubscriptionTab userId={Number(user.id)} />
 
                   </div>
                 </ScrollArea>
@@ -934,6 +934,12 @@ function SubscriptionTab({ userId }: { userId: number }) {
     setStartedAt(s.startedAt ? s.startedAt.slice(0, 10) : "");
     setExpiresAt(s.expiresAt ? s.expiresAt.slice(0, 10) : "");
   };
+
+  // Auto-prefill form fields when the current subscription loads
+  useEffect(() => {
+    if (sub) prefill(sub);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sub?.id]);
 
   const saveMutation = useMutation({
     mutationFn: () => {
