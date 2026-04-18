@@ -16,6 +16,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Cloud, Palette, Upload, X, Loader2, Save, RefreshCw, FileImage, Server, CheckCircle2, XCircle, WifiOff, Plus, Pencil, Trash2, Star } from "lucide-react";
 
 interface SettingsData {
@@ -81,6 +91,11 @@ export function AdminSiteSettings() {
   const [formSaving, setFormSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [settingPrimaryId, setSettingPrimaryId] = useState<number | null>(null);
+
+  // Delete confirmation dialog
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [deleteImpactListings, setDeleteImpactListings] = useState<number | null>(null);
+  const [deleteImpactLoading, setDeleteImpactLoading] = useState(false);
 
   useEffect(() => {
     const loadAll = async () => {
@@ -289,8 +304,23 @@ export function AdminSiteSettings() {
     }
   };
 
+  const openDeleteConfirm = async (id: number) => {
+    setDeleteConfirmId(id);
+    setDeleteImpactListings(null);
+    setDeleteImpactLoading(true);
+    try {
+      const data = await apiFetch(`/api/cloudron/instances/${id}/impact`);
+      setDeleteImpactListings(data.activeListings ?? 0);
+    } catch {
+      setDeleteImpactListings(0);
+    } finally {
+      setDeleteImpactLoading(false);
+    }
+  };
+
   const handleDeleteInstance = async (id: number) => {
     setDeletingId(id);
+    setDeleteConfirmId(null);
     try {
       await apiFetch(`/api/cloudron/instances/${id}`, { method: "DELETE" });
       setCloudronInstances((prev) => prev.filter((inst) => inst.id !== id));
@@ -634,7 +664,7 @@ export function AdminSiteSettings() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => handleDeleteInstance(inst.id)}
+                      onClick={() => openDeleteConfirm(inst.id)}
                       disabled={deletingId === inst.id}
                       title="Delete instance"
                       className="h-8 w-8 p-0 text-destructive hover:text-destructive"
@@ -688,6 +718,44 @@ export function AdminSiteSettings() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog
+        open={deleteConfirmId !== null}
+        onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Cloudron instance?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteImpactLoading ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Checking affected listings…
+                </span>
+              ) : deleteImpactListings != null && deleteImpactListings > 0 ? (
+                <>
+                  This will also hide{" "}
+                  <strong>{deleteImpactListings} active app {deleteImpactListings === 1 ? "listing" : "listings"}</strong>{" "}
+                  from the marketplace. This action cannot be undone.
+                </>
+              ) : (
+                "This will permanently remove the instance and its configuration. This action cannot be undone."
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (deleteConfirmId !== null) handleDeleteInstance(deleteConfirmId); }}
+              disabled={deleteImpactLoading}
+            >
+              Remove instance
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Add / Edit Instance Dialog */}
       <Dialog open={instanceDialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>

@@ -6,10 +6,11 @@
  */
 
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, count } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   cloudronInstancesTable,
+  cloudronAppsCacheTable,
   auditLogsTable,
   settingsTable,
   insertCloudronInstanceSchema,
@@ -151,6 +152,30 @@ router.delete("/instances/:id", requireAdmin, async (req: Request, res: Response
     }
 
     res.json({ success: true });
+  } catch (err) {
+    handleCloudronError(err, res);
+  }
+});
+
+/**
+ * GET /api/cloudron/instances/:id/impact
+ * Returns how many cached app listings would be hidden if this instance is removed.
+ * Returns: { activeListings: number }
+ */
+router.get("/instances/:id/impact", requireAdmin, async (req: Request, res: Response) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid instance ID" });
+    return;
+  }
+
+  try {
+    const [result] = await db
+      .select({ total: count() })
+      .from(cloudronAppsCacheTable)
+      .where(eq(cloudronAppsCacheTable.instanceId, id));
+
+    res.json({ activeListings: result?.total ?? 0 });
   } catch (err) {
     handleCloudronError(err, res);
   }
