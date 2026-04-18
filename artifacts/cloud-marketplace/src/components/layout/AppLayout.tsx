@@ -7,6 +7,8 @@ import { useRole } from "@/hooks/useRole";
 import { useSiteConfig } from "@/contexts/SiteConfigContext";
 import { LayoutDashboard, Server, Receipt, Menu, LogOut, Cloud, ShieldCheck, CreditCard, Sparkles, BadgeCheck, Layers } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useQuery } from "@tanstack/react-query";
+import { adminFetch } from "@/lib/adminFetch";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { t, language, setLanguage } = useI18n();
@@ -18,6 +20,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const siteName = config.siteName || "CloudMarket";
   const siteLogoUrl = config.siteLogoUrl;
 
+  const cloudronAccessQuery = useQuery({
+    queryKey: ["cloudron-client-access-check", user?.id],
+    queryFn: () => adminFetch("/api/cloudron-client/summary"),
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+    enabled: !!user,
+  });
+
+  const hasCloudronAccess = cloudronAccessQuery.isSuccess;
+
   const toggleLanguage = () => {
     setLanguage(language === "en" ? "ar" : "en");
   };
@@ -26,7 +38,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
     { href: "/services", label: t("nav.services"), icon: Server },
     { href: "/my-services", label: t("nav.myServices"), icon: Layers },
-    { href: "/my-cloudron", label: t("nav.myCloudron"), icon: Cloud },
+    ...(hasCloudronAccess ? [{ href: "/my-cloudron", label: t("nav.myCloudron"), icon: Cloud }] : []),
     { href: "/orders", label: t("nav.orders"), icon: Receipt },
     { href: "/billing", label: t("nav.billing"), icon: CreditCard },
     { href: "/pricing", label: t("nav.pricing"), icon: Sparkles },
