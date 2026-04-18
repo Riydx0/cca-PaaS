@@ -399,15 +399,22 @@ function TaskProgressStrip({ taskId, label, onDone }: { taskId: string; label: s
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const consecutiveErrors = useRef(0);
+  const onDoneCalledRef = useRef(false);
+  const onDoneRef = useRef(onDone);
+  useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
 
   const poll = useCallback(async () => {
+    if (onDoneCalledRef.current) return;
     try {
       const data = await fetchTask(taskId);
       consecutiveErrors.current = 0;
       setTask(data);
       if (data.state === "success") {
-        setDone(true);
-        onDone();
+        if (!onDoneCalledRef.current) {
+          onDoneCalledRef.current = true;
+          setDone(true);
+          onDoneRef.current();
+        }
       } else if (data.state === "error" || data.state === "cancelled") {
         setError(data.errorMessage ?? t("admin.cloudron.task.failed"));
         setDone(true);
@@ -419,11 +426,11 @@ function TaskProgressStrip({ taskId, label, onDone }: { taskId: string; label: s
         setDone(true);
       }
     }
-  }, [taskId, t, onDone]);
+  }, [taskId, t]);
 
   useEffect(() => {
-    poll();
     if (done) return;
+    poll();
     const timer = setInterval(poll, 3000);
     return () => clearInterval(timer);
   }, [poll, done]);
@@ -612,10 +619,12 @@ function ConfirmActionDialog({
   action,
   onClose,
   onTaskStarted,
+  onDone,
 }: {
   action: ConfirmAction | null;
   onClose: () => void;
   onTaskStarted: (task: ActiveTask) => void;
+  onDone: () => void;
 }) {
   const { t } = useI18n();
 
@@ -628,6 +637,9 @@ function ConfirmActionDialog({
         onClose();
       } else if (data.error) {
         toast.error(data.error);
+      } else {
+        onClose();
+        onDone();
       }
     },
     onError: () => toast.error(t("admin.cloudron.uninstall.error")),
@@ -642,6 +654,9 @@ function ConfirmActionDialog({
         onClose();
       } else if (data.error) {
         toast.error(data.error);
+      } else {
+        onClose();
+        onDone();
       }
     },
     onError: () => toast.error(t("admin.cloudron.restart.error")),
@@ -656,6 +671,9 @@ function ConfirmActionDialog({
         onClose();
       } else if (data.error) {
         toast.error(data.error);
+      } else {
+        onClose();
+        onDone();
       }
     },
     onError: () => toast.error(t("admin.cloudron.stop.error")),
@@ -670,6 +688,9 @@ function ConfirmActionDialog({
         onClose();
       } else if (data.error) {
         toast.error(data.error);
+      } else {
+        onClose();
+        onDone();
       }
     },
     onError: () => toast.error(t("admin.cloudron.start.error")),
@@ -684,6 +705,9 @@ function ConfirmActionDialog({
         onClose();
       } else if (data.error) {
         toast.error(data.error);
+      } else {
+        onClose();
+        onDone();
       }
     },
     onError: () => toast.error(t("admin.cloudron.update.error")),
@@ -1196,12 +1220,12 @@ export function AdminCloudronPage() {
     onError: () => toast.error(t("admin.cloudron.install.error")),
   });
 
-  const handleTaskStarted = (task: ActiveTask) => setActiveTasks((prev) => [...prev, task]);
-  const handleTaskDone = (taskId: string) => {
+  const handleTaskStarted = useCallback((task: ActiveTask) => setActiveTasks((prev) => [...prev, task]), []);
+  const handleTaskDone = useCallback((taskId: string) => {
     setActiveTasks((prev) => prev.filter((t) => t.taskId !== taskId));
     void qc.invalidateQueries({ queryKey: ["cloudron-apps"] });
     void refetch();
-  };
+  }, [qc, refetch]);
 
   function openInstall(appStoreId?: string) {
     setInstallAppStoreId(appStoreId);
@@ -1574,6 +1598,10 @@ export function AdminCloudronPage() {
         action={confirmAction}
         onClose={() => setConfirmAction(null)}
         onTaskStarted={handleTaskStarted}
+        onDone={() => {
+          void qc.invalidateQueries({ queryKey: ["cloudron-apps"] });
+          void refetch();
+        }}
       />
     </div>
   );
