@@ -175,9 +175,13 @@ interface CloudronTask {
   _installRecord?: { appStoreId?: string; location?: string } | null;
 }
 
+type AppTransition = "stopping" | "starting" | "restarting";
+
 interface ActiveTask {
   taskId: string;
   label: string;
+  appId?: string;
+  transition?: AppTransition;
 }
 
 interface AppStoreListing {
@@ -426,7 +430,20 @@ function AdminActivityTab({ instances }: { instances: CloudronInstance[] }) {
   );
 }
 
-function RunStateBadge({ state }: { state?: string }) {
+function RunStateBadge({ state, transition }: { state?: string; transition?: AppTransition }) {
+  const { t } = useI18n();
+  if (transition) {
+    const label = t(`admin.cloudron.runState.${transition}`);
+    return (
+      <Badge
+        variant="outline"
+        className="rounded-full px-2.5 py-0.5 border font-semibold text-xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 inline-flex items-center"
+      >
+        <Loader2 className="h-3 w-3 me-1.5 animate-spin" />
+        {label}
+      </Badge>
+    );
+  }
   const s = state ?? "unknown";
   const map: Record<string, string> = {
     running: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400",
@@ -456,15 +473,24 @@ function InstallStateBadge({ state }: { state?: string }) {
 
 const MAX_POLL_ERRORS = 3;
 
-function TaskProgressStrip({ taskId, label, onDone, instanceId = null }: { taskId: string; label: string; onDone: () => void; instanceId?: number | null }) {
+function TaskProgressStrip({ taskId, label, onDone, onTerminal, instanceId = null }: { taskId: string; label: string; onDone: () => void; onTerminal?: () => void; instanceId?: number | null }) {
   const { t } = useI18n();
   const [task, setTask] = useState<CloudronTask | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const consecutiveErrors = useRef(0);
   const onDoneCalledRef = useRef(false);
+  const onTerminalCalledRef = useRef(false);
   const onDoneRef = useRef(onDone);
+  const onTerminalRef = useRef(onTerminal);
   useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
+  useEffect(() => { onTerminalRef.current = onTerminal; }, [onTerminal]);
+
+  const fireTerminal = useCallback(() => {
+    if (onTerminalCalledRef.current) return;
+    onTerminalCalledRef.current = true;
+    onTerminalRef.current?.();
+  }, []);
 
   const poll = useCallback(async () => {
     if (onDoneCalledRef.current) return;
@@ -476,20 +502,23 @@ function TaskProgressStrip({ taskId, label, onDone, instanceId = null }: { taskI
         if (!onDoneCalledRef.current) {
           onDoneCalledRef.current = true;
           setDone(true);
+          fireTerminal();
           onDoneRef.current();
         }
       } else if (data.state === "error" || data.state === "cancelled") {
         setError(data.errorMessage ?? t("admin.cloudron.task.failed"));
         setDone(true);
+        fireTerminal();
       }
     } catch {
       consecutiveErrors.current += 1;
       if (consecutiveErrors.current >= MAX_POLL_ERRORS) {
         setError(t("admin.cloudron.task.pollError"));
         setDone(true);
+        fireTerminal();
       }
     }
-  }, [taskId, t, instanceId]);
+  }, [taskId, t, instanceId, fireTerminal]);
 
   useEffect(() => {
     if (done) return;
@@ -714,10 +743,10 @@ function ConfirmActionDialog({
 
   const restartMutation = useMutation({
     mutationFn: (appId: string) => postRestart(appId, instanceId),
-    onSuccess: (data) => {
+    onSuccess: (data, appId) => {
       if (data.taskId) {
         toast.success(t("admin.cloudron.restart.queued"));
-        onTaskStarted({ taskId: data.taskId, label: t("admin.cloudron.restart.task.inProgress") });
+        onTaskStarted({ taskId: data.taskId, label: t("admin.cloudron.restart.task.inProgress"), appId, transition: "restarting" });
         onClose();
       } else if (data.error) {
         toast.error(data.error);
@@ -731,10 +760,10 @@ function ConfirmActionDialog({
 
   const stopMutation = useMutation({
     mutationFn: (appId: string) => postStop(appId, instanceId),
-    onSuccess: (data) => {
+    onSuccess: (data, appId) => {
       if (data.taskId) {
         toast.success(t("admin.cloudron.stop.queued"));
-        onTaskStarted({ taskId: data.taskId, label: t("admin.cloudron.stop.task.inProgress") });
+        onTaskStarted({ taskId: data.taskId, label: t("admin.cloudron.stop.task.inProgress"), appId, transition: "stopping" });
         onClose();
       } else if (data.error) {
         toast.error(data.error);
@@ -748,10 +777,10 @@ function ConfirmActionDialog({
 
   const startMutation = useMutation({
     mutationFn: (appId: string) => postStart(appId, instanceId),
-    onSuccess: (data) => {
+    onSuccess: (data, appId) => {
       if (data.taskId) {
         toast.success(t("admin.cloudron.start.queued"));
-        onTaskStarted({ taskId: data.taskId, label: t("admin.cloudron.start.task.inProgress") });
+        onTaskStarted({ taskId: data.taskId, label: t("admin.cloudron.start.task.inProgress"), appId, transition: "starting" });
         onClose();
       } else if (data.error) {
         toast.error(data.error);
@@ -1529,11 +1558,23 @@ export function AdminCloudronPage() {
   });
 
   const handleTaskStarted = useCallback((task: ActiveTask) => setActiveTasks((prev) => [...prev, task]), []);
-  const handleTaskDone = useCallback((taskId: string) => {
-    setActiveTasks((prev) => prev.filter((t) => t.taskId !== taskId));
+  const handleTaskDone = useCallback(async (taskId: string) => {
     void qc.invalidateQueries({ queryKey: ["cloudron-apps"] });
-    void refetch();
+    try {
+      await refetch();
+    } finally {
+      setActiveTasks((prev) => prev.filter((t) => t.taskId !== taskId));
+    }
   }, [qc, refetch]);
+  const handleTaskTerminal = useCallback(async (taskId: string) => {
+    try {
+      await refetch();
+    } finally {
+      setActiveTasks((prev) =>
+        prev.map((t) => (t.taskId === taskId ? { ...t, transition: undefined, appId: undefined } : t)),
+      );
+    }
+  }, [refetch]);
 
   function openInstall(appStoreId?: string) {
     setInstallAppStoreId(appStoreId);
@@ -1708,6 +1749,7 @@ export function AdminCloudronPage() {
                   taskId={activeTask.taskId}
                   label={activeTask.label}
                   onDone={() => handleTaskDone(activeTask.taskId)}
+                  onTerminal={() => handleTaskTerminal(activeTask.taskId)}
                   instanceId={instanceId}
                 />
               </CardContent>
@@ -1777,6 +1819,7 @@ export function AdminCloudronPage() {
                       const title = app.manifest?.title ?? app.appStoreId ?? app.id;
                       const isBusy = app.installationState === "installing" ||
                         app.installationState?.startsWith("pending_");
+                      const appTransition = activeTasks.find((tk) => tk.appId === app.id && tk.transition)?.transition;
                       const iconUrl = getAppIconUrl(app, appsData?.instanceBaseUrl);
                       const fqdn = computeFqdn(app);
                       const locationLabel = app.location && app.location.length > 0
@@ -1808,7 +1851,7 @@ export function AdminCloudronPage() {
                               <span className="text-muted-foreground text-xs">—</span>
                             )}
                           </TableCell>
-                          <TableCell><RunStateBadge state={app.runState} /></TableCell>
+                          <TableCell><RunStateBadge state={app.runState} transition={appTransition} /></TableCell>
                           <TableCell><InstallStateBadge state={app.installationState} /></TableCell>
                           <TableCell>
                             <div className="flex items-center justify-end gap-1.5">
