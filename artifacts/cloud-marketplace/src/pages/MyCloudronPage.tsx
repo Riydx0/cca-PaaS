@@ -159,8 +159,45 @@ async function fetchSummary(): Promise<CloudronSummary> {
   return clientFetch<CloudronSummary>("/api/cloudron-client/summary");
 }
 
-async function fetchApps(): Promise<{ apps: ClientApp[] }> {
-  return clientFetch<{ apps: ClientApp[] }>("/api/cloudron-client/apps");
+async function fetchApps(): Promise<{ apps: ClientApp[]; instanceBaseUrl?: string }> {
+  return clientFetch<{ apps: ClientApp[]; instanceBaseUrl?: string }>("/api/cloudron-client/apps");
+}
+
+function computeFqdn(app: ClientApp): string | null {
+  if ((app as { fqdn?: string }).fqdn) return (app as { fqdn?: string }).fqdn ?? null;
+  if (app.location && app.domain) return `${app.location}.${app.domain}`;
+  if (app.domain) return app.domain;
+  return null;
+}
+
+function getAppIconUrl(app: ClientApp, instanceBaseUrl?: string): string | null {
+  const manifestIcon = app.manifest?.icon;
+  if (manifestIcon && /^https?:\/\//i.test(manifestIcon)) return manifestIcon;
+  if (instanceBaseUrl) {
+    const base = instanceBaseUrl.replace(/\/$/, "");
+    return `${base}/api/v1/apps/${encodeURIComponent(app.id)}/icon`;
+  }
+  return manifestIcon ?? null;
+}
+
+function ClientAppIcon({ src, alt }: { src: string | null; alt: string }) {
+  const [errored, setErrored] = useState(false);
+  useEffect(() => { setErrored(false); }, [src]);
+  if (!src || errored) {
+    return (
+      <div className="h-8 w-8 rounded-lg border border-border bg-muted flex items-center justify-center shrink-0">
+        <Cloud className="h-4 w-4 text-muted-foreground" />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="h-8 w-8 rounded-lg object-contain border border-border bg-background shrink-0"
+      onError={() => setErrored(true)}
+    />
+  );
 }
 
 async function fetchAppStore(): Promise<{ apps?: AppStoreListing[] }> {
@@ -519,6 +556,7 @@ function MyAppsTab({
               <TableRow className="bg-muted/40">
                 <TableHead>{t("admin.cloudron.col.app")}</TableHead>
                 <TableHead>{t("admin.cloudron.col.location")}</TableHead>
+                <TableHead>{t("admin.cloudron.col.fqdn")}</TableHead>
                 <TableHead>{t("admin.cloudron.col.status")}</TableHead>
                 <TableHead className="text-end">{t("admin.cloudron.col.actions")}</TableHead>
               </TableRow>
@@ -527,24 +565,36 @@ function MyAppsTab({
               {apps.map((app) => {
                 const name = app.manifest?.title ?? app.appStoreId ?? app.id;
                 const isRunning = app.runState === "running";
+                const iconUrl = getAppIconUrl(app, appsQuery.data?.instanceBaseUrl);
+                const fqdn = computeFqdn(app);
                 return (
                   <TableRow key={app.id} className="group">
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        {app.manifest?.icon ? (
-                          <img src={app.manifest.icon} alt={name} className="h-8 w-8 rounded-lg object-contain bg-muted" />
-                        ) : (
-                          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                            <Cloud className="h-4 w-4 text-primary" />
-                          </div>
-                        )}
+                        <ClientAppIcon src={iconUrl} alt={name} />
                         <div>
                           <p className="font-medium text-sm">{name}</p>
-                          {app.domain && <p className="text-xs text-muted-foreground">{app.domain}</p>}
+                          {app.appStoreId && <p className="text-xs text-muted-foreground font-mono">{app.appStoreId}</p>}
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">{app.location || "—"}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {app.location ? app.location : <span className="italic text-muted-foreground/70">{t("admin.cloudron.location.root")}</span>}
+                    </TableCell>
+                    <TableCell>
+                      {fqdn ? (
+                        <a
+                          href={`https://${fqdn}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-xs text-primary hover:underline inline-flex items-center gap-1"
+                        >
+                          {fqdn}
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell><RunStateBadge state={app.runState} /></TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1.5 justify-end">

@@ -436,7 +436,7 @@ router.get("/apps", requireAuth, async (req: Request, res: Response) => {
   await withPermission(req, res, "view_apps", async (access) => {
     const client = createCloudronClient(access.instance.baseUrl, access.instance.apiToken);
     const apps = await listApps(client);
-    res.json({ apps });
+    res.json({ apps, instanceBaseUrl: access.instance.baseUrl });
   });
 });
 
