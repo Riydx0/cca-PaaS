@@ -915,12 +915,14 @@ function SubscriptionTab({ userId }: { userId: number }) {
   const [planId, setPlanId] = useState<string>("");
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [status, setStatus] = useState<string>("active");
+  const [startedAt, setStartedAt] = useState<string>("");
   const [expiresAt, setExpiresAt] = useState<string>("");
 
   const prefill = (s: SubscriptionRow) => {
     setPlanId(String(s.planId));
     setBillingCycle(s.billingCycle);
     setStatus(s.status);
+    setStartedAt(s.startedAt ? s.startedAt.slice(0, 10) : "");
     setExpiresAt(s.expiresAt ? s.expiresAt.slice(0, 10) : "");
   };
 
@@ -931,6 +933,7 @@ function SubscriptionTab({ userId }: { userId: number }) {
         planId: Number(planId),
         billingCycle,
         status,
+        startedAt: startedAt || null,
         expiresAt: expiresAt || null,
       };
       if (sub) {
@@ -1005,10 +1008,10 @@ function SubscriptionTab({ userId }: { userId: number }) {
         <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/10 dark:border-emerald-900 p-3 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-300">
-              {sub.status}
+              {t(`admin.user.subscription.status.${sub.status}` as Parameters<typeof t>[0])}
             </Badge>
             <span className="text-sm font-medium">{sub.planName ?? `Plan #${sub.planId}`}</span>
-            <span className="text-xs text-muted-foreground">· {sub.billingCycle}</span>
+            <span className="text-xs text-muted-foreground">· {t(`admin.user.subscription.${sub.billingCycle}` as Parameters<typeof t>[0])}</span>
           </div>
           <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
             <span>{t("admin.user.subscription.startedAt")}: {new Date(sub.startedAt).toLocaleDateString()}</span>
@@ -1070,23 +1073,34 @@ function SubscriptionTab({ userId }: { userId: number }) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="trial">Trial</SelectItem>
-                <SelectItem value="expired">Expired</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
+                <SelectItem value="active">{t("admin.user.subscription.status.active")}</SelectItem>
+                <SelectItem value="trial">{t("admin.user.subscription.status.trial")}</SelectItem>
+                <SelectItem value="expired">{t("admin.user.subscription.status.expired")}</SelectItem>
+                <SelectItem value="cancelled">{t("admin.user.subscription.status.cancelled")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">{t("admin.user.subscription.expiresAt")}</Label>
-          <Input
-            type="date"
-            className="h-8 text-sm"
-            value={expiresAt}
-            onChange={(e) => setExpiresAt(e.target.value)}
-          />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t("admin.user.subscription.startedAtLabel")}</Label>
+            <Input
+              type="date"
+              className="h-8 text-sm"
+              value={startedAt}
+              onChange={(e) => setStartedAt(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t("admin.user.subscription.expiresAt")}</Label>
+            <Input
+              type="date"
+              className="h-8 text-sm"
+              value={expiresAt}
+              onChange={(e) => setExpiresAt(e.target.value)}
+            />
+          </div>
         </div>
 
         <Button

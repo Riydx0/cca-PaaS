@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useI18n } from "@/lib/i18n";
-import { adminFetch } from "@/lib/adminFetch";
+import { adminFetch, AdminApiError } from "@/lib/adminFetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -308,7 +308,13 @@ function InstallModal({
         toast.error(data.error);
       }
     },
-    onError: () => toast.error(t("cloudron.client.install.error")),
+    onError: (err: Error) => {
+      if (err instanceof AdminApiError && err.status === 403) {
+        toast.error(t("cloudron.client.limitReached.apps"));
+      } else {
+        toast.error(t("cloudron.client.install.error"));
+      }
+    },
   });
 
   return (
@@ -788,7 +794,13 @@ function MailboxesTab({ permissions }: { permissions: string[] }) {
       setAddOpen(false);
       setName(""); setPassword("");
     },
-    onError: () => toast.error(t("cloudron.client.mailboxes.createError")),
+    onError: (err: Error) => {
+      if (err instanceof AdminApiError && err.status === 403) {
+        toast.error(t("cloudron.client.limitReached.mailboxes"));
+      } else {
+        toast.error(t("cloudron.client.mailboxes.createError"));
+      }
+    },
   });
 
   const editMutation = useMutation({
@@ -976,6 +988,7 @@ interface MySubscriptionData {
       enabled: boolean;
       limitValue: number | null;
     }>;
+    usage: Record<string, number | null>;
   } | null;
 }
 
@@ -1031,7 +1044,7 @@ function PlanCard() {
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-300">
-              {sub.status}
+              {t(`admin.user.subscription.status.${sub.status}` as Parameters<typeof t>[0])}
             </Badge>
             <span className="text-sm font-bold">{sub.planName}</span>
           </div>
@@ -1049,7 +1062,7 @@ function PlanCard() {
                   className={`text-xs gap-1 ${f.enabled ? "bg-emerald-500/10 text-emerald-700 border-emerald-300" : "bg-muted text-muted-foreground border-border/50 opacity-60"}`}
                 >
                   {f.enabled ? <Check className="h-2.5 w-2.5" /> : <X className="h-2.5 w-2.5" />}
-                  {f.featureKey.replace(/_/g, " ")}
+                  {t(`admin.user.cloudron.perm.${f.featureKey}` as Parameters<typeof t>[0])}
                 </Badge>
               ))}
             </div>
@@ -1064,16 +1077,27 @@ function PlanCard() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {limits.map((f) => {
                   const labelKey = LIMIT_LABELS[f.featureKey] ?? f.featureKey;
+                  const used = sub.usage?.[f.featureKey] ?? null;
+                  const pct = f.limitValue != null && used != null
+                    ? Math.min(100, Math.round((used / f.limitValue) * 100))
+                    : 0;
                   return (
                     <div key={f.featureKey} className="space-y-1">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-medium text-muted-foreground">{t(labelKey as Parameters<typeof t>[0])}</span>
                         <span className="font-bold text-foreground">
-                          {f.limitValue != null ? f.limitValue : t("cloudron.client.plan.unlimited")}
+                          {f.limitValue != null
+                            ? used != null
+                              ? `${used} / ${f.limitValue}`
+                              : String(f.limitValue)
+                            : t("cloudron.client.plan.unlimited")}
                         </span>
                       </div>
                       {f.limitValue != null && (
-                        <Progress value={0} className="h-1.5" />
+                        <Progress
+                          value={pct}
+                          className={`h-1.5 ${pct >= 90 ? "[&>div]:bg-destructive" : pct >= 70 ? "[&>div]:bg-amber-500" : ""}`}
+                        />
                       )}
                     </div>
                   );

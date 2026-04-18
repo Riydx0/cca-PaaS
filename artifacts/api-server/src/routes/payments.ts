@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, Request } from "express";
 import { requireAuth } from "../middlewares/requireRole";
 import { db } from "@workspace/db";
 import {
@@ -26,7 +26,7 @@ function getAmountForPlan(
   return Math.round(parsed * 100);
 }
 
-router.post("/initiate", requireAuth, async (req: any, res) => {
+router.post("/initiate", requireAuth, async (req: Request, res) => {
   if (!MoyasarService.isConfigured()) {
     res.status(503).json({ error: "Payment gateway not configured" });
     return;
@@ -99,13 +99,13 @@ router.post("/initiate", requireAuth, async (req: any, res) => {
       status: moyasarPayment.status,
       transactionUrl: moyasarPayment.source?.transaction_url ?? null,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[payments] initiate error:", err);
-    res.status(500).json({ error: err.message ?? "Failed to initiate payment" });
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to initiate payment" });
   }
 });
 
-router.post("/verify", requireAuth, async (req: any, res) => {
+router.post("/verify", requireAuth, async (req: Request, res) => {
   try {
     const userId = req.session.userId as number;
     const { moyasarPaymentId, paymentRecordId } = req.body ?? {};
@@ -193,9 +193,9 @@ router.post("/verify", requireAuth, async (req: any, res) => {
     }
 
     res.json({ status: moyasarPayment.status, subscriptionId: record.subscriptionId ?? null });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[payments] verify error:", err);
-    res.status(500).json({ error: err.message ?? "Failed to verify payment" });
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to verify payment" });
   }
 });
 
@@ -268,7 +268,7 @@ router.post("/webhook", async (req, res) => {
     }
 
     res.status(200).json({ received: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[payments] webhook error:", err);
     res.status(500).json({ error: "Webhook processing failed" });
   }

@@ -588,6 +588,11 @@ const translations = {
     "admin.user.subscription.noPlans": "No active plans available.",
     "admin.user.subscription.selectPlan": "Select a plan…",
     "admin.user.subscription.selectStatus": "Select status…",
+    "admin.user.subscription.status.active": "Active",
+    "admin.user.subscription.status.trial": "Trial",
+    "admin.user.subscription.status.expired": "Expired",
+    "admin.user.subscription.status.cancelled": "Cancelled",
+    "admin.user.subscription.startedAtLabel": "Start Date",
 
     // ---- Set Password Page ----
     "setPassword.titleSetup": "Set Your Password",
@@ -887,6 +892,10 @@ const translations = {
     "cloudron.client.plan.features": "Plan Permissions",
     "cloudron.client.plan.limits": "Usage Limits",
     "cloudron.client.plan.loading": "Loading plan…",
+    "cloudron.client.limitReached.apps": "You have reached your app limit. Upgrade your plan to install more apps.",
+    "cloudron.client.limitReached.mailboxes": "You have reached your mailbox limit. Upgrade your plan to create more mailboxes.",
+    "cloudron.client.featureDisabled": "This feature is not included in your current plan. Please upgrade to access it.",
+    "cloudron.client.plan.usedOf": "{used} / {limit}",
 
     // ---- Moyasar Payment ----
     "payment.moyasar.title": "Secure Checkout",
@@ -1495,6 +1504,11 @@ const translations = {
     "admin.user.subscription.noPlans": "لا توجد خطط نشطة متاحة.",
     "admin.user.subscription.selectPlan": "اختر خطة…",
     "admin.user.subscription.selectStatus": "اختر الحالة…",
+    "admin.user.subscription.status.active": "نشط",
+    "admin.user.subscription.status.trial": "تجريبي",
+    "admin.user.subscription.status.expired": "منتهي",
+    "admin.user.subscription.status.cancelled": "ملغى",
+    "admin.user.subscription.startedAtLabel": "تاريخ البداية",
 
     // ---- صفحة تعيين كلمة المرور ----
     "setPassword.titleSetup": "تعيين كلمة المرور",
@@ -1794,6 +1808,10 @@ const translations = {
     "cloudron.client.plan.features": "صلاحيات الخطة",
     "cloudron.client.plan.limits": "حدود الاستخدام",
     "cloudron.client.plan.loading": "جارٍ تحميل الخطة…",
+    "cloudron.client.limitReached.apps": "لقد وصلت إلى الحد الأقصى لعدد التطبيقات. قم بترقية خطتك لتثبيت المزيد.",
+    "cloudron.client.limitReached.mailboxes": "لقد وصلت إلى الحد الأقصى لعدد صناديق البريد. قم بترقية خطتك لإنشاء المزيد.",
+    "cloudron.client.featureDisabled": "هذه الميزة غير متاحة في خطتك الحالية. يرجى الترقية للوصول إليها.",
+    "cloudron.client.plan.usedOf": "{used} / {limit}",
 
     // ---- الدفع عبر Moyasar ----
     "payment.moyasar.title": "الدفع الآمن",

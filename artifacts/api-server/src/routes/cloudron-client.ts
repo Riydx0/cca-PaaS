@@ -654,11 +654,12 @@ router.get("/tasks/:id", requireAuth, async (req: Request, res: Response) => {
 
 /**
  * GET /api/cloudron-client/my-subscription
- * Returns the authenticated user's active/trial subscription with plan features.
+ * Returns the authenticated user's active/trial subscription with plan features
+ * and current usage counts for max_apps, max_mailboxes, max_cloudron_instances.
  * Required permission: view_cloudron
  */
 router.get("/my-subscription", requireAuth, async (req: Request, res: Response) => {
-  await withPermission(req, res, "view_cloudron", async (_access, userId) => {
+  await withPermission(req, res, "view_cloudron", async (access, userId) => {
     const activeSub = await getActiveSubscription(userId);
 
     if (!activeSub) {
@@ -676,6 +677,35 @@ router.get("/my-subscription", requireAuth, async (req: Request, res: Response) 
       .where(eq(subscriptionPlanFeaturesTable.planId, activeSub.planId))
       .orderBy(asc(subscriptionPlanFeaturesTable.featureKey));
 
+    // Build usage counts – best-effort (null means unavailable, not an error)
+    const usage: Record<string, number | null> = {
+      max_apps: null,
+      max_mailboxes: null,
+      max_cloudron_instances: 1, // each user has at most 1 linked instance
+    };
+
+    try {
+      if (hasPermission(access.permissions, "view_apps")) {
+        const client = createCloudronClient(access.instance.baseUrl, access.instance.apiToken);
+        const apps = await listApps(client);
+        usage.max_apps = apps.length;
+      }
+    } catch { /* non-fatal */ }
+
+    try {
+      if (hasPermission(access.permissions, "view_mail")) {
+        const client = createCloudronClient(access.instance.baseUrl, access.instance.apiToken);
+        const domainData = await client.get<{ domains?: { domain: string }[] }>("/mail/domains");
+        const domain = domainData.domains?.[0]?.domain;
+        if (domain) {
+          const mailData = await client.get<{ mailboxes?: unknown[] }>(
+            `/mail/${encodeURIComponent(domain)}/mailboxes`
+          );
+          usage.max_mailboxes = mailData.mailboxes?.length ?? 0;
+        }
+      }
+    } catch { /* non-fatal */ }
+
     res.json({
       subscription: {
         id: activeSub.subscriptionId,
@@ -683,6 +713,7 @@ router.get("/my-subscription", requireAuth, async (req: Request, res: Response) 
         planName: activeSub.planName,
         status: activeSub.status,
         features,
+        usage,
       },
     });
   });

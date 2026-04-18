@@ -76,19 +76,19 @@ const NUMERIC_LIMIT_KEYS = [
   "max_apps", "max_mailboxes", "max_cloudron_instances",
 ] as const;
 
-const PERM_LABEL_MAP: Record<string, string> = {
-  view_cloudron: "View Cloudron",
-  view_apps: "View Apps",
-  install_apps: "Install Apps",
-  restart_apps: "Restart Apps",
-  uninstall_apps: "Uninstall Apps",
-  stop_apps: "Stop Apps",
-  start_apps: "Start Apps",
-  view_app_store: "Browse App Store",
-  view_mail: "View Mailboxes",
-  create_mailboxes: "Create Mailboxes",
-  edit_mailboxes: "Edit Mailboxes",
-  delete_mailboxes: "Delete Mailboxes",
+const PERM_I18N_MAP: Record<string, string> = {
+  view_cloudron: "admin.user.cloudron.perm.view_cloudron",
+  view_apps: "admin.user.cloudron.perm.view_apps",
+  install_apps: "admin.user.cloudron.perm.install_apps",
+  restart_apps: "admin.user.cloudron.perm.restart_apps",
+  uninstall_apps: "admin.user.cloudron.perm.uninstall_apps",
+  stop_apps: "admin.user.cloudron.perm.stop_apps",
+  start_apps: "admin.user.cloudron.perm.start_apps",
+  view_app_store: "admin.user.cloudron.perm.view_app_store",
+  view_mail: "admin.user.cloudron.perm.view_mail",
+  create_mailboxes: "admin.user.cloudron.perm.create_mailboxes",
+  edit_mailboxes: "admin.user.cloudron.perm.edit_mailboxes",
+  delete_mailboxes: "admin.user.cloudron.perm.delete_mailboxes",
 };
 
 const DEFAULT_FORM: PlanFormData = {
@@ -165,7 +165,7 @@ function featuresMapToPayload(map: Record<string, { enabled: boolean; limitValue
   }));
 }
 
-function PlanFeaturesEditor({ planId, planName }: { planId: number; planName: string }) {
+function PlanFeaturesEditor({ planId }: { planId: number }) {
   const { t } = useI18n();
   const qc = useQueryClient();
 
@@ -243,7 +243,7 @@ function PlanFeaturesEditor({ planId, planName }: { planId: number; planName: st
                 }`}
               >
                 <span className="text-xs font-medium leading-tight text-foreground">
-                  {PERM_LABEL_MAP[key] ?? key}
+                  {t(PERM_I18N_MAP[key] ?? key)}
                 </span>
                 <Switch
                   checked={val.enabled}
@@ -511,7 +511,7 @@ export function AdminPlansPage() {
                   {isExpanded && (
                     <>
                       <Separator className="mt-4 opacity-40" />
-                      <PlanFeaturesEditor planId={plan.id} planName={plan.name} />
+                      <PlanFeaturesEditor planId={plan.id} />
                     </>
                   )}
                 </CardContent>
