@@ -72,9 +72,9 @@ const BOOLEAN_PERM_KEYS = [
   "view_mail", "create_mailboxes", "edit_mailboxes", "delete_mailboxes",
 ] as const;
 
-const NUMERIC_LIMIT_KEYS = [
+const NUMERIC_LIMIT_KEYS = new Set([
   "max_apps", "max_mailboxes", "max_cloudron_instances",
-] as const;
+]);
 
 const PERM_I18N_MAP: Record<string, string> = {
   view_cloudron: "admin.user.cloudron.perm.view_cloudron",
@@ -156,8 +156,6 @@ function buildFeaturesMap(rows: PlanFeatureRow[]): Record<string, { enabled: boo
   }
   return map;
 }
-
-const NUMERIC_LIMIT_KEYS = new Set(["max_apps", "max_mailboxes", "max_cloudron_instances"]);
 
 function featuresMapToPayload(map: Record<string, { enabled: boolean; limitValue: string }>) {
   return Object.entries(map).map(([featureKey, v]) => {

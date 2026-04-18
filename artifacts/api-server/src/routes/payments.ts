@@ -158,8 +158,28 @@ router.post("/verify", requireAuth, async (req: Request, res) => {
       return;
     }
 
-    // SDK flow: initiate created the DB record but moyasarPaymentId wasn't set yet.
-    // The Moyasar payment ID is returned by the SDK callback URL — link it now.
+    if (!record.moyasarPaymentId && !moyasarPaymentId) {
+      res.status(400).json({ error: "Payment not yet initiated with Moyasar" });
+      return;
+    }
+
+    // Resolve the Moyasar payment ID to use for fetching
+    const resolvedMoyasarId = record.moyasarPaymentId ?? moyasarPaymentId;
+    const moyasarPayment = await MoyasarService.getPayment(resolvedMoyasarId);
+
+    // Security: validate that the fetched Moyasar payment matches the DB record
+    // (amount and currency must match to prevent payment substitution attacks)
+    const recordAmountHalala = Math.round(Number(record.amount) * 100);
+    if (moyasarPayment.amount !== recordAmountHalala) {
+      res.status(400).json({ error: "Payment amount mismatch" });
+      return;
+    }
+    if (moyasarPayment.currency.toUpperCase() !== (record.currency ?? "SAR").toUpperCase()) {
+      res.status(400).json({ error: "Payment currency mismatch" });
+      return;
+    }
+
+    // SDK flow: after validation, link the Moyasar payment ID to the DB record
     if (!record.moyasarPaymentId && moyasarPaymentId) {
       await db
         .update(moyasarPaymentsTable)
@@ -167,13 +187,6 @@ router.post("/verify", requireAuth, async (req: Request, res) => {
         .where(eq(moyasarPaymentsTable.id, record.id));
       record = { ...record, moyasarPaymentId };
     }
-
-    if (!record.moyasarPaymentId) {
-      res.status(400).json({ error: "Payment not yet initiated with Moyasar" });
-      return;
-    }
-
-    const moyasarPayment = await MoyasarService.getPayment(record.moyasarPaymentId);
 
     await db
       .update(moyasarPaymentsTable)
