@@ -6,11 +6,12 @@
  * - Sends an email alert on the first failure after a healthy period
  * - Rate-limits alerts to at most one per ALERT_COOLDOWN_MS (default: 1 hour)
  * - Exposes last known status so the frontend can show a banner
+ * - Persists state to DB so it survives server restarts (no duplicate alerts)
  */
 
 import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { usersTable, cloudronInstancesTable } from "@workspace/db/schema";
+import { usersTable, cloudronInstancesTable, settingsTable } from "@workspace/db/schema";
 import { createCloudronClient } from "../cloudron/client";
 import { decryptSecret } from "../lib/crypto";
 import { cloudronService } from "./CloudronService";
@@ -19,6 +20,10 @@ import { logger } from "../lib/logger";
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;   // 5 minutes
 const ALERT_COOLDOWN_MS = 60 * 60 * 1000;  // 1 hour
+
+const DB_KEY_STATE            = "cloudron_health_state";
+const DB_KEY_LAST_ALERT       = "cloudron_health_last_alert_sent_at";
+const DB_KEY_LAST_UNREACHABLE = "cloudron_health_last_unreachable_at";
 
 export type CloudronHealthState = "unknown" | "healthy" | "unreachable";
 
@@ -40,8 +45,9 @@ class CloudronHealthMonitor {
   private lastAlertSentAt: Date | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
 
-  start(): void {
+  async start(): Promise<void> {
     if (this.timer) return;
+    await this.loadPersistedState();
     logger.info("[CloudronHealthMonitor] Starting background health checks every 5 minutes");
     this.runCheck().catch(() => {});
     this.timer = setInterval(() => {
@@ -70,6 +76,83 @@ class CloudronHealthMonitor {
     };
   }
 
+  /** Load previously persisted state from the DB so we survive restarts. */
+  private async loadPersistedState(): Promise<void> {
+    try {
+      const [stateRows, alertRows, unreachableRows] = await Promise.all([
+        db.select().from(settingsTable).where(eq(settingsTable.key, DB_KEY_STATE)),
+        db.select().from(settingsTable).where(eq(settingsTable.key, DB_KEY_LAST_ALERT)),
+        db.select().from(settingsTable).where(eq(settingsTable.key, DB_KEY_LAST_UNREACHABLE)),
+      ]);
+
+      const persistedState = stateRows[0]?.value as CloudronHealthState | undefined;
+      if (persistedState === "healthy" || persistedState === "unreachable") {
+        this.state = persistedState;
+      }
+
+      const alertVal = alertRows[0]?.value;
+      if (alertVal) {
+        const d = new Date(alertVal);
+        if (!isNaN(d.getTime())) this.lastAlertSentAt = d;
+      }
+
+      const unreachableVal = unreachableRows[0]?.value;
+      if (unreachableVal) {
+        const d = new Date(unreachableVal);
+        if (!isNaN(d.getTime())) this.lastUnreachableAt = d;
+      }
+
+      logger.info(
+        { state: this.state, lastAlertSentAt: this.lastAlertSentAt },
+        "[CloudronHealthMonitor] Loaded persisted state from DB"
+      );
+    } catch (err) {
+      logger.warn({ err }, "[CloudronHealthMonitor] Could not load persisted state — starting fresh");
+    }
+  }
+
+  /** Persist the critical in-memory state to the DB. Best-effort. */
+  private async saveState(): Promise<void> {
+    try {
+      await Promise.all([
+        db
+          .insert(settingsTable)
+          .values({ key: DB_KEY_STATE, value: this.state })
+          .onConflictDoUpdate({ target: settingsTable.key, set: { value: this.state, updatedAt: new Date() } }),
+
+        db
+          .insert(settingsTable)
+          .values({
+            key: DB_KEY_LAST_ALERT,
+            value: this.lastAlertSentAt ? this.lastAlertSentAt.toISOString() : "",
+          })
+          .onConflictDoUpdate({
+            target: settingsTable.key,
+            set: {
+              value: this.lastAlertSentAt ? this.lastAlertSentAt.toISOString() : "",
+              updatedAt: new Date(),
+            },
+          }),
+
+        db
+          .insert(settingsTable)
+          .values({
+            key: DB_KEY_LAST_UNREACHABLE,
+            value: this.lastUnreachableAt ? this.lastUnreachableAt.toISOString() : "",
+          })
+          .onConflictDoUpdate({
+            target: settingsTable.key,
+            set: {
+              value: this.lastUnreachableAt ? this.lastUnreachableAt.toISOString() : "",
+              updatedAt: new Date(),
+            },
+          }),
+      ]);
+    } catch (err) {
+      logger.warn({ err }, "[CloudronHealthMonitor] Failed to persist health state to DB");
+    }
+  }
+
   private async runCheck(): Promise<void> {
     const previousState = this.state;
 
@@ -81,6 +164,8 @@ class CloudronHealthMonitor {
       if (!result.configured) {
         this.state = "unknown";
         this.error = undefined;
+        this.lastUnreachableAt = null;
+        await this.saveState();
         return;
       }
 
@@ -111,6 +196,9 @@ class CloudronHealthMonitor {
     if (this.state === "healthy") {
       this.lastUnreachableAt = null;
     }
+
+    // Persist the alert-suppression state so restarts don't cause duplicate alerts.
+    await this.saveState();
 
     // Persist per-instance health for the admin dashboard. Best-effort —
     // errors here must not affect the in-memory primary status above.

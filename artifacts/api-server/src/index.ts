@@ -127,7 +127,7 @@ const { loadAppStoreCacheFromDb } = await import("./routes/cloudron.js");
 await loadAppStoreCacheFromDb();
 
 const { cloudronHealthMonitor } = await import("./services/CloudronHealthMonitor.js");
-cloudronHealthMonitor.start();
+await cloudronHealthMonitor.start();
 
 const { cloudronSyncService } = await import("./services/CloudronSyncService.js");
 cloudronSyncService.start();
