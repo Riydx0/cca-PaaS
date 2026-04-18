@@ -45,10 +45,17 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const [cloudronStatus, setCloudronStatus] = useState<CloudronStatus>(null);
 
   useEffect(() => {
-    fetch("/api/admin/system/cloudron-status", { credentials: "include" })
-      .then((r) => r.ok ? r.json() : Promise.reject())
-      .then((data: CloudronStatus) => setCloudronStatus(data))
-      .catch(() => {});
+    const fetchStatus = () => {
+      fetch("/api/admin/system/cloudron-status", { credentials: "include" })
+        .then((r) => r.ok ? r.json() : Promise.reject())
+        .then((data: CloudronStatus) => setCloudronStatus(data))
+        .catch(() => {});
+    };
+
+    fetchStatus();
+    const intervalId = setInterval(fetchStatus, 60_000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   const cloudronIndicatorTitle =
