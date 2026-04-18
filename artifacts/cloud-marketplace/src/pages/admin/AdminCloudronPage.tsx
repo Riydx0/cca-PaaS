@@ -79,6 +79,7 @@ interface CloudronApp {
   appStoreId?: string;
   location?: string;
   domain?: string;
+  fqdn?: string;
   runState?: string;
   installationState?: string;
   manifest?: { title?: string; version?: string; icon?: string };
@@ -87,8 +88,58 @@ interface CloudronApp {
 interface CloudronAppsResult {
   configured: boolean;
   instanceName?: string;
+  instanceBaseUrl?: string;
   apps?: CloudronApp[];
   error?: string;
+}
+
+function computeFqdn(app: CloudronApp): string | null {
+  if (app.fqdn) return app.fqdn;
+  if (app.location && app.domain) return `${app.location}.${app.domain}`;
+  if (app.domain) return app.domain;
+  return null;
+}
+
+function getAppIconUrl(app: CloudronApp, instanceBaseUrl?: string): string | null {
+  const manifestIcon = app.manifest?.icon;
+  if (manifestIcon && /^https?:\/\//i.test(manifestIcon)) return manifestIcon;
+  if (instanceBaseUrl) {
+    const base = instanceBaseUrl.replace(/\/$/, "");
+    return `${base}/api/v1/apps/${encodeURIComponent(app.id)}/icon`;
+  }
+  return manifestIcon ?? null;
+}
+
+function AppIcon({
+  src,
+  alt,
+  size = "md",
+}: {
+  src: string | null;
+  alt: string;
+  size?: "sm" | "md" | "lg";
+}) {
+  const [errored, setErrored] = useState(false);
+  useEffect(() => { setErrored(false); }, [src]);
+  const dim = size === "sm" ? "h-6 w-6" : size === "lg" ? "h-14 w-14" : "h-10 w-10";
+  const iconDim = size === "sm" ? "h-3.5 w-3.5" : size === "lg" ? "h-7 w-7" : "h-5 w-5";
+  const radius = size === "sm" ? "rounded" : size === "lg" ? "rounded-xl" : "rounded-lg";
+
+  if (!src || errored) {
+    return (
+      <div className={`${dim} ${radius} border border-border bg-muted flex items-center justify-center shrink-0`}>
+        <AppWindow className={`${iconDim} text-muted-foreground`} />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={`${dim} ${radius} object-contain border border-border bg-background shrink-0`}
+      onError={() => setErrored(true)}
+    />
+  );
 }
 
 interface CloudronTestResult {
@@ -975,12 +1026,16 @@ function AppDetailsModal({
   );
 }
 
+const TAG_VISIBLE_LIMIT = 24;
+
 function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => void }) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [detailsApp, setDetailsApp] = useState<AppStoreListing | null>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [tagSearch, setTagSearch] = useState("");
+  const [showAllTags, setShowAllTags] = useState(false);
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<AppStoreResult>({
     queryKey: ["cloudron-appstore"],
@@ -1050,42 +1105,87 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
             className="ps-9"
           />
         </div>
-        {allTags.length > 0 && (
-          <div className="mt-3 space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Tag className="h-3.5 w-3.5" />
-              <span>{t("admin.cloudron.appstore.filterByTag")}</span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => setSelectedTag(null)}
-                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors ${
-                  selectedTag === null
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background text-muted-foreground border-border hover:bg-muted"
-                }`}
-              >
-                {t("admin.cloudron.appstore.filterAll")}
-              </button>
-              {allTags.map((tag) => (
+        {allTags.length > 0 && (() => {
+          const tagQuery = tagSearch.trim().toLowerCase();
+          const filteredTags = tagQuery
+            ? allTags.filter((tag) => tag.toLowerCase().includes(tagQuery))
+            : allTags;
+          const overLimit = filteredTags.length > TAG_VISIBLE_LIMIT;
+          let visibleTags = overLimit && !showAllTags
+            ? filteredTags.slice(0, TAG_VISIBLE_LIMIT)
+            : filteredTags;
+          // Always include the currently selected tag, even if hidden
+          if (selectedTag && !visibleTags.includes(selectedTag) && allTags.includes(selectedTag)) {
+            visibleTags = [selectedTag, ...visibleTags];
+          }
+          const hiddenCount = filteredTags.length - Math.min(filteredTags.length, TAG_VISIBLE_LIMIT);
+          return (
+            <div className="mt-3 space-y-1.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Tag className="h-3.5 w-3.5" />
+                  <span>{t("admin.cloudron.appstore.filterByTag")}</span>
+                  <span className="text-muted-foreground/60">· {allTags.length}</span>
+                </div>
+                {allTags.length > TAG_VISIBLE_LIMIT && (
+                  <div className="relative">
+                    <Search className="absolute start-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
+                    <Input
+                      placeholder={t("admin.cloudron.appstore.tagSearchPlaceholder")}
+                      value={tagSearch}
+                      onChange={(e) => setTagSearch(e.target.value)}
+                      className="ps-7 h-7 text-xs w-44"
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
                 <button
-                  key={tag}
                   type="button"
-                  onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors ${
-                    selectedTag === tag
+                  onClick={() => setSelectedTag(null)}
+                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors ${
+                    selectedTag === null
                       ? "bg-primary text-primary-foreground border-primary"
                       : "bg-background text-muted-foreground border-border hover:bg-muted"
                   }`}
                 >
-                  {tag}
-                  {selectedTag === tag && <X className="h-3 w-3" />}
+                  {t("admin.cloudron.appstore.filterAll")}
                 </button>
-              ))}
+                {visibleTags.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors ${
+                      selectedTag === tag
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background text-muted-foreground border-border hover:bg-muted"
+                    }`}
+                  >
+                    {tag}
+                    {selectedTag === tag && <X className="h-3 w-3" />}
+                  </button>
+                ))}
+                {overLimit && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllTags((v) => !v)}
+                    className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border border-dashed border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  >
+                    {showAllTags
+                      ? t("admin.cloudron.appstore.showLess")
+                      : t("admin.cloudron.appstore.showMore").replace("{n}", String(hiddenCount))}
+                  </button>
+                )}
+                {tagQuery && filteredTags.length === 0 && (
+                  <span className="text-xs text-muted-foreground italic px-1 py-0.5">
+                    {t("admin.cloudron.appstore.noTagsMatch")}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </CardHeader>
       <CardContent className="p-0">
         {isLoading ? (
@@ -1464,15 +1564,16 @@ export function AdminCloudronPage() {
                       const title = app.manifest?.title ?? app.appStoreId ?? app.id;
                       const isBusy = app.installationState === "installing" ||
                         app.installationState?.startsWith("pending_");
+                      const iconUrl = getAppIconUrl(app, appsData?.instanceBaseUrl);
+                      const fqdn = computeFqdn(app);
+                      const locationLabel = app.location && app.location.length > 0
+                        ? app.location
+                        : t("admin.cloudron.location.root");
                       return (
                         <TableRow key={app.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              {app.manifest?.icon ? (
-                                <img src={app.manifest.icon} alt={title} className="h-6 w-6 rounded object-contain shrink-0" />
-                              ) : (
-                                <AppWindow className="h-5 w-5 text-muted-foreground shrink-0" />
-                              )}
+                              <AppIcon src={iconUrl} alt={title} size="sm" />
                               <div>
                                 <p className="font-medium text-sm leading-none">{title}</p>
                                 {app.manifest?.version && (
@@ -1482,12 +1583,13 @@ export function AdminCloudronPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{app.location ?? "—"}</code>
+                            <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{locationLabel}</code>
                           </TableCell>
                           <TableCell>
-                            {app.domain ? (
-                              <a href={`https://${app.domain}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
-                                {app.domain}
+                            {fqdn ? (
+                              <a href={`https://${fqdn}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+                                {fqdn}
+                                <ExternalLink className="h-3 w-3 opacity-60" />
                               </a>
                             ) : (
                               <span className="text-muted-foreground text-xs">—</span>

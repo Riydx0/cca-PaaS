@@ -76,7 +76,7 @@ class CloudronService {
 
     const client = createCloudronClient(instance.baseUrl, instance.apiToken);
     const apps = await listApps(client);
-    return { configured: true, instanceName: instance.name, apps };
+    return { configured: true, instanceName: instance.name, instanceBaseUrl: instance.baseUrl, apps };
   }
 
   /**

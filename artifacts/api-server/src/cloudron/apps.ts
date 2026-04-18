@@ -19,6 +19,7 @@ export interface CloudronApp {
   };
   location: string;
   domain: string;
+  fqdn?: string;
   installationState:
     | "pending_install"
     | "pending_configure"
