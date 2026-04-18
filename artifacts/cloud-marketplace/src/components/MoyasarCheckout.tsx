@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useI18n } from "@/lib/i18n";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { adminFetch } from "@/lib/adminFetch";
 
 const MOYASAR_CDN = "https://cdn.moyasar.com/mpf/1.14.0/moyasar.js";
 const MOYASAR_CSS = "https://cdn.moyasar.com/mpf/1.14.0/moyasar.css";
@@ -47,6 +48,14 @@ function loadMoyasarSDK(): Promise<void> {
   });
 }
 
+interface InitiateResponse {
+  paymentRecordId: number;
+  amountHalala: number;
+  currency: string;
+  description: string;
+  callbackUrl: string;
+}
+
 interface MoyasarCheckoutProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -68,56 +77,67 @@ export function MoyasarCheckout({
 }: MoyasarCheckoutProps) {
   const { t, dir } = useI18n();
   const formRef = useRef<HTMLDivElement>(null);
-  const [sdkLoading, setSdkLoading] = useState(false);
-  const [sdkError, setSdkError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const initializedRef = useRef(false);
 
-  const amountHalala = Math.round(amountSar * 100);
+  const initCheckout = useCallback(async () => {
+    if (initializedRef.current || !formRef.current) return;
 
-  const callbackBase = window.location.origin;
-  const callbackUrl = `${callbackBase}/payment/callback?planId=${planId}&billingCycle=${billingCycle}`;
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Step 1: Create a payment record on the backend and get the callback URL
+      const initData = await adminFetch<InitiateResponse>("/api/payments/initiate", {
+        method: "POST",
+        body: JSON.stringify({ planId, billingCycle }),
+      });
+
+      // Step 2: Load the Moyasar SDK
+      await loadMoyasarSDK();
+      setLoading(false);
+
+      if (!formRef.current || !window.Moyasar) return;
+
+      formRef.current.innerHTML = "";
+      const formEl = document.createElement("div");
+      formEl.className = "mysr-form";
+      formRef.current.appendChild(formEl);
+
+      // Step 3: Initialize the SDK form with callbackUrl that includes paymentRecordId
+      window.Moyasar.init({
+        element: ".mysr-form",
+        amount: initData.amountHalala,
+        currency: initData.currency,
+        description: initData.description,
+        publishable_api_key: PUBLISHABLE_KEY!,
+        callback_url: initData.callbackUrl,
+        methods: ["creditcard", "stcpay"],
+        metadata: {
+          planId: String(planId),
+          billingCycle,
+          paymentRecordId: String(initData.paymentRecordId),
+        },
+        on_completed: () => {
+          initializedRef.current = false;
+        },
+      });
+
+      initializedRef.current = true;
+    } catch (err: unknown) {
+      setLoading(false);
+      const msg = err instanceof Error ? err.message : "Failed to initialize payment";
+      setError(msg);
+      toast.error(msg);
+    }
+  }, [planId, billingCycle]);
 
   useEffect(() => {
-    if (!open || !PUBLISHABLE_KEY || initializedRef.current) return;
-
-    setSdkLoading(true);
-    setSdkError(null);
-
-    loadMoyasarSDK()
-      .then(() => {
-        setSdkLoading(false);
-        if (!formRef.current || !window.Moyasar) return;
-
-        formRef.current.innerHTML = "";
-        const formEl = document.createElement("div");
-        formEl.className = "mysr-form";
-        formRef.current.appendChild(formEl);
-
-        window.Moyasar.init({
-          element: ".mysr-form",
-          amount: amountHalala,
-          currency,
-          description: `${planName} — ${billingCycle}`,
-          publishable_api_key: PUBLISHABLE_KEY,
-          callback_url: callbackUrl,
-          methods: ["creditcard", "stcpay"],
-          metadata: {
-            planId: String(planId),
-            billingCycle,
-          },
-          on_completed: () => {
-            initializedRef.current = false;
-          },
-        });
-
-        initializedRef.current = true;
-      })
-      .catch((err: Error) => {
-        setSdkLoading(false);
-        setSdkError(err.message);
-        toast.error("Failed to load payment form");
-      });
-  }, [open, amountHalala, currency, planName, billingCycle, callbackUrl, planId]);
+    if (open && PUBLISHABLE_KEY && !initializedRef.current) {
+      void initCheckout();
+    }
+  }, [open, initCheckout]);
 
   function handleClose() {
     initializedRef.current = false;
@@ -150,14 +170,14 @@ export function MoyasarCheckout({
           <div className="py-6 text-center text-sm text-muted-foreground">
             {t("payment.moyasar.notConfigured")}
           </div>
-        ) : sdkError ? (
+        ) : error ? (
           <div className="py-6 text-center space-y-3">
-            <p className="text-sm text-destructive">{sdkError}</p>
-            <Button variant="outline" size="sm" onClick={() => { initializedRef.current = false; }}>
+            <p className="text-sm text-destructive">{error}</p>
+            <Button variant="outline" size="sm" onClick={() => { initializedRef.current = false; void initCheckout(); }}>
               {t("payment.moyasar.tryAgain")}
             </Button>
           </div>
-        ) : sdkLoading ? (
+        ) : loading ? (
           <div className="py-10 flex items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             {t("payment.moyasar.loading")}

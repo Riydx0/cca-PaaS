@@ -26,6 +26,16 @@ function getAmountForPlan(
   return Math.round(parsed * 100);
 }
 
+/**
+ * POST /api/payments/initiate
+ *
+ * Creates a payment record in the DB for the given plan/billingCycle.
+ * Returns { paymentRecordId, amountHalala, currency } so the frontend SDK form
+ * can include paymentRecordId in its callback_url.
+ *
+ * If `source` is provided (direct API flow), also calls Moyasar API immediately.
+ * If `source` is omitted (SDK form flow), only creates the DB record.
+ */
 router.post("/initiate", requireAuth, async (req: Request, res) => {
   if (!MoyasarService.isConfigured()) {
     res.status(503).json({ error: "Payment gateway not configured" });
@@ -35,8 +45,8 @@ router.post("/initiate", requireAuth, async (req: Request, res) => {
     const userId = req.session.userId as number;
     const { planId, billingCycle = "monthly", source } = req.body ?? {};
 
-    if (!planId || !source) {
-      res.status(400).json({ error: "planId and source are required" });
+    if (!planId) {
+      res.status(400).json({ error: "planId is required" });
       return;
     }
 
@@ -74,6 +84,19 @@ router.post("/initiate", requireAuth, async (req: Request, res) => {
       })
       .returning();
 
+    // SDK form flow: no source provided — return record info so frontend SDK can include paymentRecordId
+    if (!source) {
+      res.json({
+        paymentRecordId: paymentRecord.id,
+        amountHalala,
+        currency: plan.currency ?? "SAR",
+        description: `Subscription: ${plan.name} (${billingCycle})`,
+        callbackUrl: `${CALLBACK_URL}?paymentRecordId=${paymentRecord.id}`,
+      });
+      return;
+    }
+
+    // Direct API flow: source provided — create Moyasar payment immediately
     const moyasarPayment = await MoyasarService.createPayment({
       amount: amountHalala,
       currency: plan.currency ?? "SAR",

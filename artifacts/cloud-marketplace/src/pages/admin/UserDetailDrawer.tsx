@@ -901,7 +901,7 @@ function SubscriptionTab({ userId }: { userId: number }) {
 
   const { data: subData, isLoading: subLoading } = useQuery<{ data: SubscriptionRow[] }>({
     queryKey: ["admin", "subscriptions", userId],
-    queryFn: () => adminFetch(`/api/admin/subscriptions?userId=${userId}&limit=1`),
+    queryFn: () => adminFetch(`/api/admin/subscriptions?userId=${userId}&limit=10`),
   });
 
   const { data: plansData } = useQuery<PlanOption[]>({
@@ -909,7 +909,16 @@ function SubscriptionTab({ userId }: { userId: number }) {
     queryFn: () => adminFetch("/api/admin/plans"),
   });
 
-  const sub = subData?.data?.[0] ?? null;
+  // Prioritize active > trial > suspended > any other (expired/cancelled last)
+  const sub = (() => {
+    const rows = subData?.data ?? [];
+    const priority = ["active", "trial", "suspended"];
+    for (const s of priority) {
+      const found = rows.find((r) => r.status === s);
+      if (found) return found;
+    }
+    return rows[0] ?? null;
+  })();
   const activePlans = (plansData ?? []).filter((p) => p.isActive);
 
   const [planId, setPlanId] = useState<string>("");
