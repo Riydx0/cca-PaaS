@@ -891,20 +891,7 @@ function AppDetailsModal({
       <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0">
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
           <div className="flex items-start gap-4">
-            <div className="shrink-0">
-              {icon ? (
-                <img
-                  src={icon}
-                  alt={title}
-                  className="h-14 w-14 rounded-xl object-contain border border-border bg-background"
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                />
-              ) : (
-                <div className="h-14 w-14 rounded-xl border border-border bg-muted flex items-center justify-center">
-                  <AppWindow className="h-7 w-7 text-muted-foreground" />
-                </div>
-              )}
-            </div>
+            <AppIcon src={icon ?? null} alt={title} size="lg" />
             <div className="flex-1 min-w-0">
               <DialogTitle className="text-lg leading-tight">{title}</DialogTitle>
               {tagline && (
@@ -1222,22 +1209,7 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
                 const appTags = app.manifest?.tags ?? [];
                 return (
                   <div key={app.id} className="flex items-center gap-4 px-6 py-3 hover:bg-muted/40 transition-colors">
-                    <div className="shrink-0">
-                      {icon ? (
-                        <img
-                          src={icon}
-                          alt={title}
-                          className="h-10 w-10 rounded-lg object-contain border border-border bg-background"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).style.display = "none";
-                          }}
-                        />
-                      ) : (
-                        <div className="h-10 w-10 rounded-lg border border-border bg-muted flex items-center justify-center">
-                          <AppWindow className="h-5 w-5 text-muted-foreground" />
-                        </div>
-                      )}
-                    </div>
+                    <AppIcon src={icon ?? null} alt={title} size="md" />
                     <div className="flex-1 min-w-0">
                       <button
                         type="button"
