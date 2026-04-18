@@ -434,6 +434,17 @@ async function fetchAppStoreCatalogue(): Promise<unknown> {
 }
 
 /**
+ * POST /api/cloudron/appstore/refresh
+ * Clears the in-memory App Store catalogue cache so the next GET fetches fresh data.
+ * Returns: { cleared: true }
+ */
+router.post("/appstore/refresh", requireAdmin, (_req: Request, res: Response) => {
+  appStoreCache = null;
+  appStoreFetchInFlight = null;
+  res.json({ cleared: true });
+});
+
+/**
  * GET /api/cloudron/appstore
  * Proxies the Cloudron App Store catalogue from cloudron.io with a 30-minute
  * server-side in-memory cache and stale-while-revalidate behaviour.

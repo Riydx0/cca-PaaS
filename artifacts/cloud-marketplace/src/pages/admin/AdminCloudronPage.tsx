@@ -228,6 +228,10 @@ async function fetchAppStore(): Promise<AppStoreResult> {
   return adminFetch<AppStoreResult>("/api/cloudron/appstore");
 }
 
+async function postAppStoreRefresh(): Promise<{ cleared: boolean }> {
+  return adminFetch<{ cleared: boolean }>("/api/cloudron/appstore/refresh", { method: "POST" });
+}
+
 interface ActivityLog {
   id: number;
   action: string;
@@ -973,6 +977,7 @@ function AppDetailsModal({
 
 function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => void }) {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [detailsApp, setDetailsApp] = useState<AppStoreListing | null>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -983,6 +988,16 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
     staleTime: 30 * 60 * 1000,
     gcTime: 60 * 60 * 1000,
     retry: 2,
+  });
+
+  const refreshMutation = useMutation({
+    mutationFn: postAppStoreRefresh,
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ["cloudron-appstore"] });
+      refetch();
+      toast.success(t("admin.cloudron.appstore.refreshed"));
+    },
+    onError: () => toast.error(t("admin.cloudron.appstore.refreshError")),
   });
 
   const allApps = data?.apps ?? [];
@@ -1009,10 +1024,22 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
       <CardHeader className="pb-4">
         <div className="flex items-center gap-2">
           <Store className="h-5 w-5 text-primary" />
-          <div>
+          <div className="flex-1">
             <CardTitle className="text-base">{t("admin.cloudron.appstore.title")}</CardTitle>
             <CardDescription className="mt-0.5">{t("admin.cloudron.appstore.subtitle")}</CardDescription>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refreshMutation.mutate()}
+            disabled={refreshMutation.isPending || isFetching}
+            className="shrink-0"
+          >
+            {refreshMutation.isPending || isFetching
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin me-1.5" />
+              : <RefreshCw className="h-3.5 w-3.5 me-1.5" />}
+            {t("admin.cloudron.appstore.forceRefresh")}
+          </Button>
         </div>
         <div className="relative mt-3">
           <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
