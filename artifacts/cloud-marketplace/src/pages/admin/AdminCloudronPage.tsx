@@ -856,11 +856,15 @@ function AppDetailsModal({
   onClose,
   onInstall,
   onTagClick,
+  installedApps,
+  onViewMyApps,
 }: {
   app: AppStoreListing | null;
   onClose: () => void;
   onInstall: (appStoreId: string) => void;
   onTagClick?: (tag: string) => void;
+  installedApps?: CloudronApp[];
+  onViewMyApps?: () => void;
 }) {
   const { t } = useI18n();
   const [screenshotError, setScreenshotError] = useState<Record<number, boolean>>({});
@@ -870,6 +874,10 @@ function AppDetailsModal({
   }, [app?.id]);
 
   if (!app) return null;
+
+  const isInstalled = (installedApps ?? []).some(
+    (ia) => ia.appStoreId === app.id
+  );
 
   const title = app.manifest?.title ?? app.id;
   const tagline = app.manifest?.tagline;
@@ -895,7 +903,15 @@ function AppDetailsModal({
           <div className="flex items-start gap-4">
             <AppIcon src={icon ?? null} alt={title} size="lg" />
             <div className="flex-1 min-w-0">
-              <DialogTitle className="text-lg leading-tight">{title}</DialogTitle>
+              <div className="flex items-center gap-2 flex-wrap">
+                <DialogTitle className="text-lg leading-tight">{title}</DialogTitle>
+                {isInstalled && (
+                  <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 border font-medium text-xs rounded-full px-2.5 py-0.5 shrink-0">
+                    <CheckCircle2 className="h-3 w-3 me-1" />
+                    {t("admin.cloudron.appstore.details.installedBadge")}
+                  </Badge>
+                )}
+              </div>
               {tagline && (
                 <DialogDescription className="mt-0.5 text-sm">{tagline}</DialogDescription>
               )}
@@ -1025,10 +1041,20 @@ function AppDetailsModal({
 
         <div className="px-6 py-4 border-t border-border shrink-0 flex items-center justify-between gap-3">
           <Button variant="outline" onClick={onClose}>{t("btn.cancel")}</Button>
-          <Button onClick={handleInstall}>
-            <Download className="h-4 w-4 me-2" />
-            {t("admin.cloudron.appstore.details.installBtn")}
-          </Button>
+          {isInstalled ? (
+            <Button
+              variant="secondary"
+              onClick={() => { onClose(); onViewMyApps?.(); }}
+            >
+              <AppWindow className="h-4 w-4 me-2" />
+              {t("admin.cloudron.appstore.details.viewMyApps")}
+            </Button>
+          ) : (
+            <Button onClick={handleInstall}>
+              <Download className="h-4 w-4 me-2" />
+              {t("admin.cloudron.appstore.details.installBtn")}
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -1037,7 +1063,7 @@ function AppDetailsModal({
 
 const TAG_VISIBLE_LIMIT = 24;
 
-function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => void }) {
+function AppStoreBrowser({ onInstall, onViewMyApps }: { onInstall: (appStoreId: string) => void; onViewMyApps?: () => void }) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -1053,6 +1079,13 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
     gcTime: 60 * 60 * 1000,
     retry: 2,
   });
+
+  const { data: appsData } = useQuery<CloudronAppsResult>({
+    queryKey: ["cloudron-apps"],
+    queryFn: fetchApps,
+    staleTime: 60_000,
+  });
+  const installedApps = appsData?.apps ?? [];
 
   const refreshMutation = useMutation({
     mutationFn: postAppStoreRefresh,
@@ -1298,6 +1331,8 @@ function AppStoreBrowser({ onInstall }: { onInstall: (appStoreId: string) => voi
           setSelectedTag(tag);
           setDetailsApp(null);
         }}
+        installedApps={installedApps}
+        onViewMyApps={onViewMyApps}
       />
     </Card>
   );
@@ -1312,6 +1347,7 @@ export function AdminCloudronPage() {
   const [activeTasks, setActiveTasks] = useState<ActiveTask[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<CloudronInstance | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [activeTab, setActiveTab] = useState("installed");
 
   const { data: instancesData, isLoading: instancesLoading } = useQuery<CloudronInstancesResult>({
     queryKey: ["cloudron-instances"],
@@ -1502,7 +1538,7 @@ export function AdminCloudronPage() {
       )}
 
       {/* Tabs: Installed Apps + Browse App Store + Activity Log */}
-      <Tabs defaultValue="installed">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
           <TabsTrigger value="installed" className="flex items-center gap-2">
             <AppWindow className="h-4 w-4" />
@@ -1665,7 +1701,7 @@ export function AdminCloudronPage() {
         </TabsContent>
 
         <TabsContent value="appstore">
-          <AppStoreBrowser onInstall={(appStoreId) => openInstall(appStoreId)} />
+          <AppStoreBrowser onInstall={(appStoreId) => openInstall(appStoreId)} onViewMyApps={() => setActiveTab("installed")} />
         </TabsContent>
 
         {hasInstances && (
