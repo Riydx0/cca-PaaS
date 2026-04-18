@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { adminFetch } from "@/lib/adminFetch";
-import { AlertTriangle, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 
 interface CloudronHealthStatus {
   state: "unknown" | "healthy" | "unreachable";
@@ -24,13 +25,27 @@ export function CloudronStatusBanner() {
     staleTime: 30_000,
   });
 
+  const previousStateRef = useRef<CloudronHealthStatus["state"] | null>(null);
+
   // When the connection recovers, clear the dismissed state so the banner can
-  // re-appear automatically if a future outage occurs.
+  // re-appear automatically if a future outage occurs, and show a brief
+  // success toast confirming the connection is back.
   useEffect(() => {
-    if (data?.state === "healthy") {
+    if (!data?.state) return;
+    const previous = previousStateRef.current;
+    if (data.state === "healthy") {
       setDismissedOutageAt(null);
+      if (previous === "unreachable") {
+        const instanceLabel = data.instanceName ?? "Cloudron";
+        toast.success("Cloudron connection restored", {
+          description: `The ${instanceLabel} instance is reachable again.`,
+          duration: 5000,
+          icon: <CheckCircle2 className="h-4 w-4 text-green-600" />,
+        });
+      }
     }
-  }, [data?.state]);
+    previousStateRef.current = data.state;
+  }, [data?.state, data?.instanceName]);
 
   if (!data || data.state !== "unreachable") return null;
 
