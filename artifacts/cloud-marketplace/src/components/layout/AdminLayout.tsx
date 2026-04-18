@@ -6,6 +6,7 @@ import { useRole } from "@/hooks/useRole";
 import { useSiteConfig } from "@/contexts/SiteConfigContext";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import {
   LayoutDashboard, Users, Receipt, Server, Settings, Menu, LogOut,
   ShieldCheck, ArrowLeft, CreditCard, Activity, FileText, Palette,
@@ -41,7 +42,13 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(isInSettingsGroup);
   const [cloudronOpen, setCloudronOpen] = useState(isInCloudronGroup);
 
-  type CloudronStatus = { enabled: boolean; configured: boolean; connected: boolean } | null;
+  type CloudronStatus = {
+    enabled: boolean;
+    configured: boolean;
+    connected: boolean;
+    baseUrl?: string;
+    error?: string;
+  } | null;
   const [cloudronStatus, setCloudronStatus] = useState<CloudronStatus>(null);
 
   useEffect(() => {
@@ -58,12 +65,21 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     return () => clearInterval(intervalId);
   }, []);
 
-  const cloudronIndicatorTitle =
+  const cloudronIndicatorLabel =
     cloudronStatus?.connected
       ? t("admin.nav.cloudronIndicator.connected")
       : cloudronStatus?.enabled && cloudronStatus?.configured
         ? t("admin.nav.cloudronIndicator.disconnected")
         : t("admin.nav.cloudronIndicator.disabled");
+
+  const cloudronTooltipText =
+    cloudronStatus === null
+      ? undefined
+      : cloudronStatus.connected
+        ? t("admin.nav.cloudronTooltip.connected").replace("{url}", cloudronStatus.baseUrl || "Cloudron")
+        : cloudronStatus.enabled && cloudronStatus.configured
+          ? t("admin.nav.cloudronTooltip.disconnected").replace("{error}", cloudronStatus.error || t("admin.nav.cloudronIndicator.disconnected"))
+          : t("admin.nav.cloudronTooltip.disabled");
 
   const cloudronDotColor =
     cloudronStatus === null
@@ -74,13 +90,30 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           ? "bg-red-400"
           : "bg-gray-400";
 
-  const CloudronDot = () => (
-    <span
-      className={`inline-block w-2 h-2 rounded-full shrink-0 ${cloudronDotColor}`}
-      title={cloudronStatus !== null ? cloudronIndicatorTitle : undefined}
-      aria-label={cloudronStatus !== null ? cloudronIndicatorTitle : undefined}
-    />
-  );
+  const CloudronDot = () => {
+    const dot = (
+      <span
+        className={`inline-block w-2 h-2 rounded-full shrink-0 ${cloudronDotColor}`}
+        aria-label={cloudronStatus !== null ? cloudronIndicatorLabel : undefined}
+      />
+    );
+
+    if (cloudronStatus === null || !cloudronTooltipText) return dot;
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className={`inline-block w-2 h-2 rounded-full shrink-0 ${cloudronDotColor}`}
+            aria-label={cloudronIndicatorLabel}
+          />
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          {cloudronTooltipText}
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
 
   const navItems: { href: string; label: string; icon: React.ElementType; indicator?: React.ReactNode }[] = [
     { href: "/admin/dashboard",         label: t("admin.nav.dashboard"),         icon: LayoutDashboard },
