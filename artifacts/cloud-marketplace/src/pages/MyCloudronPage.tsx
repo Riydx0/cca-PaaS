@@ -77,6 +77,7 @@ interface ClientApp {
 interface AppStoreListing {
   id: string;
   iconUrl?: string;
+  updatedAt?: string;
   manifest?: {
     title?: string;
     tagline?: string;
@@ -373,6 +374,8 @@ function InstallModal({
   const appWebsite = initialApp?.manifest?.website;
   const appTagline = initialApp?.manifest?.tagline;
   const appMemory = formatMemory(initialApp?.manifest?.memoryLimit ?? initialApp?.manifest?.minBoxMemory);
+  const appUpdatedAt = initialApp?.updatedAt;
+  const safeWebsite = appWebsite && /^https?:\/\//i.test(appWebsite) ? appWebsite : undefined;
 
   useEffect(() => {
     if (open) {
@@ -382,8 +385,7 @@ function InstallModal({
     }
   }, [open, initialAppStoreId, initialApp?.id]);
 
-  const cleanLocation = sanitizeLocation(location);
-  const locationInvalid = locationTouched && location.length > 0 && cleanLocation !== location.toLowerCase();
+  const cleanLocation = location;
   const previewFqdn = installDomain
     ? cleanLocation
       ? `${cleanLocation}.${installDomain}`
@@ -439,15 +441,18 @@ function InstallModal({
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   {appVersion && <span>v{appVersion}</span>}
                   {appMemory && <span>· {t("cloudron.client.install.memoryNeeded").replace("{memory}", appMemory)}</span>}
+                  {appUpdatedAt && (
+                    <span>· {t("cloudron.client.install.updatedAt").replace("{date}", new Date(appUpdatedAt).toLocaleDateString())}</span>
+                  )}
                 </div>
-                {appWebsite && (
+                {safeWebsite && (
                   <a
-                    href={appWebsite}
+                    href={safeWebsite}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-block text-xs text-primary hover:underline"
                   >
-                    {appWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                    {safeWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
                   </a>
                 )}
               </div>
@@ -517,7 +522,13 @@ function InstallModal({
                 id="location"
                 placeholder={t("cloudron.client.install.locationPlaceholder")}
                 value={location}
-                onChange={(e) => { setLocation(e.target.value); setLocationTouched(true); }}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  const cleaned = sanitizeLocation(raw);
+                  const hadInvalid = cleaned !== raw.toLowerCase();
+                  setLocation(cleaned);
+                  if (hadInvalid) setLocationTouched(true);
+                }}
                 className="flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-none"
                 autoFocus={hasBranding}
               />
@@ -536,8 +547,8 @@ function InstallModal({
                 )}
               </p>
             )}
-            {locationInvalid && (
-              <p className="text-xs text-destructive">{t("cloudron.client.install.locationInvalid")}</p>
+            {locationTouched && (
+              <p className="text-xs text-muted-foreground">{t("cloudron.client.install.locationInvalid")}</p>
             )}
             {!cleanLocation && (
               <p className="text-xs text-muted-foreground">{t("cloudron.client.install.locationEmptyHint")}</p>
