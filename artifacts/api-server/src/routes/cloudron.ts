@@ -167,6 +167,11 @@ function parseInstanceId(req: Request, res: Response): number | null {
   return id;
 }
 
+type AuthedRequest = Request & { currentUser?: { id: number } };
+function getActorUserId(req: Request): number | null {
+  return (req as AuthedRequest).currentUser?.id ?? null;
+}
+
 router.get("/instances/:id/test", requireAdmin, async (req: Request, res: Response) => {
   const id = parseInstanceId(req, res); if (id == null) return;
   try { res.json(await cloudronService.testConnectionFor(id)); } catch (err) { handleCloudronError(err, res); }
@@ -188,7 +193,7 @@ router.post("/instances/:id/apps/install", requireAdmin, async (req: Request, re
   if (!appStoreId) { res.status(400).json({ error: "appStoreId required" }); return; }
   try {
     const result = await cloudronService.requestInstallFor(id, { appStoreId, location, portBindings, accessRestriction });
-    logAdminCloudronAction({ userId: (req as any).session?.userId ?? null, instanceId: id, action: "cloudron_install", appId: result.appId });
+    logAdminCloudronAction({ userId: getActorUserId(req), instanceId: id, action: "cloudron_install", appId: result.appId });
     res.json(result);
   } catch (err) { handleCloudronError(err, res); }
 });
@@ -198,7 +203,7 @@ router.post("/instances/:id/apps/:appId/uninstall", requireAdmin, async (req: Re
   const appId = String(req.params.appId);
   try {
     const result = await cloudronService.requestUninstallFor(id, appId);
-    logAdminCloudronAction({ userId: (req as any).session?.userId ?? null, instanceId: id, action: "cloudron_uninstall", appId });
+    logAdminCloudronAction({ userId: getActorUserId(req), instanceId: id, action: "cloudron_uninstall", appId });
     res.json(result);
   } catch (err) { handleCloudronError(err, res); }
 });
@@ -208,7 +213,7 @@ router.post("/instances/:id/apps/:appId/restart", requireAdmin, async (req: Requ
   const appId = String(req.params.appId);
   try {
     const result = await cloudronService.requestRestartFor(id, appId);
-    logAdminCloudronAction({ userId: (req as any).session?.userId ?? null, instanceId: id, action: "cloudron_restart", appId });
+    logAdminCloudronAction({ userId: getActorUserId(req), instanceId: id, action: "cloudron_restart", appId });
     res.json(result);
   } catch (err) { handleCloudronError(err, res); }
 });
@@ -218,7 +223,7 @@ router.post("/instances/:id/apps/:appId/stop", requireAdmin, async (req: Request
   const appId = String(req.params.appId);
   try {
     const result = await cloudronService.requestStopFor(id, appId);
-    logAdminCloudronAction({ userId: (req as any).session?.userId ?? null, instanceId: id, action: "cloudron_stop", appId });
+    logAdminCloudronAction({ userId: getActorUserId(req), instanceId: id, action: "cloudron_stop", appId });
     res.json(result);
   } catch (err) { handleCloudronError(err, res); }
 });
@@ -228,7 +233,7 @@ router.post("/instances/:id/apps/:appId/start", requireAdmin, async (req: Reques
   const appId = String(req.params.appId);
   try {
     const result = await cloudronService.requestStartFor(id, appId);
-    logAdminCloudronAction({ userId: (req as any).session?.userId ?? null, instanceId: id, action: "cloudron_start", appId });
+    logAdminCloudronAction({ userId: getActorUserId(req), instanceId: id, action: "cloudron_start", appId });
     res.json(result);
   } catch (err) { handleCloudronError(err, res); }
 });
@@ -238,7 +243,7 @@ router.post("/instances/:id/apps/:appId/update", requireAdmin, async (req: Reque
   const appId = String(req.params.appId);
   try {
     const result = await cloudronService.requestUpdateFor(id, appId);
-    logAdminCloudronAction({ userId: (req as any).session?.userId ?? null, instanceId: id, action: "cloudron_update", appId });
+    logAdminCloudronAction({ userId: getActorUserId(req), instanceId: id, action: "cloudron_update", appId });
     res.json(result);
   } catch (err) { handleCloudronError(err, res); }
 });
