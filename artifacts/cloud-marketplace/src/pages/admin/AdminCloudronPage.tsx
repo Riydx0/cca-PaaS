@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRoute, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useI18n } from "@/lib/i18n";
 import { adminFetch } from "@/lib/adminFetch";
@@ -203,20 +204,27 @@ interface AppStoreResult {
   error?: string;
 }
 
+function cloudronBase(instanceId: number | null): string {
+  return instanceId ? `/api/cloudron/instances/${instanceId}` : "/api/cloudron";
+}
+
 async function fetchInstances(): Promise<CloudronInstancesResult> {
   return adminFetch<CloudronInstancesResult>("/api/cloudron/instances");
 }
 
-async function fetchApps(): Promise<CloudronAppsResult> {
-  return adminFetch<CloudronAppsResult>("/api/cloudron/apps");
+async function fetchApps(instanceId: number | null = null): Promise<CloudronAppsResult> {
+  return adminFetch<CloudronAppsResult>(`${cloudronBase(instanceId)}/apps`);
 }
 
-async function fetchTask(taskId: string): Promise<CloudronTask> {
-  return adminFetch<CloudronTask>(`/api/cloudron/tasks/${taskId}`);
+async function fetchTask(taskId: string, instanceId: number | null = null): Promise<CloudronTask> {
+  return adminFetch<CloudronTask>(`${cloudronBase(instanceId)}/tasks/${taskId}`);
 }
 
-async function postInstall(body: { appStoreId: string; location?: string }): Promise<InstallResult> {
-  return adminFetch<InstallResult>("/api/cloudron/apps/install", {
+async function postInstall(
+  body: { appStoreId: string; location?: string },
+  instanceId: number | null = null,
+): Promise<InstallResult> {
+  return adminFetch<InstallResult>(`${cloudronBase(instanceId)}/apps/install`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -240,36 +248,36 @@ async function deleteInstance(id: number): Promise<{ success: boolean }> {
   return adminFetch(`/api/cloudron/instances/${id}`, { method: "DELETE" });
 }
 
-async function postUninstall(appId: string): Promise<AppActionResult> {
-  return adminFetch<AppActionResult>(`/api/cloudron/apps/${encodeURIComponent(appId)}/uninstall`, {
+async function postUninstall(appId: string, instanceId: number | null = null): Promise<AppActionResult> {
+  return adminFetch<AppActionResult>(`${cloudronBase(instanceId)}/apps/${encodeURIComponent(appId)}/uninstall`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });
 }
 
-async function postRestart(appId: string): Promise<AppActionResult> {
-  return adminFetch<AppActionResult>(`/api/cloudron/apps/${encodeURIComponent(appId)}/restart`, {
+async function postRestart(appId: string, instanceId: number | null = null): Promise<AppActionResult> {
+  return adminFetch<AppActionResult>(`${cloudronBase(instanceId)}/apps/${encodeURIComponent(appId)}/restart`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });
 }
 
-async function postStop(appId: string): Promise<AppActionResult> {
-  return adminFetch<AppActionResult>(`/api/cloudron/apps/${encodeURIComponent(appId)}/stop`, {
+async function postStop(appId: string, instanceId: number | null = null): Promise<AppActionResult> {
+  return adminFetch<AppActionResult>(`${cloudronBase(instanceId)}/apps/${encodeURIComponent(appId)}/stop`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });
 }
 
-async function postStart(appId: string): Promise<AppActionResult> {
-  return adminFetch<AppActionResult>(`/api/cloudron/apps/${encodeURIComponent(appId)}/start`, {
+async function postStart(appId: string, instanceId: number | null = null): Promise<AppActionResult> {
+  return adminFetch<AppActionResult>(`${cloudronBase(instanceId)}/apps/${encodeURIComponent(appId)}/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });
 }
 
-async function postUpdate(appId: string): Promise<AppActionResult> {
-  return adminFetch<AppActionResult>(`/api/cloudron/apps/${encodeURIComponent(appId)}/update`, {
+async function postUpdate(appId: string, instanceId: number | null = null): Promise<AppActionResult> {
+  return adminFetch<AppActionResult>(`${cloudronBase(instanceId)}/apps/${encodeURIComponent(appId)}/update`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });
@@ -448,7 +456,7 @@ function InstallStateBadge({ state }: { state?: string }) {
 
 const MAX_POLL_ERRORS = 3;
 
-function TaskProgressStrip({ taskId, label, onDone }: { taskId: string; label: string; onDone: () => void }) {
+function TaskProgressStrip({ taskId, label, onDone, instanceId = null }: { taskId: string; label: string; onDone: () => void; instanceId?: number | null }) {
   const { t } = useI18n();
   const [task, setTask] = useState<CloudronTask | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -461,7 +469,7 @@ function TaskProgressStrip({ taskId, label, onDone }: { taskId: string; label: s
   const poll = useCallback(async () => {
     if (onDoneCalledRef.current) return;
     try {
-      const data = await fetchTask(taskId);
+      const data = await fetchTask(taskId, instanceId);
       consecutiveErrors.current = 0;
       setTask(data);
       if (data.state === "success") {
@@ -481,7 +489,7 @@ function TaskProgressStrip({ taskId, label, onDone }: { taskId: string; label: s
         setDone(true);
       }
     }
-  }, [taskId, t]);
+  }, [taskId, t, instanceId]);
 
   useEffect(() => {
     if (done) return;
@@ -529,11 +537,13 @@ function InstallModal({
   onClose,
   onTaskStarted,
   initialAppStoreId,
+  instanceId = null,
 }: {
   open: boolean;
   onClose: () => void;
   onTaskStarted: (task: ActiveTask) => void;
   initialAppStoreId?: string;
+  instanceId?: number | null;
 }) {
   const { t } = useI18n();
   const [appStoreId, setAppStoreId] = useState(initialAppStoreId ?? "");
@@ -547,7 +557,7 @@ function InstallModal({
   }, [open, initialAppStoreId]);
 
   const mutation = useMutation({
-    mutationFn: postInstall,
+    mutationFn: (body: { appStoreId: string; location?: string }) => postInstall(body, instanceId ?? null),
     onSuccess: (data) => {
       if (data.configured === false) {
         toast.error(t("admin.cloudron.notConfigured.title"));
@@ -675,16 +685,18 @@ function ConfirmActionDialog({
   onClose,
   onTaskStarted,
   onDone,
+  instanceId = null,
 }: {
   action: ConfirmAction | null;
   onClose: () => void;
   onTaskStarted: (task: ActiveTask) => void;
   onDone: () => void;
+  instanceId?: number | null;
 }) {
   const { t } = useI18n();
 
   const uninstallMutation = useMutation({
-    mutationFn: (appId: string) => postUninstall(appId),
+    mutationFn: (appId: string) => postUninstall(appId, instanceId),
     onSuccess: (data) => {
       if (data.taskId) {
         toast.success(t("admin.cloudron.uninstall.queued"));
@@ -701,7 +713,7 @@ function ConfirmActionDialog({
   });
 
   const restartMutation = useMutation({
-    mutationFn: (appId: string) => postRestart(appId),
+    mutationFn: (appId: string) => postRestart(appId, instanceId),
     onSuccess: (data) => {
       if (data.taskId) {
         toast.success(t("admin.cloudron.restart.queued"));
@@ -718,7 +730,7 @@ function ConfirmActionDialog({
   });
 
   const stopMutation = useMutation({
-    mutationFn: (appId: string) => postStop(appId),
+    mutationFn: (appId: string) => postStop(appId, instanceId),
     onSuccess: (data) => {
       if (data.taskId) {
         toast.success(t("admin.cloudron.stop.queued"));
@@ -735,7 +747,7 @@ function ConfirmActionDialog({
   });
 
   const startMutation = useMutation({
-    mutationFn: (appId: string) => postStart(appId),
+    mutationFn: (appId: string) => postStart(appId, instanceId),
     onSuccess: (data) => {
       if (data.taskId) {
         toast.success(t("admin.cloudron.start.queued"));
@@ -752,7 +764,7 @@ function ConfirmActionDialog({
   });
 
   const updateMutation = useMutation({
-    mutationFn: (appId: string) => postUpdate(appId),
+    mutationFn: (appId: string) => postUpdate(appId, instanceId),
     onSuccess: (data) => {
       if (data.taskId) {
         toast.success(t("admin.cloudron.update.queued"));
@@ -1063,7 +1075,7 @@ function AppDetailsModal({
 
 const TAG_VISIBLE_LIMIT = 24;
 
-function AppStoreBrowser({ onInstall, onViewMyApps }: { onInstall: (appStoreId: string) => void; onViewMyApps?: () => void }) {
+function AppStoreBrowser({ onInstall, onViewMyApps, instanceId = null }: { onInstall: (appStoreId: string) => void; onViewMyApps?: () => void; instanceId?: number | null }) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -1098,8 +1110,8 @@ function AppStoreBrowser({ onInstall, onViewMyApps }: { onInstall: (appStoreId: 
   });
 
   const { data: appsData } = useQuery<CloudronAppsResult>({
-    queryKey: ["cloudron-apps"],
-    queryFn: fetchApps,
+    queryKey: ["cloudron-apps", instanceId ?? "primary"],
+    queryFn: () => fetchApps(instanceId),
     staleTime: 60_000,
   });
   const installedApps = appsData?.apps ?? [];
@@ -1469,6 +1481,9 @@ function CloudronMiniStats() {
 export function AdminCloudronPage() {
   const { t } = useI18n();
   const qc = useQueryClient();
+  const [scopedRouteMatch, scopedRouteParams] = useRoute<{ id: string }>("/admin/cloudron/instances/:id/apps");
+  const instanceId =
+    scopedRouteMatch && scopedRouteParams?.id ? parseInt(scopedRouteParams.id, 10) || null : null;
   const [installOpen, setInstallOpen] = useState(false);
   const [installAppStoreId, setInstallAppStoreId] = useState<string | undefined>(undefined);
   const [addInstanceOpen, setAddInstanceOpen] = useState(false);
@@ -1492,11 +1507,13 @@ export function AdminCloudronPage() {
     error: appsError,
     refetch,
   } = useQuery<CloudronAppsResult>({
-    queryKey: ["cloudron-apps"],
-    queryFn: fetchApps,
+    queryKey: ["cloudron-apps", instanceId ?? "primary"],
+    queryFn: () => fetchApps(instanceId),
     enabled: hasInstances,
     retry: false,
   });
+
+  const scopedInstance = instanceId ? instances.find((i) => i.id === instanceId) ?? null : null;
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteInstance(id),
@@ -1527,6 +1544,24 @@ export function AdminCloudronPage() {
 
   return (
     <div className="space-y-6">
+      {scopedInstance && (
+        <div className="flex items-center gap-2 text-sm">
+          <Link href="/admin/cloudron/instances" className="text-primary hover:underline">
+            ← {t("admin.cloudron.instances.backToList")}
+          </Link>
+          <span className="text-muted-foreground">/</span>
+          <span className="text-muted-foreground">{t("admin.cloudron.instances.scopedHeader")}:</span>
+          <span className="font-semibold">{scopedInstance.name}</span>
+          <a
+            href={scopedInstance.baseUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1"
+          >
+            ({scopedInstance.baseUrl})
+          </a>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">{t("admin.cloudron.title")}</h1>
@@ -1661,6 +1696,7 @@ export function AdminCloudronPage() {
                   taskId={activeTask.taskId}
                   label={activeTask.label}
                   onDone={() => handleTaskDone(activeTask.taskId)}
+                  instanceId={instanceId}
                 />
               </CardContent>
             </Card>
@@ -1832,7 +1868,7 @@ export function AdminCloudronPage() {
         </TabsContent>
 
         <TabsContent value="appstore">
-          <AppStoreBrowser onInstall={(appStoreId) => openInstall(appStoreId)} onViewMyApps={() => setActiveTab("installed")} />
+          <AppStoreBrowser onInstall={(appStoreId) => openInstall(appStoreId)} onViewMyApps={() => setActiveTab("installed")} instanceId={instanceId} />
         </TabsContent>
 
         {hasInstances && (
@@ -1866,6 +1902,7 @@ export function AdminCloudronPage() {
         onClose={() => setInstallOpen(false)}
         onTaskStarted={handleTaskStarted}
         initialAppStoreId={installAppStoreId}
+        instanceId={instanceId}
       />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
@@ -1897,6 +1934,7 @@ export function AdminCloudronPage() {
           void qc.invalidateQueries({ queryKey: ["cloudron-apps"] });
           void refetch();
         }}
+        instanceId={instanceId}
       />
     </div>
   );

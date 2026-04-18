@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Server,
@@ -12,7 +13,16 @@ import {
   XCircle,
   HelpCircle,
   ExternalLink,
+  Eye,
+  LogIn,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
 import { adminFetch } from "@/lib/adminFetch";
@@ -83,10 +93,12 @@ function HealthBadge({ status }: { status?: CloudronInstance["healthStatus"] }) 
 
 export function AdminCloudronInstancesPage() {
   const { t } = useI18n();
+  const [, navigate] = useLocation();
   const qc = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CloudronInstance | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CloudronInstance | null>(null);
+  const [chooserTarget, setChooserTarget] = useState<CloudronInstance | null>(null);
 
   // Auto-open add modal when ?add=1 is in URL
   useEffect(() => {
@@ -193,7 +205,7 @@ export function AdminCloudronInstancesPage() {
                   <TableRow
                     key={inst.id}
                     className="cursor-pointer hover:bg-muted/40"
-                    onClick={() => setEditTarget(inst)}
+                    onClick={() => setChooserTarget(inst)}
                   >
                     <TableCell className="font-medium">{inst.name}</TableCell>
                     <TableCell>
@@ -265,6 +277,50 @@ export function AdminCloudronInstancesPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!chooserTarget} onOpenChange={(v) => !v && setChooserTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("admin.cloudron.instances.chooser.title")}</DialogTitle>
+            <DialogDescription>
+              {chooserTarget?.name} — {chooserTarget?.baseUrl}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+            <Button
+              variant="outline"
+              className="h-auto py-4 flex-col gap-2"
+              onClick={() => {
+                if (!chooserTarget) return;
+                const id = chooserTarget.id;
+                setChooserTarget(null);
+                navigate(`/admin/cloudron/instances/${id}`);
+              }}
+            >
+              <Eye className="h-6 w-6 text-primary" />
+              <div className="font-semibold">{t("admin.cloudron.instances.chooser.view")}</div>
+              <div className="text-xs text-muted-foreground text-center">
+                {t("admin.cloudron.instances.chooser.viewDesc")}
+              </div>
+            </Button>
+            <Button
+              className="h-auto py-4 flex-col gap-2"
+              onClick={() => {
+                if (!chooserTarget) return;
+                const id = chooserTarget.id;
+                setChooserTarget(null);
+                navigate(`/admin/cloudron/instances/${id}/apps`);
+              }}
+            >
+              <LogIn className="h-6 w-6" />
+              <div className="font-semibold">{t("admin.cloudron.instances.chooser.enter")}</div>
+              <div className="text-xs opacity-90 text-center">
+                {t("admin.cloudron.instances.chooser.enterDesc")}
+              </div>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AddInstanceModal
         open={addOpen}

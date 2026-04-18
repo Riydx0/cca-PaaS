@@ -82,7 +82,67 @@ class CloudronService {
     if (!instance) throw new CloudronError("Instance not found", 404, "NOT_FOUND");
     const client = clientFor(instance);
     const apps = await listApps(client);
-    return { instanceName: instance.name, instanceBaseUrl: instance.baseUrl, apps };
+    return { configured: true, instanceName: instance.name, instanceBaseUrl: instance.baseUrl, apps };
+  }
+
+  async testConnectionFor(instanceId: number): Promise<CloudronStatus> {
+    const instance = await getInstanceById(instanceId);
+    if (!instance) return { configured: false, connected: false };
+    try {
+      const client = clientFor(instance);
+      await client.get("/profile");
+      return { configured: true, connected: true, instanceName: instance.name };
+    } catch (err) {
+      const message = err instanceof CloudronError ? err.message : String(err);
+      return { configured: true, connected: false, instanceName: instance.name, error: message };
+    }
+  }
+
+  async requestInstallFor(instanceId: number, params: InstallAppParams) {
+    const instance = await getInstanceById(instanceId);
+    if (!instance) throw new CloudronError("Instance not found", 404, "NOT_FOUND");
+    const client = clientFor(instance);
+    const result = await installApp(client, params);
+    const taskId = result.taskId;
+    const record: InstallRecord = {
+      taskId, appStoreId: params.appStoreId,
+      startedAt: new Date().toISOString(),
+      state: "pending", percent: 0,
+    };
+    installRegistry.set(taskId, record);
+    this._startPolling(instance, taskId, 0);
+    return { taskId, appId: result.id };
+  }
+
+  async requestUninstallFor(instanceId: number, appId: string) {
+    const instance = await getInstanceById(instanceId);
+    if (!instance) throw new CloudronError("Instance not found", 404, "NOT_FOUND");
+    return uninstallApp(clientFor(instance), appId);
+  }
+  async requestRestartFor(instanceId: number, appId: string) {
+    const instance = await getInstanceById(instanceId);
+    if (!instance) throw new CloudronError("Instance not found", 404, "NOT_FOUND");
+    return restartApp(clientFor(instance), appId);
+  }
+  async requestStopFor(instanceId: number, appId: string) {
+    const instance = await getInstanceById(instanceId);
+    if (!instance) throw new CloudronError("Instance not found", 404, "NOT_FOUND");
+    return stopApp(clientFor(instance), appId);
+  }
+  async requestStartFor(instanceId: number, appId: string) {
+    const instance = await getInstanceById(instanceId);
+    if (!instance) throw new CloudronError("Instance not found", 404, "NOT_FOUND");
+    return startApp(clientFor(instance), appId);
+  }
+  async requestUpdateFor(instanceId: number, appId: string) {
+    const instance = await getInstanceById(instanceId);
+    if (!instance) throw new CloudronError("Instance not found", 404, "NOT_FOUND");
+    return updateApp(clientFor(instance), appId);
+  }
+  async getTaskFor(instanceId: number, taskId: string) {
+    const instance = await getInstanceById(instanceId);
+    if (!instance) throw new CloudronError("Instance not found", 404, "NOT_FOUND");
+    return getTask(clientFor(instance), taskId);
   }
 
   async requestInstall(params: InstallAppParams) {

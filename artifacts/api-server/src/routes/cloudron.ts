@@ -156,6 +156,99 @@ router.delete("/instances/:id", requireAdmin, async (req: Request, res: Response
   }
 });
 
+// ─── Instance-scoped Cloudron API Proxy (admin) ───────────────────────────────
+
+function parseInstanceId(req: Request, res: Response): number | null {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid instance ID" });
+    return null;
+  }
+  return id;
+}
+
+router.get("/instances/:id/test", requireAdmin, async (req: Request, res: Response) => {
+  const id = parseInstanceId(req, res); if (id == null) return;
+  try { res.json(await cloudronService.testConnectionFor(id)); } catch (err) { handleCloudronError(err, res); }
+});
+
+router.get("/instances/:id/apps", requireAdmin, async (req: Request, res: Response) => {
+  const id = parseInstanceId(req, res); if (id == null) return;
+  try { res.json(await cloudronService.getAppsForInstance(id)); } catch (err) { handleCloudronError(err, res); }
+});
+
+router.post("/instances/:id/apps/install", requireAdmin, async (req: Request, res: Response) => {
+  const id = parseInstanceId(req, res); if (id == null) return;
+  const { appStoreId, location, portBindings, accessRestriction } = req.body as {
+    appStoreId?: string;
+    location?: string;
+    portBindings?: Record<string, unknown>;
+    accessRestriction?: { users: string[]; groups: string[] } | null;
+  };
+  if (!appStoreId) { res.status(400).json({ error: "appStoreId required" }); return; }
+  try {
+    const result = await cloudronService.requestInstallFor(id, { appStoreId, location, portBindings, accessRestriction });
+    logAdminCloudronAction({ userId: (req as any).session?.userId ?? null, instanceId: id, action: "cloudron_install", appId: result.appId });
+    res.json(result);
+  } catch (err) { handleCloudronError(err, res); }
+});
+
+router.post("/instances/:id/apps/:appId/uninstall", requireAdmin, async (req: Request, res: Response) => {
+  const id = parseInstanceId(req, res); if (id == null) return;
+  const appId = String(req.params.appId);
+  try {
+    const result = await cloudronService.requestUninstallFor(id, appId);
+    logAdminCloudronAction({ userId: (req as any).session?.userId ?? null, instanceId: id, action: "cloudron_uninstall", appId });
+    res.json(result);
+  } catch (err) { handleCloudronError(err, res); }
+});
+
+router.post("/instances/:id/apps/:appId/restart", requireAdmin, async (req: Request, res: Response) => {
+  const id = parseInstanceId(req, res); if (id == null) return;
+  const appId = String(req.params.appId);
+  try {
+    const result = await cloudronService.requestRestartFor(id, appId);
+    logAdminCloudronAction({ userId: (req as any).session?.userId ?? null, instanceId: id, action: "cloudron_restart", appId });
+    res.json(result);
+  } catch (err) { handleCloudronError(err, res); }
+});
+
+router.post("/instances/:id/apps/:appId/stop", requireAdmin, async (req: Request, res: Response) => {
+  const id = parseInstanceId(req, res); if (id == null) return;
+  const appId = String(req.params.appId);
+  try {
+    const result = await cloudronService.requestStopFor(id, appId);
+    logAdminCloudronAction({ userId: (req as any).session?.userId ?? null, instanceId: id, action: "cloudron_stop", appId });
+    res.json(result);
+  } catch (err) { handleCloudronError(err, res); }
+});
+
+router.post("/instances/:id/apps/:appId/start", requireAdmin, async (req: Request, res: Response) => {
+  const id = parseInstanceId(req, res); if (id == null) return;
+  const appId = String(req.params.appId);
+  try {
+    const result = await cloudronService.requestStartFor(id, appId);
+    logAdminCloudronAction({ userId: (req as any).session?.userId ?? null, instanceId: id, action: "cloudron_start", appId });
+    res.json(result);
+  } catch (err) { handleCloudronError(err, res); }
+});
+
+router.post("/instances/:id/apps/:appId/update", requireAdmin, async (req: Request, res: Response) => {
+  const id = parseInstanceId(req, res); if (id == null) return;
+  const appId = String(req.params.appId);
+  try {
+    const result = await cloudronService.requestUpdateFor(id, appId);
+    logAdminCloudronAction({ userId: (req as any).session?.userId ?? null, instanceId: id, action: "cloudron_update", appId });
+    res.json(result);
+  } catch (err) { handleCloudronError(err, res); }
+});
+
+router.get("/instances/:id/tasks/:taskId", requireAdmin, async (req: Request, res: Response) => {
+  const id = parseInstanceId(req, res); if (id == null) return;
+  const taskId = String(req.params.taskId);
+  try { res.json(await cloudronService.getTaskFor(id, taskId)); } catch (err) { handleCloudronError(err, res); }
+});
+
 // ─── Cloudron API Proxy ───────────────────────────────────────────────────────
 
 /**
@@ -355,7 +448,7 @@ function buildActivityMessage(action: string, entityId: string | null): string {
 // ─── Admin action logging ─────────────────────────────────────────────────────
 
 interface LogAdminActionOptions {
-  userId: number;
+  userId: number | null;
   instanceId: number;
   action: string;
   appId?: string;
@@ -364,6 +457,7 @@ interface LogAdminActionOptions {
 
 function logAdminCloudronAction(opts: LogAdminActionOptions): void {
   const { userId, instanceId, action, appId, details } = opts;
+  if (userId == null) return;
   const entityId = appId ?? String(instanceId);
   const message = buildActivityMessage(action, appId ?? null);
   db.insert(auditLogsTable)
