@@ -1120,15 +1120,27 @@ function AppStoreBrowser({ onInstall, onViewMyApps }: { onInstall: (appStoreId: 
     new Set(allApps.flatMap((app) => app.manifest?.tags ?? []))
   ).sort((a, b) => a.localeCompare(b));
 
-  const filtered = allApps.filter((app) => {
-    const appTags = app.manifest?.tags ?? [];
-    if (selectedTag && !appTags.includes(selectedTag)) return false;
+  const searchFiltered = allApps.filter((app) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
+    const appTags = app.manifest?.tags ?? [];
     const title = (app.manifest?.title ?? app.id).toLowerCase();
     const tagline = (app.manifest?.tagline ?? "").toLowerCase();
     const tags = appTags.join(" ").toLowerCase();
     return title.includes(q) || tagline.includes(q) || app.id.toLowerCase().includes(q) || tags.includes(q);
+  });
+
+  const tagCounts = new Map<string, number>();
+  for (const app of searchFiltered) {
+    for (const tag of (app.manifest?.tags ?? [])) {
+      tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+    }
+  }
+
+  const filtered = searchFiltered.filter((app) => {
+    const appTags = app.manifest?.tags ?? [];
+    if (selectedTag && !appTags.includes(selectedTag)) return false;
+    return true;
   });
 
   const isFiltered = search.trim() !== "" || selectedTag !== null;
@@ -1202,13 +1214,14 @@ function AppStoreBrowser({ onInstall, onViewMyApps }: { onInstall: (appStoreId: 
                 <button
                   type="button"
                   onClick={() => setSelectedTag(null)}
-                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors ${
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors ${
                     selectedTag === null
                       ? "bg-primary text-primary-foreground border-primary"
                       : "bg-background text-muted-foreground border-border hover:bg-muted"
                   }`}
                 >
                   {t("admin.cloudron.appstore.filterAll")}
+                  <span className="opacity-70">({searchFiltered.length})</span>
                 </button>
                 {visibleTags.map((tag) => (
                   <button
@@ -1222,6 +1235,7 @@ function AppStoreBrowser({ onInstall, onViewMyApps }: { onInstall: (appStoreId: 
                     }`}
                   >
                     {tag}
+                    <span className="opacity-70">({tagCounts.get(tag) ?? 0})</span>
                     {selectedTag === tag && <X className="h-3 w-3" />}
                   </button>
                 ))}
