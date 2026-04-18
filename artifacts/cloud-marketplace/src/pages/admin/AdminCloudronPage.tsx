@@ -1608,7 +1608,7 @@ export function AdminCloudronPage() {
     onSuccess: () => {
       toast.success(t("admin.cloudron.app.toast.syncOk"));
       void refetch();
-      void queryClient.invalidateQueries({ queryKey: ["cloudron-apps-metadata-bulk", instanceId ?? "primary"] });
+      void qc.invalidateQueries({ queryKey: ["cloudron-apps-metadata-bulk", instanceId ?? "primary"] });
     },
     onError: (err: any) => {
       toast.error(err?.message ?? t("admin.cloudron.app.toast.syncFailed"));
