@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { adminFetch } from "@/lib/adminFetch";
 import { AlertTriangle, X } from "lucide-react";
@@ -13,7 +13,9 @@ interface CloudronHealthStatus {
 }
 
 export function CloudronStatusBanner() {
-  const [dismissed, setDismissed] = useState(false);
+  // Track the outage timestamp for which the admin clicked dismiss.
+  // If lastUnreachableAt changes (new outage after recovery), the banner re-appears.
+  const [dismissedOutageAt, setDismissedOutageAt] = useState<string | null>(null);
 
   const { data } = useQuery<CloudronHealthStatus>({
     queryKey: ["admin", "cloudron-health"],
@@ -22,7 +24,22 @@ export function CloudronStatusBanner() {
     staleTime: 30_000,
   });
 
-  if (dismissed || !data || data.state !== "unreachable") return null;
+  // When the connection recovers, clear the dismissed state so the banner can
+  // re-appear automatically if a future outage occurs.
+  useEffect(() => {
+    if (data?.state === "healthy") {
+      setDismissedOutageAt(null);
+    }
+  }, [data?.state]);
+
+  if (!data || data.state !== "unreachable") return null;
+
+  // Suppress banner only if the admin already dismissed this exact outage event.
+  const isDismissed =
+    dismissedOutageAt !== null &&
+    dismissedOutageAt === data.lastUnreachableAt;
+
+  if (isDismissed) return null;
 
   const instanceLabel = data.instanceName ?? "Cloudron";
   const checkedAt = data.lastCheckedAt
@@ -48,7 +65,7 @@ export function CloudronStatusBanner() {
         </p>
       </div>
       <button
-        onClick={() => setDismissed(true)}
+        onClick={() => setDismissedOutageAt(data.lastUnreachableAt)}
         className="shrink-0 rounded-md p-1 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
         aria-label="Dismiss alert"
       >
