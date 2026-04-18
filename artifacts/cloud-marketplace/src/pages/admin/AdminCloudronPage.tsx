@@ -1482,8 +1482,10 @@ export function AdminCloudronPage() {
   const { t } = useI18n();
   const qc = useQueryClient();
   const [scopedRouteMatch, scopedRouteParams] = useRoute<{ id: string }>("/admin/cloudron/instances/:id/apps");
-  const instanceId =
-    scopedRouteMatch && scopedRouteParams?.id ? parseInt(scopedRouteParams.id, 10) || null : null;
+  const parsedScopedId = scopedRouteMatch && scopedRouteParams?.id ? parseInt(scopedRouteParams.id, 10) : NaN;
+  const scopedIdInvalid = scopedRouteMatch && (!Number.isFinite(parsedScopedId) || parsedScopedId <= 0);
+  const instanceId: number | null =
+    scopedRouteMatch && Number.isFinite(parsedScopedId) && parsedScopedId > 0 ? parsedScopedId : null;
   const [installOpen, setInstallOpen] = useState(false);
   const [installAppStoreId, setInstallAppStoreId] = useState<string | undefined>(undefined);
   const [addInstanceOpen, setAddInstanceOpen] = useState(false);
@@ -1509,7 +1511,7 @@ export function AdminCloudronPage() {
   } = useQuery<CloudronAppsResult>({
     queryKey: ["cloudron-apps", instanceId ?? "primary"],
     queryFn: () => fetchApps(instanceId),
-    enabled: hasInstances,
+    enabled: hasInstances && !scopedIdInvalid,
     retry: false,
   });
 
@@ -1544,6 +1546,16 @@ export function AdminCloudronPage() {
 
   return (
     <div className="space-y-6">
+      {scopedIdInvalid && (
+        <Alert variant="destructive">
+          <AlertTitle>{t("admin.cloudron.instances.notFound") as string}</AlertTitle>
+          <AlertDescription>
+            <Link href="/admin/cloudron/instances" className="underline">
+              {t("admin.cloudron.instances.backToList")}
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
       {scopedInstance && (
         <div className="flex items-center gap-2 text-sm">
           <Link href="/admin/cloudron/instances" className="text-primary hover:underline">
