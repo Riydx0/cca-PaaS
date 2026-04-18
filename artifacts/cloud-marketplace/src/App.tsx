@@ -50,6 +50,11 @@ import { AdminCloudronPage } from "@/pages/admin/AdminCloudronPage";
 import { AdminCloudronInstancesPage } from "@/pages/admin/AdminCloudronInstancesPage";
 import { AdminCloudronDashboardPage } from "@/pages/admin/AdminCloudronDashboardPage";
 import { AdminCloudronInstanceDetailsPage } from "@/pages/admin/AdminCloudronInstanceDetailsPage";
+import {
+  AdminCloudronInstanceShell,
+  AdminCloudronInstanceTabPlaceholder,
+  type CloudronInstanceTab,
+} from "@/pages/admin/AdminCloudronInstanceShell";
 import { AdminCloudronLicensesPage } from "@/pages/admin/AdminCloudronLicensesPage";
 import { AdminCloudronSyncLogsPage } from "@/pages/admin/AdminCloudronSyncLogsPage";
 
@@ -119,6 +124,34 @@ function ServiceDetailsRedirect() {
   }, [rawId, navigate]);
 
   return null;
+}
+
+function CloudronInstanceAppsRoute() {
+  const [, params] = useRoute<{ id: string }>("/admin/cloudron/instances/:id/apps");
+  const id = params ? parseInt(params.id, 10) : NaN;
+  if (isNaN(id)) return <p className="text-sm text-destructive">Invalid instance ID</p>;
+  return (
+    <AdminCloudronInstanceShell instanceId={id} activeTab="apps">
+      <AdminCloudronPage />
+    </AdminCloudronInstanceShell>
+  );
+}
+
+function makeCloudronInstanceTab(
+  tab: CloudronInstanceTab,
+  titleKey: string,
+  hintKey: string,
+) {
+  return function CloudronInstanceTabRoute() {
+    const [, params] = useRoute<{ id: string }>(`/admin/cloudron/instances/:id/${tab}`);
+    const id = params ? parseInt(params.id, 10) : NaN;
+    if (isNaN(id)) return <p className="text-sm text-destructive">Invalid instance ID</p>;
+    return (
+      <AdminCloudronInstanceShell instanceId={id} activeTab={tab}>
+        <AdminCloudronInstanceTabPlaceholder titleKey={titleKey} hintKey={hintKey} />
+      </AdminCloudronInstanceShell>
+    );
+  };
 }
 
 function HomeRedirect() {
@@ -277,7 +310,25 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
         <AdminRoute component={AdminCloudronInstancesPage} />
       </Route>
       <Route path="/admin/cloudron/instances/:id/apps">
-        <AdminRoute component={AdminCloudronPage} />
+        <AdminRoute component={CloudronInstanceAppsRoute} />
+      </Route>
+      <Route path="/admin/cloudron/instances/:id/appstore">
+        <AdminRoute component={makeCloudronInstanceTab("appstore", "admin.cloudron.shell.placeholder.appstore.title", "admin.cloudron.shell.placeholder.appstore.hint")} />
+      </Route>
+      <Route path="/admin/cloudron/instances/:id/users">
+        <AdminRoute component={makeCloudronInstanceTab("users", "admin.cloudron.shell.placeholder.users.title", "admin.cloudron.shell.placeholder.users.hint")} />
+      </Route>
+      <Route path="/admin/cloudron/instances/:id/groups">
+        <AdminRoute component={makeCloudronInstanceTab("groups", "admin.cloudron.shell.placeholder.groups.title", "admin.cloudron.shell.placeholder.groups.hint")} />
+      </Route>
+      <Route path="/admin/cloudron/instances/:id/mailboxes">
+        <AdminRoute component={makeCloudronInstanceTab("mailboxes", "admin.cloudron.shell.placeholder.mailboxes.title", "admin.cloudron.shell.placeholder.mailboxes.hint")} />
+      </Route>
+      <Route path="/admin/cloudron/instances/:id/activity">
+        <AdminRoute component={makeCloudronInstanceTab("activity", "admin.cloudron.shell.placeholder.activity.title", "admin.cloudron.shell.placeholder.activity.hint")} />
+      </Route>
+      <Route path="/admin/cloudron/instances/:id/settings">
+        <AdminRoute component={makeCloudronInstanceTab("settings", "admin.cloudron.shell.placeholder.settings.title", "admin.cloudron.shell.placeholder.settings.hint")} />
       </Route>
       <Route path="/admin/cloudron/instances/:id">
         <AdminRoute component={AdminCloudronInstanceDetailsPage} />
