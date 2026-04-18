@@ -144,11 +144,11 @@ const emptyForm: FormState = {
   storageGb: "",
   storageType: "SSD",
   bandwidthTb: "",
-  config: {} as Record<string, any>,
+  config: {},
 };
 
 function summarySpecs(p: Product, t: (k: string) => string): string {
-  const c = (p.config ?? {}) as Record<string, any>;
+  const c = (p.config ?? {}) as Record<string, unknown>;
   switch (p.productType) {
     case "server":
       return `${p.cpu || c.cpu || 0}vCPU • ${p.ramGb || c.ramGb || 0}GB • ${p.storageGb || c.storageGb || 0}GB ${p.storageType || c.storageType || ""}`;
@@ -304,7 +304,7 @@ export function AdminServices() {
   }, [services, filterType]);
 
   const saveService = useMutation({
-    mutationFn: (data: any) =>
+    mutationFn: (data: Record<string, unknown>) =>
       editTarget
         ? adminFetch(`/api/admin/services/${editTarget.id}`, { method: "PATCH", body: JSON.stringify(data) })
         : adminFetch("/api/admin/services", { method: "POST", body: JSON.stringify(data) }),
@@ -367,15 +367,15 @@ export function AdminServices() {
       storageGb: String(s.storageGb ?? ""),
       storageType: s.storageType ?? "SSD",
       bandwidthTb: String(s.bandwidthTb ?? ""),
-      config: (s.config ?? {}) as Record<string, any>,
+      config: (s.config ?? {}) as Record<string, unknown>,
     });
     setDialogOpen(true);
   };
 
   const handleSubmit = () => {
-    const productType = form.productType as ProductType;
-    const num = (v: any) => (v === "" || v == null ? 0 : Number(v));
-    const data: any = {
+    const productType = form.productType;
+    const num = (v: unknown) => (v === "" || v == null ? 0 : Number(v));
+    const data: Record<string, unknown> = {
       serviceType: productType,
       productType,
       provider: form.provider,
