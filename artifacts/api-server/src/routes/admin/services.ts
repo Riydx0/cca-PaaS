@@ -8,7 +8,14 @@ import { AuditService } from "../../services/audit_service";
 const router = Router();
 
 function mapService(s: any) {
-  return { ...s, bandwidthTb: Number(s.bandwidthTb), priceMonthly: Number(s.priceMonthly) };
+  return {
+    ...s,
+    bandwidthTb: Number(s.bandwidthTb ?? 0),
+    priceMonthly: Number(s.priceMonthly ?? 0),
+    priceYearly: s.priceYearly != null ? Number(s.priceYearly) : 0,
+    setupFee: s.setupFee != null ? Number(s.setupFee) : 0,
+    config: s.config ?? {},
+  };
 }
 
 router.get("/", requireAdmin, async (_req, res) => {
