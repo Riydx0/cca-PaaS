@@ -280,8 +280,8 @@ export function AdminCloudronInstancesPage() {
 
       <Dialog open={!!chooserTarget} onOpenChange={(v) => !v && setChooserTarget(null)}>
         <DialogContent className="sm:max-w-lg p-0 overflow-hidden">
-          <DialogHeader className="px-6 pt-6 pb-4 bg-gradient-to-br from-primary/5 via-background to-background border-b">
-            <DialogTitle className="text-lg">
+          <DialogHeader className="px-6 pt-6 pb-4 bg-gradient-to-br from-primary/5 via-background to-background border-b text-start sm:text-start">
+            <DialogTitle className="text-lg text-start">
               {t("admin.cloudron.instances.chooser.title")}
             </DialogTitle>
             <DialogDescription asChild>
