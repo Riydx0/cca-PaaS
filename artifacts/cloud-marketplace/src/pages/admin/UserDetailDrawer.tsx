@@ -1075,6 +1075,7 @@ function SubscriptionTab({ userId }: { userId: number }) {
               <SelectContent>
                 <SelectItem value="active">{t("admin.user.subscription.status.active")}</SelectItem>
                 <SelectItem value="trial">{t("admin.user.subscription.status.trial")}</SelectItem>
+                <SelectItem value="suspended">{t("admin.user.subscription.status.suspended")}</SelectItem>
                 <SelectItem value="expired">{t("admin.user.subscription.status.expired")}</SelectItem>
                 <SelectItem value="cancelled">{t("admin.user.subscription.status.cancelled")}</SelectItem>
               </SelectContent>

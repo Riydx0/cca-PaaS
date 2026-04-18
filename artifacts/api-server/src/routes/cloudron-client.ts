@@ -110,6 +110,31 @@ async function getActiveSubscription(userId: number): Promise<ActivePlanInfo | n
   return row ?? null;
 }
 
+/**
+ * Like getActiveSubscription but also includes 'suspended' subscriptions.
+ * Used for display purposes only (plan card). Does NOT grant feature access.
+ */
+async function getSubscriptionForDisplay(userId: number): Promise<ActivePlanInfo | null> {
+  const [row] = await db
+    .select({
+      subscriptionId: userSubscriptionsTable.id,
+      planId: subscriptionPlansTable.id,
+      planName: subscriptionPlansTable.name,
+      status: userSubscriptionsTable.status,
+    })
+    .from(userSubscriptionsTable)
+    .innerJoin(subscriptionPlansTable, eq(userSubscriptionsTable.planId, subscriptionPlansTable.id))
+    .where(
+      and(
+        eq(userSubscriptionsTable.userId, userId),
+        sql`${userSubscriptionsTable.status} IN ('active', 'trial', 'suspended')`
+      )
+    )
+    .orderBy(desc(userSubscriptionsTable.startedAt), desc(userSubscriptionsTable.id))
+    .limit(1);
+  return row ?? null;
+}
+
 async function getPlanFeature(
   planId: number,
   featureKey: string
@@ -660,7 +685,9 @@ router.get("/tasks/:id", requireAuth, async (req: Request, res: Response) => {
  */
 router.get("/my-subscription", requireAuth, async (req: Request, res: Response) => {
   await withPermission(req, res, "view_cloudron", async (access, userId) => {
-    const activeSub = await getActiveSubscription(userId);
+    // Use display query (active + trial + suspended) so clients can see their plan status
+    // even when suspended. Enforcement (feature access) still requires active/trial only.
+    const activeSub = await getSubscriptionForDisplay(userId);
 
     if (!activeSub) {
       res.json({ subscription: null });

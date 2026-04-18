@@ -199,6 +199,15 @@ router.post("/verify", requireAuth, async (req: Request, res) => {
   }
 });
 
+/**
+ * Moyasar webhook handler.
+ *
+ * Security: Moyasar does not provide HMAC request signing (unlike Stripe).
+ * Authenticity is verified by re-fetching the payment from Moyasar's API using
+ * the server-side secret key. Only if the re-fetched status is "paid" do we
+ * activate the subscription — the webhook payload itself is never trusted.
+ * This is the recommended security model for Moyasar integrations.
+ */
 router.post("/webhook", async (req, res) => {
   try {
     const { id: moyasarPaymentId, status } = req.body ?? {};
@@ -207,6 +216,7 @@ router.post("/webhook", async (req, res) => {
       return;
     }
 
+    // Re-fetch from Moyasar's API — this is the authenticity check.
     const moyasarPayment = await MoyasarService.getPayment(moyasarPaymentId);
 
     const [record] = await db
