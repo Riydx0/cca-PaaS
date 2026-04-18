@@ -93,6 +93,92 @@ export class CloudronClient {
   delete<T>(path: string): Promise<T> {
     return this.request<T>("DELETE", path);
   }
+
+  // ---------- Users ----------
+  listUsers(): Promise<{ users: CloudronApiUser[] }> {
+    return this.get<{ users: CloudronApiUser[] }>("/users");
+  }
+  getUser(userId: string): Promise<CloudronApiUser> {
+    return this.get<CloudronApiUser>(`/users/${encodeURIComponent(userId)}`);
+  }
+  createUser(payload: {
+    username?: string;
+    email: string;
+    fallbackEmail?: string;
+    displayName?: string;
+    password?: string;
+    role?: string;
+  }): Promise<{ id: string } | CloudronApiUser> {
+    return this.post<{ id: string } | CloudronApiUser>("/users", payload);
+  }
+  updateUser(userId: string, payload: Partial<{
+    email: string;
+    fallbackEmail: string;
+    displayName: string;
+    role: string;
+    active: boolean;
+  }>): Promise<unknown> {
+    return this.post<unknown>(`/users/${encodeURIComponent(userId)}`, payload);
+  }
+  deleteUser(userId: string): Promise<unknown> {
+    return this.delete<unknown>(`/users/${encodeURIComponent(userId)}`);
+  }
+  setUserPassword(userId: string, password: string): Promise<unknown> {
+    return this.post<unknown>(
+      `/users/${encodeURIComponent(userId)}/password`,
+      { password },
+    );
+  }
+  setUserGroups(userId: string, groupIds: string[]): Promise<unknown> {
+    return this.post<unknown>(
+      `/users/${encodeURIComponent(userId)}/groups`,
+      { groupIds },
+    );
+  }
+
+  // ---------- Groups ----------
+  listGroups(): Promise<{ groups: CloudronApiGroup[] }> {
+    return this.get<{ groups: CloudronApiGroup[] }>("/groups");
+  }
+  getGroup(groupId: string): Promise<CloudronApiGroup> {
+    return this.get<CloudronApiGroup>(`/groups/${encodeURIComponent(groupId)}`);
+  }
+  createGroup(name: string): Promise<{ id: string } | CloudronApiGroup> {
+    return this.post<{ id: string } | CloudronApiGroup>("/groups", { name });
+  }
+  updateGroup(groupId: string, payload: { name?: string }): Promise<unknown> {
+    return this.post<unknown>(`/groups/${encodeURIComponent(groupId)}`, payload);
+  }
+  deleteGroup(groupId: string): Promise<unknown> {
+    return this.delete<unknown>(`/groups/${encodeURIComponent(groupId)}`);
+  }
+  setGroupMembers(groupId: string, userIds: string[]): Promise<unknown> {
+    return this.post<unknown>(
+      `/groups/${encodeURIComponent(groupId)}/members`,
+      { userIds },
+    );
+  }
+}
+
+export interface CloudronApiUser {
+  id: string;
+  username?: string | null;
+  email?: string | null;
+  fallbackEmail?: string | null;
+  displayName?: string | null;
+  role?: string | null;
+  admin?: boolean;
+  active?: boolean;
+  groupIds?: string[];
+  createdAt?: string;
+  [k: string]: unknown;
+}
+
+export interface CloudronApiGroup {
+  id: string;
+  name: string;
+  userIds?: string[];
+  [k: string]: unknown;
 }
 
 /**

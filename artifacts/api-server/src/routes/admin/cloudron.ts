@@ -14,6 +14,24 @@ import { eq, desc, and, inArray, sql, count, countDistinct } from "drizzle-orm";
 import { computeFinancials } from "../../lib/cloudronFinancials";
 import { syncInstance } from "../../services/CloudronSyncService";
 import { getInstanceById } from "../../services/CloudronService";
+import {
+  syncUsers,
+  listUsersFromCache,
+  getUserDetail,
+  createUser as svcCreateUser,
+  updateUser as svcUpdateUser,
+  deleteUser as svcDeleteUser,
+  setUserPassword as svcSetUserPassword,
+  setUserMetadata as svcSetUserMetadata,
+  syncGroups,
+  listGroupsFromCache,
+  getGroupWithMembers,
+  createGroup as svcCreateGroup,
+  updateGroup as svcUpdateGroup,
+  deleteGroup as svcDeleteGroup,
+  setGroupMembers as svcSetGroupMembers,
+} from "../../services/CloudronUserGroupService";
+import { CloudronError } from "../../cloudron/client";
 
 const router = Router({ mergeParams: true });
 
@@ -710,6 +728,259 @@ router.post("/instances/:id/apps/:appId/sync", requireAdmin, async (req, res) =>
     console.error("[admin/cloudron] single-app sync error", err);
     res.status(500).json({ error: err?.message ?? "Failed to sync app" });
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cloudron USERS (Source of Truth = Cloudron, fail-closed)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function parseInstanceId(req: any, res: any): number | null {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid instance ID" }); return null; }
+  return id;
+}
+function asTriggeredBy(req: any): string {
+  return `manual:${req.session?.userId ?? "unknown"}`;
+}
+function handleCloudronError(res: any, err: any) {
+  if (err instanceof CloudronError) {
+    const status = err.status >= 400 && err.status < 600 ? err.status : 502;
+    res.status(status).json({ error: err.message, code: err.code ?? "CLOUDRON_ERROR" });
+    return;
+  }
+  console.error("[admin/cloudron] error", err);
+  res.status(500).json({ error: err?.message ?? "Internal error" });
+}
+
+// GET users (from cache)
+router.get("/instances/:id/users", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const users = await listUsersFromCache(id);
+    res.json({
+      users: users.map((u) => ({
+        ...u,
+        lastSeenAt: u.lastSeenAt.toISOString(),
+        createdAt: u.createdAt.toISOString(),
+      })),
+    });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+// POST manual sync
+router.post("/instances/:id/users/sync", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const result = await syncUsers(inst, asTriggeredBy(req));
+    if (!result.ok) { res.status(502).json({ error: result.message ?? "Sync failed" }); return; }
+    res.json(result);
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+// GET single
+router.get("/instances/:id/users/:userId", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  try {
+    const detail = await getUserDetail(id, String(req.params.userId));
+    if (!detail) { res.status(404).json({ error: "User not found in cache" }); return; }
+    res.json({
+      user: {
+        ...detail.cache,
+        lastSeenAt: detail.cache.lastSeenAt.toISOString(),
+        createdAt: detail.cache.createdAt.toISOString(),
+        updatedAt: detail.cache.updatedAt.toISOString(),
+      },
+      metadata: detail.metadata
+        ? {
+            ...detail.metadata,
+            createdAt: detail.metadata.createdAt.toISOString(),
+            updatedAt: detail.metadata.updatedAt.toISOString(),
+          }
+        : null,
+    });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+// POST create
+router.post("/instances/:id/users", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  const body = req.body ?? {};
+  if (!body.email || typeof body.email !== "string") {
+    res.status(400).json({ error: "email is required" }); return;
+  }
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const row = await svcCreateUser(inst, {
+      email: body.email,
+      username: body.username || undefined,
+      fallbackEmail: body.fallbackEmail || undefined,
+      displayName: body.displayName || undefined,
+      password: body.password || undefined,
+      role: body.role || undefined,
+    }, asTriggeredBy(req));
+    res.json({ user: { ...row, lastSeenAt: row.lastSeenAt.toISOString(), createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() } });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+// PATCH update
+router.patch("/instances/:id/users/:userId", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  const body = req.body ?? {};
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const row = await svcUpdateUser(inst, String(req.params.userId), {
+      ...(body.email !== undefined && { email: body.email }),
+      ...(body.fallbackEmail !== undefined && { fallbackEmail: body.fallbackEmail }),
+      ...(body.displayName !== undefined && { displayName: body.displayName }),
+      ...(body.role !== undefined && { role: body.role }),
+      ...(body.active !== undefined && { active: !!body.active }),
+    }, asTriggeredBy(req));
+    res.json({ user: { ...row, lastSeenAt: row.lastSeenAt.toISOString(), createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() } });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+// DELETE
+router.delete("/instances/:id/users/:userId", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    await svcDeleteUser(inst, String(req.params.userId), asTriggeredBy(req));
+    res.json({ ok: true });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+// POST reset password
+router.post("/instances/:id/users/:userId/reset-password", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  const body = req.body ?? {};
+  if (typeof body.password !== "string" || body.password.length < 8) {
+    res.status(400).json({ error: "password (>=8 chars) is required" }); return;
+  }
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    await svcSetUserPassword(inst, String(req.params.userId), body.password, asTriggeredBy(req));
+    res.json({ ok: true });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+// PATCH local metadata
+router.patch("/instances/:id/users/:userId/metadata", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  const body = req.body ?? {};
+  try {
+    const detail = await getUserDetail(id, String(req.params.userId));
+    if (!detail) { res.status(404).json({ error: "User not found in cache" }); return; }
+    await svcSetUserMetadata(detail.cache.id, {
+      internalNotes: typeof body.internalNotes === "string" ? body.internalNotes : null,
+      tagsJson: body.tagsJson ?? null,
+      customerId: typeof body.customerId === "number" ? body.customerId : null,
+    });
+    res.json({ ok: true });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cloudron GROUPS (Source of Truth = Cloudron, fail-closed)
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get("/instances/:id/groups", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const groups = await listGroupsFromCache(id);
+    res.json({
+      groups: groups.map((g) => ({ ...g, lastSeenAt: g.lastSeenAt.toISOString() })),
+    });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+router.post("/instances/:id/groups/sync", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const result = await syncGroups(inst, asTriggeredBy(req));
+    if (!result.ok) { res.status(502).json({ error: result.message ?? "Sync failed" }); return; }
+    res.json(result);
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+router.get("/instances/:id/groups/:groupId", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  try {
+    const detail = await getGroupWithMembers(id, String(req.params.groupId));
+    if (!detail) { res.status(404).json({ error: "Group not found in cache" }); return; }
+    res.json({
+      group: {
+        ...detail.group,
+        lastSeenAt: detail.group.lastSeenAt.toISOString(),
+        createdAt: detail.group.createdAt.toISOString(),
+        updatedAt: detail.group.updatedAt.toISOString(),
+      },
+      members: detail.members,
+    });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+router.post("/instances/:id/groups", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  const body = req.body ?? {};
+  if (!body.name || typeof body.name !== "string") {
+    res.status(400).json({ error: "name is required" }); return;
+  }
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const row = await svcCreateGroup(inst, body.name.trim(), asTriggeredBy(req));
+    res.json({ group: { ...row, lastSeenAt: row.lastSeenAt.toISOString(), createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() } });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+router.patch("/instances/:id/groups/:groupId", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  const body = req.body ?? {};
+  if (!body.name || typeof body.name !== "string") {
+    res.status(400).json({ error: "name is required" }); return;
+  }
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const row = await svcUpdateGroup(inst, String(req.params.groupId), body.name.trim(), asTriggeredBy(req));
+    res.json({ group: { ...row, lastSeenAt: row.lastSeenAt.toISOString(), createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() } });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+router.delete("/instances/:id/groups/:groupId", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    await svcDeleteGroup(inst, String(req.params.groupId), asTriggeredBy(req));
+    res.json({ ok: true });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+router.put("/instances/:id/groups/:groupId/members", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  const body = req.body ?? {};
+  if (!Array.isArray(body.userIds)) {
+    res.status(400).json({ error: "userIds (string[]) is required" }); return;
+  }
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    await svcSetGroupMembers(inst, String(req.params.groupId), body.userIds.map(String), asTriggeredBy(req));
+    res.json({ ok: true });
+  } catch (err) { handleCloudronError(res, err); }
 });
 
 export default router;
