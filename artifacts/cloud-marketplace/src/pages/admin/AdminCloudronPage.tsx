@@ -1507,8 +1507,9 @@ export function AdminCloudronPage() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="h-7 px-2 text-xs"
-                                disabled={isBusy}
+                                className={`h-7 px-2 text-xs${app.runState === "stopped" ? " opacity-40 cursor-not-allowed" : ""}`}
+                                disabled={isBusy || app.runState === "stopped"}
+                                title={app.runState === "stopped" ? t("admin.cloudron.restart.disabledStopped") : undefined}
                                 onClick={() => setConfirmAction({ type: "restart", app })}
                               >
                                 <RotateCcw className="h-3.5 w-3.5 me-1" />
