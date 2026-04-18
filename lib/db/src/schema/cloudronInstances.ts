@@ -10,6 +10,8 @@ export const cloudronInstancesTable = pgTable("cloudron_instances", {
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   lastSyncAt: timestamp("last_sync_at"),
+  healthStatus: text("health_status").notNull().default("unknown"),
+  lastCheckedAt: timestamp("last_checked_at"),
 });
 
 export const insertCloudronInstanceSchema = createInsertSchema(cloudronInstancesTable).omit({

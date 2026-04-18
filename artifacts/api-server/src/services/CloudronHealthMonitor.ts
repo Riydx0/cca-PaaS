@@ -10,7 +10,8 @@
 
 import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db/schema";
+import { usersTable, cloudronInstancesTable } from "@workspace/db/schema";
+import { createCloudronClient } from "../cloudron/client";
 import { cloudronService } from "./CloudronService";
 import { EmailService } from "./email_service";
 import { logger } from "../lib/logger";
@@ -109,6 +110,39 @@ class CloudronHealthMonitor {
     if (this.state === "healthy") {
       this.lastUnreachableAt = null;
     }
+
+    // Persist per-instance health for the admin dashboard. Best-effort —
+    // errors here must not affect the in-memory primary status above.
+    try {
+      await this.persistAllInstancesHealth();
+    } catch (err) {
+      logger.warn({ err }, "[CloudronHealthMonitor] Failed to persist per-instance health");
+    }
+  }
+
+  /** Ping every active Cloudron instance and write its health to the DB. */
+  private async persistAllInstancesHealth(): Promise<void> {
+    const instances = await db
+      .select()
+      .from(cloudronInstancesTable)
+      .where(eq(cloudronInstancesTable.isActive, true));
+
+    await Promise.all(
+      instances.map(async (instance) => {
+        let healthStatus: "online" | "offline" = "offline";
+        try {
+          const client = createCloudronClient(instance.baseUrl, instance.apiToken);
+          await client.get("/profile");
+          healthStatus = "online";
+        } catch {
+          healthStatus = "offline";
+        }
+        await db
+          .update(cloudronInstancesTable)
+          .set({ healthStatus, lastCheckedAt: new Date() })
+          .where(eq(cloudronInstancesTable.id, instance.id));
+      })
+    );
   }
 
   private async maybeSendAlert(): Promise<void> {

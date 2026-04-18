@@ -380,10 +380,17 @@ function InstallModal({
   useEffect(() => {
     if (open) {
       setAppStoreId(initialApp?.id ?? initialAppStoreId ?? "");
-      setLocation("");
+      // Auto-suggest a location from the app's title (or App Store ID) so
+      // the user only has to confirm/edit. Falls back to empty when no
+      // sensible suggestion is available.
+      const rawSuggestion =
+        initialApp?.manifest?.title ??
+        initialApp?.id?.split(".")[1] ??
+        "";
+      setLocation(sanitizeLocation(rawSuggestion));
       setLocationTouched(false);
     }
-  }, [open, initialAppStoreId, initialApp?.id]);
+  }, [open, initialAppStoreId, initialApp?.id, initialApp?.manifest?.title]);
 
   const cleanLocation = location;
   const previewFqdn = installDomain
