@@ -593,11 +593,13 @@ function AppActionDialog({
   permissions,
   onClose,
   onTaskStarted,
+  onDone,
 }: {
   action: ConfirmAction | null;
   permissions: string[];
   onClose: () => void;
   onTaskStarted: (task: ActiveTask) => void;
+  onDone: () => void;
 }) {
   const { t } = useI18n();
 
@@ -611,6 +613,9 @@ function AppActionDialog({
         onClose();
       } else if (data.error) {
         toast.error(data.error);
+      } else {
+        onClose();
+        onDone();
       }
     },
     onError: () => toast.error(t("cloudron.client.apps.action.error")),
@@ -820,6 +825,10 @@ function MyAppsTab({
         permissions={permissions}
         onClose={() => setConfirmAction(null)}
         onTaskStarted={(task) => { onTaskStarted(task); setConfirmAction(null); }}
+        onDone={() => {
+          void qc.invalidateQueries({ queryKey: ["client-cloudron-apps"] });
+          void appsQuery.refetch();
+        }}
       />
     </div>
   );
