@@ -50,6 +50,7 @@ import { AdminCloudronPage } from "@/pages/admin/AdminCloudronPage";
 import { AdminCloudronInstancesPage } from "@/pages/admin/AdminCloudronInstancesPage";
 import { AdminCloudronDashboardPage } from "@/pages/admin/AdminCloudronDashboardPage";
 import { AdminCloudronInstanceDetailsPage } from "@/pages/admin/AdminCloudronInstanceDetailsPage";
+import { AdminCloudronAppDetailsPage } from "@/pages/admin/AdminCloudronAppDetailsPage";
 import {
   AdminCloudronInstanceShell,
   AdminCloudronInstanceTabPlaceholder,
@@ -311,6 +312,9 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
       </Route>
       <Route path="/admin/cloudron/instances/:id/apps">
         <AdminRoute component={CloudronInstanceAppsRoute} />
+      </Route>
+      <Route path="/admin/cloudron/instances/:id/apps/:appId">
+        <AdminRoute component={AdminCloudronAppDetailsPage} />
       </Route>
       <Route path="/admin/cloudron/instances/:id/appstore">
         <AdminRoute component={makeCloudronInstanceTab("appstore", "admin.cloudron.shell.placeholder.appstore.title", "admin.cloudron.shell.placeholder.appstore.hint")} />

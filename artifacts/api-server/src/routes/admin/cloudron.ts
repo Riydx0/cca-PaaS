@@ -7,6 +7,7 @@ import {
   cloudronInstancesTable,
   cloudronSyncLogsTable,
   cloudronAppsCacheTable,
+  cloudronAppMetadataTable,
   cloudronClientAccessTable,
 } from "@workspace/db/schema";
 import { eq, desc, and, inArray, sql, count, countDistinct } from "drizzle-orm";
@@ -404,6 +405,221 @@ router.get("/instances/:id/activity", requireAdmin, async (req, res) => {
   } catch (err) {
     console.error("[admin/cloudron] activity fetch error", err);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── App metadata (custom display, branding, site settings) ───────────────────
+
+interface AppMetadataPayload {
+  customDisplayName?: string | null;
+  customIconUrl?: string | null;
+  siteTitle?: string | null;
+  description?: string | null;
+  internalNotes?: string | null;
+  tagsJson?: string[] | null;
+  customerFacingLabel?: string | null;
+}
+
+function pickMetadataFields(body: unknown): AppMetadataPayload {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const norm = (v: unknown): string | null => {
+    if (v === null || v === undefined) return null;
+    const s = String(v).trim();
+    return s.length === 0 ? null : s;
+  };
+  const tags = b["tagsJson"];
+  let tagsOut: string[] | null = null;
+  if (Array.isArray(tags)) {
+    tagsOut = tags
+      .map((t) => (typeof t === "string" ? t.trim() : ""))
+      .filter((t) => t.length > 0);
+    if (tagsOut.length === 0) tagsOut = null;
+  }
+  return {
+    customDisplayName: norm(b["customDisplayName"]),
+    customIconUrl: norm(b["customIconUrl"]),
+    siteTitle: norm(b["siteTitle"]),
+    description: norm(b["description"]),
+    internalNotes: norm(b["internalNotes"]),
+    tagsJson: tagsOut,
+    customerFacingLabel: norm(b["customerFacingLabel"]),
+  };
+}
+
+function serializeMetadata(meta: typeof cloudronAppMetadataTable.$inferSelect | null) {
+  if (!meta) {
+    return {
+      customDisplayName: null,
+      customIconUrl: null,
+      siteTitle: null,
+      description: null,
+      internalNotes: null,
+      tagsJson: [] as string[],
+      customerFacingLabel: null,
+      updatedAt: null as string | null,
+    };
+  }
+  return {
+    customDisplayName: meta.customDisplayName ?? null,
+    customIconUrl: meta.customIconUrl ?? null,
+    siteTitle: meta.siteTitle ?? null,
+    description: meta.description ?? null,
+    internalNotes: meta.internalNotes ?? null,
+    tagsJson: Array.isArray(meta.tagsJson) ? (meta.tagsJson as string[]) : [],
+    customerFacingLabel: meta.customerFacingLabel ?? null,
+    updatedAt: meta.updatedAt ? meta.updatedAt.toISOString() : null,
+  };
+}
+
+/**
+ * GET /api/admin/cloudron/instances/:id/apps/metadata-bulk
+ * Returns a map of all local metadata records for this instance, keyed by Cloudron appId.
+ * Used by the My Apps list to render custom display name + icon overrides.
+ */
+router.get("/instances/:id/apps/metadata-bulk", requireAdmin, async (req, res) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid instance ID" }); return; }
+  try {
+    const rows = await db
+      .select({
+        appId: cloudronAppsCacheTable.appId,
+        meta: cloudronAppMetadataTable,
+      })
+      .from(cloudronAppsCacheTable)
+      .leftJoin(
+        cloudronAppMetadataTable,
+        eq(cloudronAppMetadataTable.cloudronAppCacheId, cloudronAppsCacheTable.id),
+      )
+      .where(eq(cloudronAppsCacheTable.instanceId, id));
+
+    const items: Record<string, ReturnType<typeof serializeMetadata>> = {};
+    for (const r of rows) {
+      if (r.meta) items[r.appId] = serializeMetadata(r.meta);
+    }
+    res.json({ items });
+  } catch (err) {
+    console.error("[admin/cloudron] metadata-bulk error", err);
+    res.status(500).json({ error: "Failed to load app metadata" });
+  }
+});
+
+/**
+ * GET /api/admin/cloudron/instances/:id/apps/:appId/metadata
+ * Returns the cached app row + local metadata (merged shape).
+ */
+router.get("/instances/:id/apps/:appId/metadata", requireAdmin, async (req, res) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid instance ID" }); return; }
+  const appId = String(req.params.appId);
+  try {
+    const [cacheRow] = await db
+      .select()
+      .from(cloudronAppsCacheTable)
+      .where(and(eq(cloudronAppsCacheTable.instanceId, id), eq(cloudronAppsCacheTable.appId, appId)))
+      .limit(1);
+
+    if (!cacheRow) {
+      res.status(404).json({ error: "App not found in cache" });
+      return;
+    }
+
+    const [metaRow] = await db
+      .select()
+      .from(cloudronAppMetadataTable)
+      .where(eq(cloudronAppMetadataTable.cloudronAppCacheId, cacheRow.id))
+      .limit(1);
+
+    res.json({
+      cache: {
+        id: cacheRow.id,
+        instanceId: cacheRow.instanceId,
+        appId: cacheRow.appId,
+        manifestTitle: cacheRow.manifestTitle,
+        location: cacheRow.location,
+        domain: cacheRow.domain,
+        version: cacheRow.version,
+        health: cacheRow.health,
+        runState: cacheRow.runState,
+        installState: cacheRow.installState,
+        iconUrl: cacheRow.iconUrl,
+        rawJson: cacheRow.rawJson,
+        lastSeenAt: cacheRow.lastSeenAt.toISOString(),
+      },
+      metadata: serializeMetadata(metaRow ?? null),
+    });
+  } catch (err) {
+    console.error("[admin/cloudron] metadata GET error", err);
+    res.status(500).json({ error: "Failed to load app metadata" });
+  }
+});
+
+/**
+ * PUT /api/admin/cloudron/instances/:id/apps/:appId/metadata
+ * Upserts the editable metadata fields for a cached Cloudron app.
+ */
+router.put("/instances/:id/apps/:appId/metadata", requireAdmin, async (req, res) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid instance ID" }); return; }
+  const appId = String(req.params.appId);
+  try {
+    const [cacheRow] = await db
+      .select({ id: cloudronAppsCacheTable.id })
+      .from(cloudronAppsCacheTable)
+      .where(and(eq(cloudronAppsCacheTable.instanceId, id), eq(cloudronAppsCacheTable.appId, appId)))
+      .limit(1);
+
+    if (!cacheRow) {
+      res.status(404).json({ error: "App not found in cache. Run a sync first." });
+      return;
+    }
+
+    const fields = pickMetadataFields(req.body);
+    const now = new Date();
+
+    const [existing] = await db
+      .select({ id: cloudronAppMetadataTable.id })
+      .from(cloudronAppMetadataTable)
+      .where(eq(cloudronAppMetadataTable.cloudronAppCacheId, cacheRow.id))
+      .limit(1);
+
+    let saved;
+    if (existing) {
+      [saved] = await db
+        .update(cloudronAppMetadataTable)
+        .set({
+          customDisplayName: fields.customDisplayName,
+          customIconUrl: fields.customIconUrl,
+          siteTitle: fields.siteTitle,
+          description: fields.description,
+          internalNotes: fields.internalNotes,
+          tagsJson: fields.tagsJson,
+          customerFacingLabel: fields.customerFacingLabel,
+          updatedAt: now,
+        })
+        .where(eq(cloudronAppMetadataTable.id, existing.id))
+        .returning();
+    } else {
+      [saved] = await db
+        .insert(cloudronAppMetadataTable)
+        .values({
+          cloudronAppCacheId: cacheRow.id,
+          customDisplayName: fields.customDisplayName,
+          customIconUrl: fields.customIconUrl,
+          siteTitle: fields.siteTitle,
+          description: fields.description,
+          internalNotes: fields.internalNotes,
+          tagsJson: fields.tagsJson,
+          customerFacingLabel: fields.customerFacingLabel,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+    }
+
+    res.json({ metadata: serializeMetadata(saved ?? null) });
+  } catch (err) {
+    console.error("[admin/cloudron] metadata PUT error", err);
+    res.status(500).json({ error: "Failed to save app metadata" });
   }
 });
 

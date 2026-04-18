@@ -84,6 +84,24 @@ interface CloudronApp {
   runState?: string;
   installationState?: string;
   manifest?: { title?: string; version?: string; icon?: string };
+  createdAt?: string;
+  updatedAt?: string;
+  health?: string;
+}
+
+interface AppMetadataOverride {
+  customDisplayName: string | null;
+  customIconUrl: string | null;
+  siteTitle: string | null;
+  description: string | null;
+  internalNotes: string | null;
+  tagsJson: string[];
+  customerFacingLabel: string | null;
+  updatedAt: string | null;
+}
+
+interface AppMetadataBulkResponse {
+  items: Record<string, AppMetadataOverride>;
 }
 
 interface CloudronAppsResult {
@@ -1544,6 +1562,17 @@ export function AdminCloudronPage() {
     retry: false,
   });
 
+  const { data: metadataBulk } = useQuery<AppMetadataBulkResponse>({
+    queryKey: ["cloudron-apps-metadata-bulk", instanceId ?? "primary"],
+    queryFn: () =>
+      adminFetch<AppMetadataBulkResponse>(
+        `/api/admin/cloudron/instances/${instanceId}/apps/metadata-bulk`,
+      ),
+    enabled: !!instanceId && hasInstances && !scopedIdInvalid,
+    retry: false,
+  });
+  const overrides = metadataBulk?.items ?? {};
+
   const scopedInstance = instanceId ? instances.find((i) => i.id === instanceId) ?? null : null;
 
   const deleteMutation = useMutation({
@@ -1811,27 +1840,46 @@ export function AdminCloudronPage() {
                       <TableHead>{t("admin.cloudron.col.fqdn")}</TableHead>
                       <TableHead>{t("admin.cloudron.col.runState")}</TableHead>
                       <TableHead>{t("admin.cloudron.col.installState")}</TableHead>
+                      <TableHead className="whitespace-nowrap">{t("admin.cloudron.col.lastUpdated")}</TableHead>
                       <TableHead className="text-end">{t("admin.cloudron.col.actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {apps.map((app) => {
-                      const title = app.manifest?.title ?? app.appStoreId ?? app.id;
+                      const upstreamTitle = app.manifest?.title ?? app.appStoreId ?? app.id;
+                      const override = instanceId ? overrides[app.id] : undefined;
+                      const title = override?.customDisplayName?.trim() || upstreamTitle;
                       const isBusy = app.installationState === "installing" ||
                         app.installationState?.startsWith("pending_");
                       const appTransition = activeTasks.find((tk) => tk.appId === app.id && tk.transition)?.transition;
-                      const iconUrl = getAppIconUrl(app, appsData?.instanceBaseUrl);
+                      const upstreamIconUrl = getAppIconUrl(app, appsData?.instanceBaseUrl);
+                      const iconUrl = (override?.customIconUrl && override.customIconUrl.length > 0)
+                        ? override.customIconUrl
+                        : upstreamIconUrl;
                       const fqdn = computeFqdn(app);
                       const locationLabel = app.location && app.location.length > 0
                         ? app.location
                         : t("admin.cloudron.location.root");
+                      const cleanBase = (appsData?.instanceBaseUrl ?? "").replace(/\/$/, "");
+                      const adminUrl = cleanBase ? `${cleanBase}/#/app/${encodeURIComponent(app.id)}` : null;
+                      const detailsHref = instanceId
+                        ? `/admin/cloudron/instances/${instanceId}/apps/${encodeURIComponent(app.id)}`
+                        : null;
+                      const lastUpdated = app.updatedAt ?? null;
                       return (
-                        <TableRow key={app.id}>
+                        <TableRow key={app.id} data-testid={`row-app-${app.id}`}>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <AppIcon src={iconUrl} alt={title} size="sm" />
-                              <div>
-                                <p className="font-medium text-sm leading-none">{title}</p>
+                              <div className="min-w-0">
+                                <p className="font-medium text-sm leading-none truncate">
+                                  {title}
+                                  {override?.customDisplayName?.trim() && (
+                                    <span className="ms-1.5 inline-block text-[10px] text-muted-foreground italic" title={upstreamTitle}>
+                                      ({t("admin.cloudron.app.upstreamTitle")}: {upstreamTitle})
+                                    </span>
+                                  )}
+                                </p>
                                 {app.manifest?.version && (
                                   <p className="text-xs text-muted-foreground mt-0.5">v{app.manifest.version}</p>
                                 )}
@@ -1853,8 +1901,62 @@ export function AdminCloudronPage() {
                           </TableCell>
                           <TableCell><RunStateBadge state={app.runState} transition={appTransition} /></TableCell>
                           <TableCell><InstallStateBadge state={app.installationState} /></TableCell>
+                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                            {lastUpdated ? new Date(lastUpdated).toLocaleDateString() : "—"}
+                          </TableCell>
                           <TableCell>
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                              {detailsHref && (
+                                <Link href={detailsHref}>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    data-testid={`button-view-details-${app.id}`}
+                                  >
+                                    <Info className="h-3.5 w-3.5 me-1" />
+                                    {t("admin.cloudron.app.btn.viewDetails")}
+                                  </Button>
+                                </Link>
+                              )}
+                              {fqdn && (
+                                <a href={`https://${fqdn}`} target="_blank" rel="noopener noreferrer">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    data-testid={`button-open-app-${app.id}`}
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5 me-1" />
+                                    {t("admin.cloudron.app.btn.openApp")}
+                                  </Button>
+                                </a>
+                              )}
+                              {adminUrl && (
+                                <a href={adminUrl} target="_blank" rel="noopener noreferrer">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    data-testid={`button-open-admin-${app.id}`}
+                                  >
+                                    <Globe className="h-3.5 w-3.5 me-1" />
+                                    {t("admin.cloudron.app.btn.openAdmin")}
+                                  </Button>
+                                </a>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                disabled={isLoading}
+                                onClick={() => { void refetch(); }}
+                                data-testid={`button-sync-app-${app.id}`}
+                                title={t("admin.cloudron.app.btn.syncHint")}
+                              >
+                                <RefreshCw className={`h-3.5 w-3.5 me-1 ${isLoading ? "animate-spin" : ""}`} />
+                                {t("admin.cloudron.app.btn.sync")}
+                              </Button>
                               {app.runState === "running" && (
                                 <Button
                                   variant="outline"
