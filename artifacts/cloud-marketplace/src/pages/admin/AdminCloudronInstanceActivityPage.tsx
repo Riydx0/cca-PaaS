@@ -317,6 +317,8 @@ function actionLabel(action: string, t: (k: string) => string): string {
 
 function entityLabel(entityType: string, t: (k: string) => string): string {
   if (entityType === "cloudron_app") return t("admin.cloudron.activity.entity.app");
+  if (entityType === "cloudron_user") return t("admin.cloudron.activity.entity.user");
+  if (entityType === "cloudron_group") return t("admin.cloudron.activity.entity.group");
   if (entityType === "cloudron_mailbox") return t("admin.cloudron.activity.entity.mailbox");
   if (entityType === "cloudron_sync") return t("admin.cloudron.activity.entity.sync");
   return entityType;
