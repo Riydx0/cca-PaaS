@@ -31,6 +31,16 @@ import {
   deleteGroup as svcDeleteGroup,
   setGroupMembers as svcSetGroupMembers,
 } from "../../services/CloudronUserGroupService";
+import {
+  syncMailboxes,
+  listMailboxesFromCache,
+  getMailboxFromCache,
+  createMailbox as svcCreateMailbox,
+  updateMailbox as svcUpdateMailbox,
+  deleteMailbox as svcDeleteMailbox,
+  syncSingleMailbox,
+  listMailDomainsLive,
+} from "../../services/CloudronMailboxService";
 import { CloudronError } from "../../cloudron/client";
 
 const router = Router({ mergeParams: true });
@@ -980,6 +990,152 @@ router.put("/instances/:id/groups/:groupId/members", requireAdmin, async (req, r
     if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
     await svcSetGroupMembers(inst, String(req.params.groupId), body.userIds.map(String), asTriggeredBy(req));
     res.json({ ok: true });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cloudron MAILBOXES (Source of Truth = Cloudron, fail-closed)
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get("/instances/:id/mailboxes/domains", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const domains = await listMailDomainsLive(inst);
+    res.json({ domains });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+router.get("/instances/:id/mailboxes", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const rows = await listMailboxesFromCache(id);
+    res.json({
+      mailboxes: rows.map((r) => ({
+        ...r,
+        lastSeenAt: r.lastSeenAt.toISOString(),
+        createdAt: r.createdAt.toISOString(),
+        updatedAt: r.updatedAt.toISOString(),
+      })),
+    });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+router.post("/instances/:id/mailboxes/sync", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const result = await syncMailboxes(inst, asTriggeredBy(req));
+    if (!result.ok) { res.status(502).json({ error: result.message ?? "Sync failed" }); return; }
+    res.json(result);
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+router.get("/instances/:id/mailboxes/:address", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  try {
+    const row = await getMailboxFromCache(id, String(req.params.address));
+    if (!row) { res.status(404).json({ error: "Mailbox not found in cache" }); return; }
+    res.json({
+      mailbox: {
+        ...row,
+        lastSeenAt: row.lastSeenAt.toISOString(),
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      },
+    });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+router.post("/instances/:id/mailboxes", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  const body = req.body ?? {};
+  if (!body.domain || typeof body.domain !== "string" || !body.name || typeof body.name !== "string") {
+    res.status(400).json({ error: "domain and name are required" }); return;
+  }
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const row = await svcCreateMailbox(
+      inst,
+      {
+        domain: body.domain.trim(),
+        name: body.name.trim(),
+        password: typeof body.password === "string" ? body.password : undefined,
+        ownerId: typeof body.ownerId === "string" && body.ownerId ? body.ownerId : undefined,
+        ownerType: body.ownerType === "group" ? "group" : body.ownerType === "user" ? "user" : undefined,
+        hasPop3: typeof body.hasPop3 === "boolean" ? body.hasPop3 : undefined,
+        active: typeof body.active === "boolean" ? body.active : undefined,
+        storageQuota: typeof body.storageQuota === "number" ? body.storageQuota : undefined,
+        displayName: typeof body.displayName === "string" ? body.displayName : undefined,
+      },
+      asTriggeredBy(req),
+    );
+    res.json({
+      mailbox: {
+        ...row,
+        lastSeenAt: row.lastSeenAt.toISOString(),
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      },
+    });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+router.patch("/instances/:id/mailboxes/:address", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  const body = req.body ?? {};
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const payload: Record<string, unknown> = {};
+    if (typeof body.password === "string" && body.password) payload.password = body.password;
+    if (typeof body.ownerId === "string") payload.ownerId = body.ownerId;
+    if (body.ownerType === "user" || body.ownerType === "group") payload.ownerType = body.ownerType;
+    if (typeof body.hasPop3 === "boolean") payload.hasPop3 = body.hasPop3;
+    if (typeof body.active === "boolean") payload.active = body.active;
+    if (typeof body.storageQuota === "number") payload.storageQuota = body.storageQuota;
+    if (typeof body.displayName === "string") payload.displayName = body.displayName;
+    const row = await svcUpdateMailbox(inst, String(req.params.address), payload, asTriggeredBy(req));
+    res.json({
+      mailbox: {
+        ...row,
+        lastSeenAt: row.lastSeenAt.toISOString(),
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      },
+    });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+router.delete("/instances/:id/mailboxes/:address", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    await svcDeleteMailbox(inst, String(req.params.address), asTriggeredBy(req));
+    res.json({ ok: true });
+  } catch (err) { handleCloudronError(res, err); }
+});
+
+router.post("/instances/:id/mailboxes/:address/sync", requireAdmin, async (req, res) => {
+  const id = parseInstanceId(req, res); if (id === null) return;
+  try {
+    const inst = await getInstanceById(id);
+    if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const row = await syncSingleMailbox(inst, String(req.params.address), asTriggeredBy(req));
+    res.json({
+      mailbox: {
+        ...row,
+        lastSeenAt: row.lastSeenAt.toISOString(),
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      },
+    });
   } catch (err) { handleCloudronError(res, err); }
 });
 

@@ -59,6 +59,7 @@ import {
 import AdminCloudronInstanceAppstorePage from "@/pages/admin/AdminCloudronInstanceAppstorePage";
 import AdminCloudronInstanceUsersPage from "@/pages/admin/AdminCloudronInstanceUsersPage";
 import AdminCloudronInstanceGroupsPage from "@/pages/admin/AdminCloudronInstanceGroupsPage";
+import AdminCloudronInstanceMailboxesPage from "@/pages/admin/AdminCloudronInstanceMailboxesPage";
 import { AdminCloudronLicensesPage } from "@/pages/admin/AdminCloudronLicensesPage";
 import { AdminCloudronSyncLogsPage } from "@/pages/admin/AdminCloudronSyncLogsPage";
 
@@ -159,6 +160,17 @@ function CloudronInstanceGroupsRoute() {
   return (
     <AdminCloudronInstanceShell instanceId={id} activeTab="groups">
       <AdminCloudronInstanceGroupsPage instanceId={id} />
+    </AdminCloudronInstanceShell>
+  );
+}
+
+function CloudronInstanceMailboxesRoute() {
+  const [, params] = useRoute<{ id: string }>("/admin/cloudron/instances/:id/mailboxes");
+  const id = params ? parseInt(params.id, 10) : NaN;
+  if (isNaN(id)) return <p className="text-sm text-destructive">Invalid instance ID</p>;
+  return (
+    <AdminCloudronInstanceShell instanceId={id} activeTab="mailboxes">
+      <AdminCloudronInstanceMailboxesPage instanceId={id} />
     </AdminCloudronInstanceShell>
   );
 }
@@ -351,7 +363,7 @@ function AppRoutes({ onSetupNeeded }: { onSetupNeeded: () => void }) {
         <AdminRoute component={CloudronInstanceGroupsRoute} />
       </Route>
       <Route path="/admin/cloudron/instances/:id/mailboxes">
-        <AdminRoute component={makeCloudronInstanceTab("mailboxes", "admin.cloudron.shell.placeholder.mailboxes.title", "admin.cloudron.shell.placeholder.mailboxes.hint")} />
+        <AdminRoute component={CloudronInstanceMailboxesRoute} />
       </Route>
       <Route path="/admin/cloudron/instances/:id/activity">
         <AdminRoute component={makeCloudronInstanceTab("activity", "admin.cloudron.shell.placeholder.activity.title", "admin.cloudron.shell.placeholder.activity.hint")} />

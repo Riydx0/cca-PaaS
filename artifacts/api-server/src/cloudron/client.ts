@@ -158,6 +158,80 @@ export class CloudronClient {
       { userIds },
     );
   }
+
+  // ---------- Mail ----------
+  listMailDomains(): Promise<{ domains: CloudronApiMailDomain[] }> {
+    return this.get<{ domains: CloudronApiMailDomain[] }>("/mail/domains");
+  }
+  listMailboxes(domain: string): Promise<{ mailboxes: CloudronApiMailbox[] }> {
+    return this.get<{ mailboxes: CloudronApiMailbox[] }>(
+      `/mail/${encodeURIComponent(domain)}/mailboxes`,
+    );
+  }
+  getMailbox(domain: string, name: string): Promise<{ mailbox: CloudronApiMailbox } | CloudronApiMailbox> {
+    return this.get<{ mailbox: CloudronApiMailbox } | CloudronApiMailbox>(
+      `/mail/${encodeURIComponent(domain)}/mailboxes/${encodeURIComponent(name)}`,
+    );
+  }
+  createMailbox(domain: string, payload: {
+    name: string;
+    password?: string;
+    ownerId?: string;
+    ownerType?: "user" | "group";
+    hasPop3?: boolean;
+    active?: boolean;
+    storageQuota?: number;
+    messagesQuota?: number;
+    displayName?: string;
+  }): Promise<unknown> {
+    return this.post<unknown>(
+      `/mail/${encodeURIComponent(domain)}/mailboxes`,
+      payload,
+    );
+  }
+  updateMailbox(domain: string, name: string, payload: Partial<{
+    password: string;
+    ownerId: string;
+    ownerType: "user" | "group";
+    hasPop3: boolean;
+    active: boolean;
+    storageQuota: number;
+    messagesQuota: number;
+    displayName: string;
+  }>): Promise<unknown> {
+    return this.patch<unknown>(
+      `/mail/${encodeURIComponent(domain)}/mailboxes/${encodeURIComponent(name)}`,
+      payload,
+    );
+  }
+  deleteMailbox(domain: string, name: string): Promise<unknown> {
+    return this.delete<unknown>(
+      `/mail/${encodeURIComponent(domain)}/mailboxes/${encodeURIComponent(name)}`,
+    );
+  }
+}
+
+export interface CloudronApiMailDomain {
+  domain: string;
+  enabled?: boolean;
+  [k: string]: unknown;
+}
+
+export interface CloudronApiMailbox {
+  name: string;
+  domain?: string;
+  ownerId?: string | null;
+  ownerType?: string | null;
+  aliases?: string[];
+  active?: boolean;
+  hasPop3?: boolean;
+  storageQuota?: number;
+  messagesQuota?: number;
+  storageUsage?: number;
+  messagesUsage?: number;
+  displayName?: string | null;
+  creationTime?: string;
+  [k: string]: unknown;
 }
 
 export interface CloudronApiUser {
