@@ -64,7 +64,7 @@ router.post("/", requireSuperAdmin, async (req, res) => {
     res.status(400).json({ error: "Invalid data", details: parsed.error });
     return;
   }
-  const v = validateProductTypeConfig(parsed.data.productType, (parsed.data as any).config);
+  const v = validateProductTypeConfig(parsed.data.productType, parsed.data.config);
   if (!v.ok) {
     res.status(400).json({ error: `Missing required config field: ${v.field}`, field: v.field });
     return;
@@ -97,9 +97,9 @@ router.patch("/:id", requireSuperAdmin, async (req, res) => {
     res.status(400).json({ error: "Invalid data", details: parsed.error });
     return;
   }
-  if (parsed.data.productType !== undefined || (parsed.data as any).config !== undefined) {
-    let productType = parsed.data.productType;
-    let config = (parsed.data as any).config;
+  if (parsed.data.productType !== undefined || parsed.data.config !== undefined) {
+    let productType: string | undefined = parsed.data.productType;
+    let config: unknown = parsed.data.config;
     if (productType === undefined || config === undefined) {
       const [existing] = await db.select().from(cloudServicesTable).where(eq(cloudServicesTable.id, id));
       if (existing) {

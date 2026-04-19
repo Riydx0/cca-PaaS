@@ -195,7 +195,7 @@ function summarySpecs(p: Product, t: (k: string) => string): string {
       return `${name}${mode ? ` • ${mode}` : ""} • ${apps} ${t("admin.product.summary.apps")}`;
     }
     case "cloud_app": {
-      const platform = readStr(c, "platform") || "Cloudron";
+      const platform = readStr(c, "platform") || t("admin.product.summary.app");
       const appId = readStr(c, "appId") || readStr(c, "appSource");
       const dom = readBool(c, "requiresDomain") ? ` • ${t("admin.product.summary.domain")}` : "";
       return `${platform}${appId ? ` • ${appId}` : ""}${dom}`;
