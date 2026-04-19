@@ -109,10 +109,11 @@ function fmtBytes(n: number | null | undefined): string {
   return `${(n / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
-function fmtDate(iso: string | undefined | null, locale: string): string {
+function fmtDate(iso: string | undefined | null, language: string): string {
   if (!iso) return "—";
+  const bcp47 = language === "ar" ? "ar-SA" : "en-US";
   try {
-    return new Date(iso).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
+    return new Date(iso).toLocaleString(bcp47, { dateStyle: "medium", timeStyle: "short" });
   } catch { return iso; }
 }
 
@@ -141,7 +142,7 @@ function UsageBar({ used, quota, t }: { used: number | null; quota: number | nul
 }
 
 export default function AdminCloudronInstanceMailboxesPage({ instanceId }: Props) {
-  const { t, locale } = useI18n();
+  const { t, language } = useI18n();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -340,7 +341,7 @@ export default function AdminCloudronInstanceMailboxesPage({ instanceId }: Props
                           {(m.aliasesJson?.length ?? 0) || "—"}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          {fmtDate(created, locale)}
+                          {fmtDate(created, language)}
                         </TableCell>
                         <TableCell className="text-end space-x-1 rtl:space-x-reverse">
                           <Button variant="ghost" size="icon" onClick={() => setViewing(m)} data-testid={`btn-view-mailbox-${m.cloudronMailboxId}`} aria-label={t("admin.cloudron.mailboxes.view")}>
@@ -383,12 +384,14 @@ export default function AdminCloudronInstanceMailboxesPage({ instanceId }: Props
         users={usersQ.data?.users ?? []}
       />
       <EditMailboxDialog
+        key={`edit-${editing?.cloudronMailboxId ?? "none"}`}
         mailbox={editing}
         onClose={() => setEditing(null)}
         instanceId={instanceId}
         users={usersQ.data?.users ?? []}
       />
       <ResetMailboxPasswordDialog
+        key={`reset-${resetting?.cloudronMailboxId ?? "none"}`}
         mailbox={resetting}
         onClose={() => setResetting(null)}
         instanceId={instanceId}
@@ -406,7 +409,7 @@ export default function AdminCloudronInstanceMailboxesPage({ instanceId }: Props
 function ViewMailboxDrawer({
   mailbox, owner, onClose,
 }: { mailbox: MailboxRow | null; owner: UserRow | null; onClose: () => void }) {
-  const { t, locale } = useI18n();
+  const { t, language } = useI18n();
   if (!mailbox) return null;
   const raw = mailbox.rawJson ?? {};
   const isActive = raw.active !== false;
@@ -447,10 +450,10 @@ function ViewMailboxDrawer({
             ) : <span className="text-muted-foreground">—</span>}
           </DetailRow>
           <DetailRow label={t("admin.cloudron.mailboxes.col.created")}>
-            <span>{fmtDate(raw.creationTime ?? mailbox.createdAt, locale)}</span>
+            <span>{fmtDate(raw.creationTime ?? mailbox.createdAt, language)}</span>
           </DetailRow>
           <DetailRow label={t("admin.cloudron.mailboxes.lastSeen")}>
-            <span>{fmtDate(mailbox.lastSeenAt, locale)}</span>
+            <span>{fmtDate(mailbox.lastSeenAt, language)}</span>
           </DetailRow>
           <details className="text-xs text-muted-foreground">
             <summary className="cursor-pointer">{t("admin.cloudron.mailboxes.rawJson")}</summary>
