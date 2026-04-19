@@ -178,12 +178,14 @@ function SettingsContent({ id }: { id: number }) {
               {clients.map((c) => (
                 <li key={c.id} className="py-2 flex items-center justify-between gap-3 text-sm">
                   <div className="min-w-0">
-                    <p className="font-medium truncate">{c.user?.name ?? c.user?.email ?? `User #${c.userId}`}</p>
+                    <p className="font-medium truncate">{c.user?.name ?? c.user?.email ?? `${t("admin.cloudron.settings.clients.userPrefix")}${c.userId}`}</p>
                     {c.user?.email ? <p className="text-xs text-muted-foreground truncate">{c.user.email}</p> : null}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <Badge variant="outline" className="text-xs">{c.relationshipType}</Badge>
-                    <span className="text-xs text-muted-foreground">{c.permissions.length} perms</span>
+                    <span className="text-xs text-muted-foreground">
+                      {t("admin.cloudron.settings.clients.permsCount").replace("{n}", String(c.permissions.length))}
+                    </span>
                   </div>
                 </li>
               ))}

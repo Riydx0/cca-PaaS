@@ -46,6 +46,12 @@ const ACTION_OPTIONS = [
   "cloudron_stop",
   "cloudron_start",
   "cloudron_update",
+  "cloudron_create_user",
+  "cloudron_edit_user",
+  "cloudron_delete_user",
+  "cloudron_create_group",
+  "cloudron_edit_group",
+  "cloudron_delete_group",
   "cloudron_create_mailbox",
   "cloudron_edit_mailbox",
   "cloudron_delete_mailbox",
@@ -140,6 +146,8 @@ function ActivityContent({ id }: { id: number }) {
                 <SelectContent>
                   <SelectItem value="all">{t("admin.cloudron.activity.filter.all")}</SelectItem>
                   <SelectItem value="cloudron_app">{t("admin.cloudron.activity.entity.app")}</SelectItem>
+                  <SelectItem value="cloudron_user">{t("admin.cloudron.activity.entity.user")}</SelectItem>
+                  <SelectItem value="cloudron_group">{t("admin.cloudron.activity.entity.group")}</SelectItem>
                   <SelectItem value="cloudron_mailbox">{t("admin.cloudron.activity.entity.mailbox")}</SelectItem>
                   <SelectItem value="cloudron_sync">{t("admin.cloudron.activity.entity.sync")}</SelectItem>
                 </SelectContent>
