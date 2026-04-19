@@ -208,6 +208,7 @@ function ActivityContent({ id }: { id: number }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("admin.cloudron.activity.col.time")}</TableHead>
+                  <TableHead>{t("admin.cloudron.activity.col.type")}</TableHead>
                   <TableHead>{t("admin.cloudron.activity.col.action")}</TableHead>
                   <TableHead>{t("admin.cloudron.activity.col.entity")}</TableHead>
                   <TableHead>{t("admin.cloudron.activity.col.status")}</TableHead>
@@ -221,12 +222,14 @@ function ActivityContent({ id }: { id: number }) {
                     <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                       {new Date(a.createdAt).toLocaleString()}
                     </TableCell>
+                    <TableCell className="text-xs">
+                      <Badge variant="secondary">{entityLabel(a.entityType, t)}</Badge>
+                    </TableCell>
                     <TableCell className="text-sm">
                       <div>{a.kind === "sync" ? a.message : actionLabel(a.action, t)}</div>
                     </TableCell>
                     <TableCell className="text-xs">
-                      <span className="text-muted-foreground">{entityLabel(a.entityType, t)}</span>
-                      {a.entityId ? <span className="ms-1 font-mono">{a.entityId}</span> : null}
+                      {a.entityId ? <span className="font-mono">{a.entityId}</span> : <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={a.status === "success"
