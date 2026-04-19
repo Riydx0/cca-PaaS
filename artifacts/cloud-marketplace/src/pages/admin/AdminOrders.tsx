@@ -261,8 +261,8 @@ export function AdminOrders() {
 
             {/* Table (lg+) — horizontal scroll if container is too narrow */}
             <div className="hidden lg:block overflow-x-auto">
-              <div className="min-w-[960px]">
-                <div className="grid grid-cols-[1.4fr_1.4fr_140px_120px_120px_150px_120px] gap-4 px-5 py-3 bg-muted/40 border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <div className="min-w-[1180px]">
+                <div className="grid grid-cols-[1.7fr_1.5fr_140px_120px_120px_150px_120px] gap-4 px-5 py-3 bg-muted/40 border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   <span>{t("admin.orders.customer")}</span>
                   <span>{t("admin.col.service")}</span>
                   <span>{t("label.provider")}</span>
@@ -278,7 +278,7 @@ export function AdminOrders() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: i * 0.02 }}
-                      className="grid grid-cols-[1.4fr_1.4fr_140px_120px_120px_150px_120px] gap-4 items-center px-5 py-4 hover:bg-muted/30 transition-colors"
+                      className="grid grid-cols-[1.7fr_1.5fr_140px_120px_120px_150px_120px] gap-4 items-center px-5 py-4 hover:bg-muted/30 transition-colors"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="bg-primary/10 p-2 rounded-md shrink-0">
