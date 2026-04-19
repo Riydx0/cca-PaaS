@@ -449,6 +449,7 @@ router.get("/instances/:id/activity", requireAdmin, async (req, res) => {
     userId: number | null;
     userName: string | null;
     userEmail: string | null;
+    triggeredBy: string | null;
     createdAt: string;
   };
 
@@ -528,6 +529,7 @@ router.get("/instances/:id/activity", requireAdmin, async (req, res) => {
           userId: r.log.userId ?? null,
           userName: r.userName ?? null,
           userEmail: r.userEmail ?? null,
+          triggeredBy: r.log.userId != null ? "user" : "system",
           createdAt: r.log.createdAt.toISOString(),
         };
       });
@@ -618,6 +620,7 @@ router.get("/instances/:id/activity", requireAdmin, async (req, res) => {
           userId: uid,
           userName: u?.name ?? null,
           userEmail: u?.email ?? null,
+          triggeredBy: trig,
           createdAt: r.createdAt.toISOString(),
         };
       });

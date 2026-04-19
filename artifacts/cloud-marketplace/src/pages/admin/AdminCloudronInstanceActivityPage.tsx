@@ -28,6 +28,7 @@ interface ActivityLog {
   errorMessage: string | null;
   userName: string | null;
   userEmail: string | null;
+  triggeredBy: string | null;
   createdAt: string;
 }
 
@@ -247,7 +248,9 @@ function ActivityContent({ id }: { id: number }) {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs">{a.userName ?? a.userEmail ?? "—"}</TableCell>
+                    <TableCell className="text-xs">
+                      {a.userName ?? a.userEmail ?? (a.triggeredBy ? <span className="text-muted-foreground italic">{a.triggeredBy}</span> : "—")}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
