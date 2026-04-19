@@ -10,7 +10,7 @@ import {
   cloudronAppMetadataTable,
   cloudronClientAccessTable,
 } from "@workspace/db/schema";
-import { eq, desc, and, inArray, sql, count, countDistinct } from "drizzle-orm";
+import { eq, desc, and, or, inArray, sql, count, countDistinct, gte, lte, ilike, type SQL } from "drizzle-orm";
 import { computeFinancials } from "../../lib/cloudronFinancials";
 import { syncInstance } from "../../services/CloudronSyncService";
 import { getInstanceById } from "../../services/CloudronService";
@@ -385,7 +385,16 @@ router.get("/licenses", requireAdmin, async (_req, res) => {
 
 /**
  * GET /api/admin/cloudron/instances/:id/activity
- * Returns the last 50 Cloudron activity log entries for a specific instance.
+ * Returns a paginated, filterable activity timeline for a specific Cloudron instance.
+ * Merges audit log rows (CRUD on apps/mailboxes) with sync log rows (background/manual syncs).
+ *
+ * Query params:
+ *   - entityType: "cloudron_app" | "cloudron_mailbox" | "cloudron_sync" (default: all three)
+ *   - action: optional action filter (regex-validated `[a-z0-9_]+`)
+ *   - status: "success" | "failed"
+ *   - from, to: ISO date range
+ *   - entity: free-text search across entityId / user name / user email / sync message
+ *   - page (1-based), pageSize (max 200, default 25)
  */
 router.get("/instances/:id/activity", requireAdmin, async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
@@ -394,17 +403,28 @@ router.get("/instances/:id/activity", requireAdmin, async (req, res) => {
     return;
   }
 
-  const limit = Math.min(parseInt(String(req.query["limit"] ?? "100"), 10) || 100, 500);
-  const entityTypeRaw = typeof req.query["entityType"] === "string" ? String(req.query["entityType"]) : null;
-  const actionRaw = typeof req.query["action"] === "string" ? String(req.query["action"]) : null;
-  const statusRaw = typeof req.query["status"] === "string" ? String(req.query["status"]) : null;
-  const fromRaw = typeof req.query["from"] === "string" ? String(req.query["from"]) : null;
-  const toRaw = typeof req.query["to"] === "string" ? String(req.query["to"]) : null;
+  const pickStr = (v: unknown): string | null =>
+    typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
 
-  const ALLOWED_TYPES = ["cloudron_app", "cloudron_mailbox"] as const;
-  const allowedTypes = entityTypeRaw && (ALLOWED_TYPES as readonly string[]).includes(entityTypeRaw)
-    ? [entityTypeRaw]
-    : [...ALLOWED_TYPES];
+  const entityTypeRaw = pickStr(req.query["entityType"]);
+  const actionRaw = pickStr(req.query["action"]);
+  const statusRaw = pickStr(req.query["status"]);
+  const fromRaw = pickStr(req.query["from"]);
+  const toRaw = pickStr(req.query["to"]);
+  const entityRaw = pickStr(req.query["entity"]);
+
+  const page = Math.max(1, parseInt(String(req.query["page"] ?? "1"), 10) || 1);
+  const pageSize = Math.min(
+    Math.max(1, parseInt(String(req.query["pageSize"] ?? "25"), 10) || 25),
+    200,
+  );
+
+  const ALLOWED_TYPES = ["cloudron_app", "cloudron_mailbox", "cloudron_sync"] as const;
+  type EntityType = (typeof ALLOWED_TYPES)[number];
+  const wantedTypes: EntityType[] =
+    entityTypeRaw && (ALLOWED_TYPES as readonly string[]).includes(entityTypeRaw)
+      ? [entityTypeRaw as EntityType]
+      : [...ALLOWED_TYPES];
 
   const fromDate = fromRaw ? new Date(fromRaw) : null;
   const toDate = toRaw ? new Date(toRaw) : null;
@@ -412,53 +432,206 @@ router.get("/instances/:id/activity", requireAdmin, async (req, res) => {
     res.status(400).json({ error: "Invalid date range" });
     return;
   }
+  if (actionRaw && !/^[a-z0-9_]+$/i.test(actionRaw)) {
+    res.status(400).json({ error: "Invalid action filter" });
+    return;
+  }
+
+  type ActivityRow = {
+    id: string;
+    kind: "audit" | "sync";
+    action: string;
+    entityType: EntityType;
+    entityId: string | null;
+    status: "success" | "failed";
+    message: string;
+    errorMessage: string | null;
+    userId: number | null;
+    userName: string | null;
+    userEmail: string | null;
+    createdAt: string;
+  };
 
   try {
-    const conds: any[] = [
-      inArray(auditLogsTable.entityType, allowedTypes),
-      sql`(${auditLogsTable.details}->>'instanceId')::integer = ${id}`,
-    ];
-    if (actionRaw && /^[a-z0-9_]+$/i.test(actionRaw)) {
-      conds.push(eq(auditLogsTable.action, actionRaw));
+    const auditTypes = wantedTypes.filter((t) => t !== "cloudron_sync");
+    const includeSync = wantedTypes.includes("cloudron_sync");
+
+    // ---- Audit log query ----
+    let auditRows: ActivityRow[] = [];
+    let auditTotal = 0;
+    if (auditTypes.length > 0) {
+      const auditConds: SQL[] = [
+        inArray(auditLogsTable.entityType, auditTypes),
+        sql`(${auditLogsTable.details}->>'instanceId')::integer = ${id}`,
+      ];
+      if (actionRaw) auditConds.push(eq(auditLogsTable.action, actionRaw));
+      if (statusRaw === "success") {
+        auditConds.push(
+          sql`COALESCE(${auditLogsTable.details}->>'status', 'success') = 'success'`,
+        );
+      } else if (statusRaw === "failed") {
+        auditConds.push(sql`${auditLogsTable.details}->>'status' = 'failed'`);
+      }
+      if (fromDate) auditConds.push(gte(auditLogsTable.createdAt, fromDate));
+      if (toDate) auditConds.push(lte(auditLogsTable.createdAt, toDate));
+      if (entityRaw) {
+        const like = `%${entityRaw}%`;
+        const entityCond = or(
+          ilike(auditLogsTable.entityId, like),
+          ilike(usersTable.name, like),
+          ilike(usersTable.email, like),
+        );
+        if (entityCond) auditConds.push(entityCond);
+      }
+
+      const auditWhere = and(...auditConds);
+
+      const rows = await db
+        .select({
+          log: auditLogsTable,
+          userName: usersTable.name,
+          userEmail: usersTable.email,
+        })
+        .from(auditLogsTable)
+        .leftJoin(usersTable, eq(auditLogsTable.userId, usersTable.id))
+        .where(auditWhere)
+        .orderBy(desc(auditLogsTable.createdAt))
+        .limit(page * pageSize); // fetch enough to merge-and-paginate
+
+      const [countRow] = await db
+        .select({ c: count() })
+        .from(auditLogsTable)
+        .leftJoin(usersTable, eq(auditLogsTable.userId, usersTable.id))
+        .where(auditWhere);
+      auditTotal = Number(countRow?.c ?? 0);
+
+      auditRows = rows.map((r): ActivityRow => {
+        const det = r.log.details as Record<string, unknown> | null;
+        const status: "success" | "failed" =
+          (det?.["status"] as string) === "failed" ? "failed" : "success";
+        const errorMessage =
+          status === "failed"
+            ? ((det?.["error"] as string) ??
+              (det?.["errorMessage"] as string) ??
+              (det?.["message"] as string) ??
+              null)
+            : null;
+        return {
+          id: `a:${r.log.id}`,
+          kind: "audit",
+          action: r.log.action,
+          entityType: r.log.entityType as EntityType,
+          entityId: r.log.entityId ?? null,
+          status,
+          message: buildActivityMessage(r.log.action, r.log.entityId ?? null),
+          errorMessage,
+          userId: r.log.userId ?? null,
+          userName: r.userName ?? null,
+          userEmail: r.userEmail ?? null,
+          createdAt: r.log.createdAt.toISOString(),
+        };
+      });
     }
-    if (statusRaw === "success") {
-      conds.push(sql`COALESCE(${auditLogsTable.details}->>'status', 'success') = 'success'`);
-    } else if (statusRaw === "failed") {
-      conds.push(sql`${auditLogsTable.details}->>'status' = 'failed'`);
+
+    // ---- Sync log query ----
+    let syncRows: ActivityRow[] = [];
+    let syncTotal = 0;
+    if (includeSync) {
+      const syncConds: SQL[] = [eq(cloudronSyncLogsTable.instanceId, id)];
+      if (statusRaw === "success" || statusRaw === "failed") {
+        syncConds.push(eq(cloudronSyncLogsTable.syncStatus, statusRaw));
+      }
+      if (fromDate) syncConds.push(gte(cloudronSyncLogsTable.createdAt, fromDate));
+      if (toDate) syncConds.push(lte(cloudronSyncLogsTable.createdAt, toDate));
+      if (actionRaw && actionRaw !== "cloudron_sync") {
+        // Sync rows only have one action type; if user filtered to anything else, return none.
+        syncConds.push(sql`false`);
+      }
+      if (entityRaw) {
+        const like = `%${entityRaw}%`;
+        const entityCond = or(
+          ilike(cloudronSyncLogsTable.message, like),
+          ilike(cloudronSyncLogsTable.triggeredBy, like),
+        );
+        if (entityCond) syncConds.push(entityCond);
+      }
+
+      const syncWhere = and(...syncConds);
+
+      const rows = await db
+        .select()
+        .from(cloudronSyncLogsTable)
+        .where(syncWhere)
+        .orderBy(desc(cloudronSyncLogsTable.createdAt))
+        .limit(page * pageSize);
+
+      const [countRow] = await db
+        .select({ c: count() })
+        .from(cloudronSyncLogsTable)
+        .where(syncWhere);
+      syncTotal = Number(countRow?.c ?? 0);
+
+      // Resolve manual:<userId> triggers to user info (best-effort)
+      const manualUserIds = Array.from(
+        new Set(
+          rows
+            .map((r) => {
+              const t = r.triggeredBy ?? "";
+              if (!t.startsWith("manual:")) return null;
+              const n = parseInt(t.slice("manual:".length), 10);
+              return Number.isFinite(n) ? n : null;
+            })
+            .filter((v): v is number => v !== null),
+        ),
+      );
+      const userMap = new Map<number, { name: string | null; email: string | null }>();
+      if (manualUserIds.length > 0) {
+        const users = await db
+          .select({ id: usersTable.id, name: usersTable.name, email: usersTable.email })
+          .from(usersTable)
+          .where(inArray(usersTable.id, manualUserIds));
+        for (const u of users) userMap.set(u.id, { name: u.name, email: u.email });
+      }
+
+      syncRows = rows.map((r): ActivityRow => {
+        const status: "success" | "failed" = r.syncStatus === "failed" ? "failed" : "success";
+        const trig = r.triggeredBy ?? "system";
+        const isManual = trig.startsWith("manual:");
+        const uidNum = isManual ? parseInt(trig.slice("manual:".length), 10) : NaN;
+        const uid: number | null = Number.isFinite(uidNum) ? uidNum : null;
+        const u = uid !== null ? userMap.get(uid) : null;
+        const summaryParts: string[] = [];
+        if (r.appsCount != null) summaryParts.push(`${r.appsCount} apps`);
+        if (r.usersCount != null) summaryParts.push(`${r.usersCount} users`);
+        if (r.mailboxesCount != null) summaryParts.push(`${r.mailboxesCount} mailboxes`);
+        const baseMsg = isManual ? "Manual sync" : "Background sync";
+        const msg = summaryParts.length > 0 ? `${baseMsg} (${summaryParts.join(", ")})` : baseMsg;
+        return {
+          id: `s:${r.id}`,
+          kind: "sync",
+          action: "cloudron_sync",
+          entityType: "cloudron_sync",
+          entityId: String(r.instanceId),
+          status,
+          message: msg,
+          errorMessage: status === "failed" ? r.message : null,
+          userId: uid,
+          userName: u?.name ?? null,
+          userEmail: u?.email ?? null,
+          createdAt: r.createdAt.toISOString(),
+        };
+      });
     }
-    if (fromDate) conds.push(sql`${auditLogsTable.createdAt} >= ${fromDate}`);
-    if (toDate) conds.push(sql`${auditLogsTable.createdAt} <= ${toDate}`);
 
-    const rows = await db
-      .select({
-        log: auditLogsTable,
-        userName: usersTable.name,
-        userEmail: usersTable.email,
-      })
-      .from(auditLogsTable)
-      .leftJoin(usersTable, eq(auditLogsTable.userId, usersTable.id))
-      .where(and(...conds))
-      .orderBy(desc(auditLogsTable.createdAt))
-      .limit(limit);
+    // ---- Merge, sort, paginate ----
+    const merged = [...auditRows, ...syncRows].sort((a, b) =>
+      a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0,
+    );
+    const total = auditTotal + syncTotal;
+    const start = (page - 1) * pageSize;
+    const logs = merged.slice(start, start + pageSize);
 
-    const logs = rows.map((r) => {
-      const det = r.log.details as Record<string, unknown> | null;
-      const status = (det?.status as string) === "failed" ? "failed" : "success";
-      return {
-        id: r.log.id,
-        action: r.log.action,
-        entityType: r.log.entityType,
-        entityId: r.log.entityId ?? null,
-        status,
-        message: buildActivityMessage(r.log.action, r.log.entityId ?? null),
-        userId: r.log.userId ?? null,
-        userName: r.userName ?? null,
-        userEmail: r.userEmail ?? null,
-        createdAt: r.log.createdAt.toISOString(),
-      };
-    });
-
-    res.json({ logs });
+    res.json({ logs, total, page, pageSize });
   } catch (err) {
     console.error("[admin/cloudron] activity fetch error", err);
     res.status(500).json({ error: "Internal server error" });
