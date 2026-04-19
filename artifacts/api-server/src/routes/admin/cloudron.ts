@@ -209,6 +209,17 @@ router.get("/instances/:id", requireAdmin, async (req, res) => {
       .where(eq(cloudronSyncLogsTable.instanceId, id))
       .orderBy(desc(cloudronSyncLogsTable.createdAt))
       .limit(1);
+    const [lastSuccessfulSyncRow] = await db
+      .select()
+      .from(cloudronSyncLogsTable)
+      .where(
+        and(
+          eq(cloudronSyncLogsTable.instanceId, id),
+          eq(cloudronSyncLogsTable.syncStatus, "success"),
+        ),
+      )
+      .orderBy(desc(cloudronSyncLogsTable.createdAt))
+      .limit(1);
 
     res.json({
       instance: publicInstance(inst),
@@ -221,6 +232,12 @@ router.get("/instances/:id", requireAdmin, async (req, res) => {
               status: lastSyncRow.syncStatus,
               createdAt: lastSyncRow.createdAt.toISOString(),
               message: lastSyncRow.message,
+            }
+          : null,
+        lastSuccessfulSync: lastSuccessfulSyncRow
+          ? {
+              id: lastSuccessfulSyncRow.id,
+              createdAt: lastSuccessfulSyncRow.createdAt.toISOString(),
             }
           : null,
       },

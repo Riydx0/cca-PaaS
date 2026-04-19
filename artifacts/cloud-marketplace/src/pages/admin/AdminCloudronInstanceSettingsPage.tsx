@@ -21,6 +21,7 @@ interface DetailsResp {
     cachedApps: number;
     linkedClients: number;
     lastSync: { id: number; status: string; createdAt: string; message: string | null } | null;
+    lastSuccessfulSync: { id: number; createdAt: string } | null;
   };
 }
 
@@ -147,8 +148,12 @@ function SettingsContent({ id }: { id: number }) {
             }
           />
           <Field
-            label={t("admin.cloudron.settings.info.lastSync")}
+            label={t("admin.cloudron.settings.info.lastSyncAttempt")}
             value={data.stats.lastSync ? new Date(data.stats.lastSync.createdAt).toLocaleString() : "—"}
+          />
+          <Field
+            label={t("admin.cloudron.settings.info.lastSync")}
+            value={data.stats.lastSuccessfulSync ? new Date(data.stats.lastSuccessfulSync.createdAt).toLocaleString() : "—"}
           />
           <Field label={t("admin.cloudron.settings.info.linkedClients")} value={data.stats.linkedClients.toString()} />
           {inst.notes ? (
