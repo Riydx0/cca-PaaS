@@ -66,6 +66,8 @@ import {
   X,
   Settings2,
   ChevronDown,
+  FolderOpen,
+  Copy as CopyIcon,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ReactMarkdown from "react-markdown";
@@ -1153,6 +1155,123 @@ function AppDetailsModal({
   );
 }
 
+const FILE_MANAGER_APP_STORE_IDS = new Set([
+  "io.cloudron.surfer",
+  "com.cloudron.surfer",
+  "org.filebrowser.cloudronapp",
+  "io.filebrowser.cloudronapp",
+]);
+
+function AppFilesDialog({
+  app,
+  onClose,
+  instanceBaseUrl,
+  allApps,
+}: {
+  app: CloudronApp | null;
+  onClose: () => void;
+  instanceBaseUrl?: string;
+  allApps: CloudronApp[];
+}) {
+  const { t } = useI18n();
+
+  const host = (() => {
+    if (!instanceBaseUrl) return "";
+    try {
+      return new URL(instanceBaseUrl).host;
+    } catch {
+      return instanceBaseUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    }
+  })();
+
+  const fileManagerApp = allApps.find(
+    (a) => a.appStoreId && FILE_MANAGER_APP_STORE_IDS.has(a.appStoreId),
+  );
+  const fileManagerFqdn = fileManagerApp ? computeFqdn(fileManagerApp) : null;
+  const fileManagerUrl = fileManagerFqdn ? `https://${fileManagerFqdn}` : null;
+
+  const dataPath = app ? `/app/${app.id}/data` : "";
+
+  function copy(value: string) {
+    if (!value) return;
+    navigator.clipboard
+      .writeText(value)
+      .then(() => toast.success(t("admin.cloudron.app.files.copied")))
+      .catch(() => toast.error(t("admin.cloudron.app.files.copied")));
+  }
+
+  const title = (app?.manifest?.title || app?.id || "").toString();
+
+  return (
+    <Dialog open={!!app} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
+            {t("admin.cloudron.app.files.title").replace("{appName}", title)}
+          </DialogTitle>
+          <DialogDescription>
+            {t("admin.cloudron.app.files.intro")}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3 mt-2">
+          {[
+            { key: "host", label: t("admin.cloudron.app.files.sftp.host"), value: host },
+            { key: "port", label: t("admin.cloudron.app.files.sftp.port"), value: "222" },
+            { key: "user", label: t("admin.cloudron.app.files.sftp.user"), value: "cloudron" },
+            { key: "path", label: t("admin.cloudron.app.files.sftp.path"), value: dataPath },
+          ].map((row) => (
+            <div key={row.key} className="space-y-1">
+              <div className="text-xs text-muted-foreground">{row.label}</div>
+              <div className="flex items-center gap-2">
+                <code
+                  className="flex-1 text-xs bg-muted/60 rounded px-2 py-1.5 font-mono truncate"
+                  dir="ltr"
+                >
+                  {row.value || "—"}
+                </code>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => copy(row.value)}
+                  disabled={!row.value}
+                  aria-label={t("admin.cloudron.app.files.copy")}
+                >
+                  <CopyIcon className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))}
+
+          <p className="text-xs text-muted-foreground pt-1">
+            {t("admin.cloudron.app.files.sftp.passwordHint")}
+          </p>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-border">
+          {fileManagerUrl ? (
+            <Button
+              type="button"
+              className="w-full"
+              onClick={() => window.open(fileManagerUrl, "_blank", "noopener,noreferrer")}
+            >
+              <FolderOpen className="h-4 w-4 me-2" />
+              {t("admin.cloudron.app.files.openManager")}
+              <ExternalLink className="h-3.5 w-3.5 ms-2 opacity-70" />
+            </Button>
+          ) : (
+            <p className="text-xs text-muted-foreground text-center">
+              {t("admin.cloudron.app.files.noManager")}
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const TAG_VISIBLE_LIMIT = 24;
 
 export function AppStoreBrowser({ onInstall, onViewMyApps, instanceId = null }: { onInstall: (appStoreId: string) => void; onViewMyApps?: () => void; instanceId?: number | null }) {
@@ -1572,6 +1691,7 @@ export function AdminCloudronPage() {
   const [activeTasks, setActiveTasks] = useState<ActiveTask[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<CloudronInstance | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [filesTarget, setFilesTarget] = useState<CloudronApp | null>(null);
   const [activeTab, setActiveTab] = useState("installed");
 
   const { data: instancesData, isLoading: instancesLoading } = useQuery<CloudronInstancesResult>({
@@ -2016,6 +2136,13 @@ export function AdminCloudronPage() {
                                     <Globe className="h-4 w-4 me-2" />
                                     {t("admin.cloudron.app.btn.openAdmin")}
                                   </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    data-testid={`button-files-${app.id}`}
+                                    onSelect={() => setFilesTarget(app)}
+                                  >
+                                    <FolderOpen className="h-4 w-4 me-2" />
+                                    {t("admin.cloudron.app.btn.files")}
+                                  </DropdownMenuItem>
 
                                   <DropdownMenuSeparator />
 
@@ -2154,6 +2281,13 @@ export function AdminCloudronPage() {
           void refetch();
         }}
         instanceId={instanceId}
+      />
+
+      <AppFilesDialog
+        app={filesTarget}
+        onClose={() => setFilesTarget(null)}
+        instanceBaseUrl={appsData?.instanceBaseUrl}
+        allApps={apps}
       />
     </div>
   );
