@@ -18,6 +18,36 @@ function mapService(s: any) {
   };
 }
 
+// Per-productType required config fields. Mirrors the frontend dynamic-form rules.
+const REQUIRED_CONFIG_FIELDS: Record<string, string[]> = {
+  cloud_app: ["appId"],
+  ai_agent: ["engine"],
+  ai_model: ["modelName"],
+  mail_service: ["mailboxCount"],
+  storage_service: ["includedStorageGb"],
+  managed_service: ["customSpecs"],
+  custom: ["customSpecs"],
+};
+
+function validateProductTypeConfig(
+  productType: string | undefined,
+  config: unknown,
+): { ok: true } | { ok: false; field: string } {
+  if (!productType) return { ok: true };
+  const required = REQUIRED_CONFIG_FIELDS[productType];
+  if (!required || required.length === 0) return { ok: true };
+  const cfg = (config && typeof config === "object" ? config : {}) as Record<string, unknown>;
+  for (const f of required) {
+    const v = cfg[f];
+    const empty =
+      v == null ||
+      (typeof v === "string" && v.trim() === "") ||
+      (typeof v === "number" && (isNaN(v) || v === 0));
+    if (empty) return { ok: false, field: f };
+  }
+  return { ok: true };
+}
+
 router.get("/", requireAdmin, async (_req, res) => {
   try {
     const services = await db.select().from(cloudServicesTable).orderBy(cloudServicesTable.id);
@@ -32,6 +62,11 @@ router.post("/", requireSuperAdmin, async (req, res) => {
   const parsed = insertCloudServiceSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid data", details: parsed.error });
+    return;
+  }
+  const v = validateProductTypeConfig(parsed.data.productType, (parsed.data as any).config);
+  if (!v.ok) {
+    res.status(400).json({ error: `Missing required config field: ${v.field}`, field: v.field });
     return;
   }
   try {
@@ -61,6 +96,22 @@ router.patch("/:id", requireSuperAdmin, async (req, res) => {
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid data", details: parsed.error });
     return;
+  }
+  if (parsed.data.productType !== undefined || (parsed.data as any).config !== undefined) {
+    let productType = parsed.data.productType;
+    let config = (parsed.data as any).config;
+    if (productType === undefined || config === undefined) {
+      const [existing] = await db.select().from(cloudServicesTable).where(eq(cloudServicesTable.id, id));
+      if (existing) {
+        productType = productType ?? existing.productType;
+        config = config ?? existing.config;
+      }
+    }
+    const v = validateProductTypeConfig(productType, config);
+    if (!v.ok) {
+      res.status(400).json({ error: `Missing required config field: ${v.field}`, field: v.field });
+      return;
+    }
   }
   try {
     const [updated] = await db

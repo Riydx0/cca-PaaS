@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, type TranslationKey } from "@/lib/i18n";
 import { adminFetch } from "@/lib/adminFetch";
 import { useRole } from "@/hooks/useRole";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -11,10 +11,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Server, Plus, Pencil, Trash2, Loader2, Package } from "lucide-react";
+import {
+  Server, Plus, Pencil, Trash2, Loader2, Package, Eye,
+  Cloud, AppWindow, Bot, Brain, Mail, HardDrive, Settings as SettingsIcon, Box,
+  type LucideIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -71,6 +76,7 @@ interface Product {
   config?: Record<string, unknown> | null;
   internalNotes?: string | null;
   createdAt: string;
+  updatedAt?: string;
 }
 
 interface Provider {
@@ -80,13 +86,17 @@ interface Provider {
   active: boolean;
 }
 
+type FieldType = "text" | "number" | "switch" | "textarea" | "select";
+type SectionId = "identity" | "capacity" | "behavior";
 type FieldDef = {
   key: string;
   label: string;
-  type?: "text" | "number" | "switch" | "textarea" | "select";
+  type?: FieldType;
   options?: { value: string; label: string }[];
   placeholder?: string;
   span?: 1 | 2;
+  section?: SectionId;
+  required?: boolean;
 };
 
 interface FormState {
@@ -147,26 +157,70 @@ const emptyForm: FormState = {
   config: {},
 };
 
+// ----- Typed config readers -----
+function readStr(c: Record<string, unknown>, k: string, fallback = ""): string {
+  const v = c[k];
+  if (typeof v === "string") return v;
+  if (v == null) return fallback;
+  return String(v);
+}
+function readNum(c: Record<string, unknown>, k: string, fallback = 0): number {
+  const v = c[k];
+  if (typeof v === "number" && !isNaN(v)) return v;
+  if (typeof v === "string" && v !== "") {
+    const n = Number(v);
+    return isNaN(n) ? fallback : n;
+  }
+  return fallback;
+}
+function readBool(c: Record<string, unknown>, k: string): boolean {
+  const v = c[k];
+  return v === true || v === "true" || v === 1 || v === "1";
+}
+
 function summarySpecs(p: Product, t: (k: string) => string): string {
   const c = (p.config ?? {}) as Record<string, unknown>;
   switch (p.productType) {
-    case "server":
-      return `${p.cpu || c.cpu || 0}vCPU • ${p.ramGb || c.ramGb || 0}GB • ${p.storageGb || c.storageGb || 0}GB ${p.storageType || c.storageType || ""}`;
-    case "cloud_platform":
-      return `${c.platformName ?? "Platform"} • ${c.deploymentMode ?? ""} • ${c.includedAppsCount ?? 0} apps`;
-    case "cloud_app":
-      return `${c.platform ?? "Cloudron"} • ${c.appId ?? c.appSource ?? ""}${c.requiresDomain ? " • Domain" : ""}`;
-    case "ai_agent":
-      return `${c.engine ?? "Agent"} • ${c.templateName ?? ""}${c.requiresWhatsApp ? " • WA" : ""}`;
-    case "ai_model":
-      return `${c.modelName ?? "Model"} • ${c.minRamGb ?? 0}GB${c.gpuRequired ? " • GPU" : ""}`;
+    case "server": {
+      const cpu = p.cpu || readNum(c, "cpu");
+      const ram = p.ramGb || readNum(c, "ramGb");
+      const storage = p.storageGb || readNum(c, "storageGb");
+      const stype = p.storageType || readStr(c, "storageType");
+      return `${cpu}vCPU • ${ram}GB • ${storage}GB ${stype}`.trim();
+    }
+    case "cloud_platform": {
+      const name = readStr(c, "platformName") || t("admin.product.summary.platform");
+      const mode = readStr(c, "deploymentMode");
+      const apps = readNum(c, "includedAppsCount");
+      return `${name}${mode ? ` • ${mode}` : ""} • ${apps} ${t("admin.product.summary.apps")}`;
+    }
+    case "cloud_app": {
+      const platform = readStr(c, "platform") || "Cloudron";
+      const appId = readStr(c, "appId") || readStr(c, "appSource");
+      const dom = readBool(c, "requiresDomain") ? ` • ${t("admin.product.summary.domain")}` : "";
+      return `${platform}${appId ? ` • ${appId}` : ""}${dom}`;
+    }
+    case "ai_agent": {
+      const eng = readStr(c, "engine") || t("admin.product.summary.agent");
+      const tpl = readStr(c, "templateName");
+      const wa = readBool(c, "requiresWhatsApp") ? ` • ${t("admin.product.summary.whatsapp")}` : "";
+      return `${eng}${tpl ? ` • ${tpl}` : ""}${wa}`;
+    }
+    case "ai_model": {
+      const name = readStr(c, "modelName") || t("admin.product.summary.model");
+      const ram = readNum(c, "minRamGb");
+      const gpu = readBool(c, "gpuRequired") ? ` • ${t("admin.product.summary.gpu")}` : "";
+      return `${name} • ${ram}GB${gpu}`;
+    }
     case "mail_service":
-      return `${c.mailboxCount ?? 0} ${t("admin.product.mail.boxes")} • ${c.storagePerMailboxGb ?? 0}GB`;
+      return `${readNum(c, "mailboxCount")} ${t("admin.product.mail.boxes")} • ${readNum(c, "storagePerMailboxGb")}GB`;
     case "storage_service":
-      return `${c.includedStorageGb ?? 0}GB • ${c.maxUsers ?? 0} ${t("admin.product.storage.users")}`;
+      return `${readNum(c, "includedStorageGb")}GB • ${readNum(c, "maxUsers")} ${t("admin.product.storage.users")}`;
     case "managed_service":
-    case "custom":
-      return c.customSpecs ?? c.fulfillmentMode ?? t("admin.product.custom.label");
+    case "custom": {
+      const cs = readStr(c, "customSpecs") || readStr(c, "fulfillmentMode");
+      return cs || t("admin.product.custom.label");
+    }
     default:
       return "";
   }
@@ -176,82 +230,82 @@ function getDynamicFields(productType: ProductType, t: (k: string) => string): F
   switch (productType) {
     case "server":
       return [
-        { key: "region", label: t("label.region"), span: 2 },
-        { key: "cpu", label: t("label.cpu"), type: "number" },
-        { key: "ramGb", label: t("label.ram"), type: "number" },
-        { key: "storageGb", label: t("label.storage"), type: "number" },
-        { key: "storageType", label: t("admin.field.storageType"), type: "select", options: [
+        { key: "region", label: t("label.region"), span: 2, section: "identity" },
+        { key: "cpu", label: t("label.cpu"), type: "number", section: "capacity" },
+        { key: "ramGb", label: t("label.ram"), type: "number", section: "capacity" },
+        { key: "storageGb", label: t("label.storage"), type: "number", section: "capacity" },
+        { key: "storageType", label: t("admin.field.storageType"), type: "select", section: "capacity", options: [
           { value: "SSD", label: "SSD" }, { value: "NVMe", label: "NVMe" }, { value: "HDD", label: "HDD" },
         ] },
-        { key: "bandwidthTb", label: t("label.bandwidth"), type: "number" },
-        { key: "config.ipv4Count", label: t("admin.product.server.ipv4"), type: "number" },
-        { key: "config.osTemplate", label: t("admin.product.server.osTemplate"), span: 2 },
+        { key: "bandwidthTb", label: t("label.bandwidth"), type: "number", section: "capacity" },
+        { key: "config.ipv4Count", label: t("admin.product.server.ipv4"), type: "number", section: "behavior" },
+        { key: "config.osTemplate", label: t("admin.product.server.osTemplate"), span: 2, section: "behavior" },
       ];
     case "cloud_platform":
       return [
-        { key: "config.platformName", label: t("admin.product.platform.name"), span: 2 },
-        { key: "config.deploymentMode", label: t("admin.product.platform.deployMode"), type: "select", options: [
+        { key: "config.platformName", label: t("admin.product.platform.name"), span: 2, section: "identity" },
+        { key: "config.deploymentMode", label: t("admin.product.platform.deployMode"), type: "select", section: "behavior", options: [
           { value: "shared", label: "Shared" }, { value: "dedicated", label: "Dedicated" },
         ] },
-        { key: "config.includedAppsCount", label: t("admin.product.platform.appsCount"), type: "number" },
-        { key: "config.domainRequired", label: t("admin.product.platform.domainRequired"), type: "switch" },
-        { key: "config.managed", label: t("admin.product.managed"), type: "switch" },
+        { key: "config.includedAppsCount", label: t("admin.product.platform.appsCount"), type: "number", section: "capacity" },
+        { key: "config.domainRequired", label: t("admin.product.platform.domainRequired"), type: "switch", section: "behavior" },
+        { key: "config.managed", label: t("admin.product.managed"), type: "switch", section: "behavior" },
       ];
     case "cloud_app":
       return [
-        { key: "config.platform", label: t("admin.product.app.platform"), placeholder: "Cloudron" },
-        { key: "config.appSource", label: t("admin.product.app.source"), placeholder: "official | custom" },
-        { key: "config.appId", label: t("admin.product.app.id"), span: 2 },
-        { key: "config.requiresDomain", label: t("admin.product.app.requiresDomain"), type: "switch" },
-        { key: "config.requiresSubdomain", label: t("admin.product.app.requiresSubdomain"), type: "switch" },
-        { key: "config.requiresMailbox", label: t("admin.product.app.requiresMailbox"), type: "switch" },
-        { key: "config.managed", label: t("admin.product.managed"), type: "switch" },
-        { key: "config.defaultPlan", label: t("admin.product.app.defaultPlan"), span: 2 },
+        { key: "config.platform", label: t("admin.product.app.platform"), placeholder: "Cloudron", section: "identity" },
+        { key: "config.appSource", label: t("admin.product.app.source"), placeholder: "official | custom", section: "identity" },
+        { key: "config.appId", label: t("admin.product.app.id"), span: 2, section: "identity", required: true },
+        { key: "config.defaultPlan", label: t("admin.product.app.defaultPlan"), span: 2, section: "capacity" },
+        { key: "config.requiresDomain", label: t("admin.product.app.requiresDomain"), type: "switch", section: "behavior" },
+        { key: "config.requiresSubdomain", label: t("admin.product.app.requiresSubdomain"), type: "switch", section: "behavior" },
+        { key: "config.requiresMailbox", label: t("admin.product.app.requiresMailbox"), type: "switch", section: "behavior" },
+        { key: "config.managed", label: t("admin.product.managed"), type: "switch", section: "behavior" },
       ];
     case "ai_agent":
       return [
-        { key: "config.engine", label: t("admin.product.agent.engine"), placeholder: "OpenClaw / n8n" },
-        { key: "config.templateName", label: t("admin.product.agent.template") },
-        { key: "config.runtimeType", label: t("admin.product.agent.runtime"), placeholder: "docker | serverless" },
-        { key: "config.memoryLimitMb", label: t("admin.product.agent.memoryMb"), type: "number" },
-        { key: "config.requiresWhatsApp", label: t("admin.product.agent.requiresWhatsApp"), type: "switch" },
-        { key: "config.requiresApiKey", label: t("admin.product.agent.requiresApiKey"), type: "switch" },
-        { key: "config.managed", label: t("admin.product.managed"), type: "switch" },
+        { key: "config.engine", label: t("admin.product.agent.engine"), placeholder: "OpenClaw / n8n", section: "identity", required: true },
+        { key: "config.templateName", label: t("admin.product.agent.template"), section: "identity" },
+        { key: "config.runtimeType", label: t("admin.product.agent.runtime"), placeholder: "docker | serverless", section: "identity" },
+        { key: "config.memoryLimitMb", label: t("admin.product.agent.memoryMb"), type: "number", section: "capacity" },
+        { key: "config.requiresWhatsApp", label: t("admin.product.agent.requiresWhatsApp"), type: "switch", section: "behavior" },
+        { key: "config.requiresApiKey", label: t("admin.product.agent.requiresApiKey"), type: "switch", section: "behavior" },
+        { key: "config.managed", label: t("admin.product.managed"), type: "switch", section: "behavior" },
       ];
     case "ai_model":
       return [
-        { key: "config.modelName", label: t("admin.product.model.name"), span: 2 },
-        { key: "config.runtime", label: t("admin.product.model.runtime"), placeholder: "Ollama / vLLM" },
-        { key: "config.minRamGb", label: t("admin.product.model.minRam"), type: "number" },
-        { key: "config.contextLength", label: t("admin.product.model.context"), type: "number" },
-        { key: "config.accessType", label: t("admin.product.model.access"), type: "select", options: [
+        { key: "config.modelName", label: t("admin.product.model.name"), span: 2, section: "identity", required: true },
+        { key: "config.runtime", label: t("admin.product.model.runtime"), placeholder: "Ollama / vLLM", section: "identity" },
+        { key: "config.accessType", label: t("admin.product.model.access"), type: "select", section: "behavior", options: [
           { value: "api", label: "API" }, { value: "private", label: "Private" }, { value: "shared", label: "Shared" },
         ] },
-        { key: "config.gpuRequired", label: t("admin.product.model.gpu"), type: "switch" },
-        { key: "config.managed", label: t("admin.product.managed"), type: "switch" },
+        { key: "config.minRamGb", label: t("admin.product.model.minRam"), type: "number", section: "capacity" },
+        { key: "config.contextLength", label: t("admin.product.model.context"), type: "number", section: "capacity" },
+        { key: "config.gpuRequired", label: t("admin.product.model.gpu"), type: "switch", section: "behavior" },
+        { key: "config.managed", label: t("admin.product.managed"), type: "switch", section: "behavior" },
       ];
     case "mail_service":
       return [
-        { key: "config.mailboxCount", label: t("admin.product.mail.count"), type: "number" },
-        { key: "config.storagePerMailboxGb", label: t("admin.product.mail.storage"), type: "number" },
-        { key: "config.domainRequired", label: t("admin.product.mail.domainRequired"), type: "switch" },
-        { key: "config.antiSpam", label: t("admin.product.mail.antiSpam"), type: "switch" },
+        { key: "config.mailboxCount", label: t("admin.product.mail.count"), type: "number", section: "capacity", required: true },
+        { key: "config.storagePerMailboxGb", label: t("admin.product.mail.storage"), type: "number", section: "capacity" },
+        { key: "config.domainRequired", label: t("admin.product.mail.domainRequired"), type: "switch", section: "behavior" },
+        { key: "config.antiSpam", label: t("admin.product.mail.antiSpam"), type: "switch", section: "behavior" },
       ];
     case "storage_service":
       return [
-        { key: "config.includedStorageGb", label: t("admin.product.storage.included"), type: "number" },
-        { key: "config.maxUsers", label: t("admin.product.storage.maxUsers"), type: "number" },
-        { key: "config.backupIncluded", label: t("admin.product.storage.backup"), type: "switch" },
-        { key: "config.externalAccess", label: t("admin.product.storage.external"), type: "switch" },
+        { key: "config.includedStorageGb", label: t("admin.product.storage.included"), type: "number", section: "capacity", required: true },
+        { key: "config.maxUsers", label: t("admin.product.storage.maxUsers"), type: "number", section: "capacity" },
+        { key: "config.backupIncluded", label: t("admin.product.storage.backup"), type: "switch", section: "behavior" },
+        { key: "config.externalAccess", label: t("admin.product.storage.external"), type: "switch", section: "behavior" },
       ];
     case "managed_service":
     case "custom":
       return [
-        { key: "config.customSpecs", label: t("admin.product.custom.specs"), type: "textarea", span: 2 },
-        { key: "config.fulfillmentMode", label: t("admin.product.custom.fulfillment"), type: "select", options: [
+        { key: "config.customSpecs", label: t("admin.product.custom.specs"), type: "textarea", span: 2, section: "identity", required: true },
+        { key: "config.fulfillmentMode", label: t("admin.product.custom.fulfillment"), type: "select", section: "behavior", options: [
           { value: "manual", label: "Manual" }, { value: "auto", label: "Auto" }, { value: "hybrid", label: "Hybrid" },
         ] },
-        { key: "config.manualNotes", label: t("admin.product.custom.notes"), type: "textarea", span: 2 },
+        { key: "config.manualNotes", label: t("admin.product.custom.notes"), type: "textarea", span: 2, section: "behavior" },
       ];
     default:
       return [];
@@ -277,6 +331,48 @@ function setNested(obj: Record<string, unknown>, path: string, value: unknown): 
   return out;
 }
 
+// Coerce config values according to the field type defs (defensive on load + before save)
+function coerceConfig(config: Record<string, unknown>, fields: FieldDef[]): Record<string, unknown> {
+  let out = { ...config };
+  for (const f of fields) {
+    if (!f.key.startsWith("config.")) continue;
+    const inner = f.key.slice("config.".length);
+    const v = getNested(out, inner);
+    if (v == null || v === "") continue;
+    if (f.type === "number") {
+      const n = typeof v === "number" ? v : Number(v);
+      if (!isNaN(n)) out = setNested(out, inner, n);
+    } else if (f.type === "switch") {
+      out = setNested(out, inner, v === true || v === "true" || v === 1 || v === "1");
+    } else {
+      out = setNested(out, inner, typeof v === "string" ? v : String(v));
+    }
+  }
+  return out;
+}
+
+// ---- Icon mapper ----
+const ICON_MAP: Record<string, LucideIcon> = {
+  server: Server, cloud: Cloud, app: AppWindow, agent: Bot, brain: Brain,
+  mail: Mail, storage: HardDrive, settings: SettingsIcon, package: Package, box: Box,
+};
+const TYPE_FALLBACK_ICON: Record<ProductType, LucideIcon> = {
+  server: Server,
+  cloud_platform: Cloud,
+  cloud_app: AppWindow,
+  ai_agent: Bot,
+  ai_model: Brain,
+  mail_service: Mail,
+  storage_service: HardDrive,
+  managed_service: SettingsIcon,
+  custom: Package,
+};
+function ProductIcon({ icon, productType }: { icon?: string | null; productType: ProductType }) {
+  let Comp: LucideIcon | undefined = icon ? ICON_MAP[icon.toLowerCase()] : undefined;
+  if (!Comp) Comp = TYPE_FALLBACK_ICON[productType] ?? Package;
+  return <Comp className="h-4 w-4 text-primary" />;
+}
+
 export function AdminServices() {
   const { t } = useI18n();
   const { isSuperAdmin } = useRole();
@@ -284,8 +380,10 @@ export function AdminServices() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [filterType, setFilterType] = useState<ProductType | "all">("all");
+  const [viewTarget, setViewTarget] = useState<Product | null>(null);
 
   const { data: services, isLoading } = useQuery<Product[]>({
     queryKey: ["admin", "services"],
@@ -334,15 +432,19 @@ export function AdminServices() {
 
   const openCreate = () => {
     setEditTarget(null);
+    setErrors({});
     setForm({ ...emptyForm, config: {} });
     setDialogOpen(true);
   };
 
   const openEdit = (s: Product) => {
     setEditTarget(s);
+    setErrors({});
+    const productType = (s.productType ?? "server") as ProductType;
+    const fields = getDynamicFields(productType, t);
     setForm({
       ...emptyForm,
-      productType: (s.productType ?? "server") as ProductType,
+      productType,
       provider: s.provider ?? "",
       name: s.name ?? "",
       slug: s.slug ?? "",
@@ -367,13 +469,40 @@ export function AdminServices() {
       storageGb: String(s.storageGb ?? ""),
       storageType: s.storageType ?? "SSD",
       bandwidthTb: String(s.bandwidthTb ?? ""),
-      config: (s.config ?? {}) as Record<string, unknown>,
+      config: coerceConfig((s.config ?? {}) as Record<string, unknown>, fields),
     });
     setDialogOpen(true);
   };
 
+  const validate = (): Record<string, string> => {
+    const errs: Record<string, string> = {};
+    const reqMsg = (label: string) => t("admin.product.error.required").replace("{field}", label);
+    if (!form.name.trim()) errs["name"] = reqMsg(t("admin.field.name"));
+    if (!form.provider.trim()) errs["provider"] = reqMsg(t("label.provider"));
+    const fields = getDynamicFields(form.productType, t);
+    for (const f of fields) {
+      if (!f.required) continue;
+      const val = f.key.startsWith("config.")
+        ? getNested(form.config, f.key.slice("config.".length))
+        : (form as unknown as Record<string, unknown>)[f.key];
+      const empty =
+        val == null ||
+        (typeof val === "string" && val.trim() === "") ||
+        (typeof val === "number" && (isNaN(val) || val === 0));
+      if (empty) errs[f.key] = reqMsg(f.label);
+    }
+    return errs;
+  };
+
   const handleSubmit = () => {
+    const errs = validate();
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      toast.error(Object.values(errs)[0]);
+      return;
+    }
     const productType = form.productType;
+    const fields = getDynamicFields(productType, t);
     const num = (v: unknown) => (v === "" || v == null ? 0 : Number(v));
     const data: Record<string, unknown> = {
       serviceType: productType,
@@ -402,25 +531,112 @@ export function AdminServices() {
       storageGb: num(form.storageGb),
       storageType: form.storageType || "SSD",
       bandwidthTb: num(form.bandwidthTb).toString(),
-      config: form.config || {},
+      config: coerceConfig(form.config || {}, fields),
     };
     saveService.mutate(data);
   };
 
-  const setField = <K extends keyof FormState>(key: K | string, value: unknown) => {
-    if (typeof key === "string" && key.startsWith("config.")) {
+  const setField = (key: string, value: unknown, fieldType?: FieldType) => {
+    let v = value;
+    if (fieldType === "number") {
+      // store as number when not empty, else empty string for input control
+      if (typeof value === "string") {
+        if (value === "") v = "";
+        else { const n = Number(value); v = isNaN(n) ? value : n; }
+      }
+    } else if (fieldType === "switch") {
+      v = !!value;
+    }
+    if (key.startsWith("config.")) {
       const inner = key.slice("config.".length);
-      setForm((p) => ({ ...p, config: setNested(p.config ?? {}, inner, value) as Record<string, unknown> }));
+      // For number config we want actual number stored (or undefined when empty)
+      const stored = fieldType === "number" && v === "" ? undefined : v;
+      setForm((p) => ({ ...p, config: setNested(p.config ?? {}, inner, stored) as Record<string, unknown> }));
     } else {
-      setForm((p) => ({ ...p, [key as keyof FormState]: value } as FormState));
+      setForm((p) => ({ ...p, [key]: v } as unknown as FormState));
+    }
+    if (errors[key]) {
+      setErrors((e) => { const n = { ...e }; delete n[key]; return n; });
     }
   };
   const getField = (key: string): unknown => {
-    if (key.startsWith("config.")) return getNested(form.config ?? {}, key.slice("config.".length)) ?? "";
+    if (key.startsWith("config.")) {
+      const v = getNested(form.config ?? {}, key.slice("config.".length));
+      return v ?? "";
+    }
     return (form as unknown as Record<string, unknown>)[key] ?? "";
   };
 
   const dynamicFields = getDynamicFields(form.productType as ProductType, t);
+  const sectionMeta: { id: SectionId; titleKey: TranslationKey; helpKey: TranslationKey }[] = [
+    { id: "identity", titleKey: "admin.product.section.identity", helpKey: "admin.product.section.identityHelp" },
+    { id: "capacity", titleKey: "admin.product.section.capacity", helpKey: "admin.product.section.capacityHelp" },
+    { id: "behavior", titleKey: "admin.product.section.behavior", helpKey: "admin.product.section.behaviorHelp" },
+  ];
+
+  const renderField = (fd: FieldDef) => {
+    const colSpan = fd.span === 2 ? "col-span-2" : "";
+    const err = errors[fd.key];
+    const labelNode = (
+      <Label className="flex items-center gap-1">
+        {fd.label}
+        {fd.required && <span className="text-destructive">*</span>}
+      </Label>
+    );
+    if (fd.type === "switch") {
+      return (
+        <div key={fd.key} className={`flex items-center gap-2 pt-5 ${colSpan}`}>
+          <Switch
+            checked={!!getField(fd.key)}
+            onCheckedChange={(v) => setField(fd.key, v, "switch")}
+          />
+          <Label>{fd.label}</Label>
+        </div>
+      );
+    }
+    if (fd.type === "select") {
+      return (
+        <div key={fd.key} className={`grid gap-1.5 ${colSpan}`}>
+          {labelNode}
+          <Select value={String(getField(fd.key) ?? "")} onValueChange={(v) => setField(fd.key, v, "select")}>
+            <SelectTrigger className={err ? "border-destructive" : ""}><SelectValue placeholder={fd.placeholder} /></SelectTrigger>
+            <SelectContent>
+              {fd.options?.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {err && <p className="text-xs text-destructive">{err}</p>}
+        </div>
+      );
+    }
+    if (fd.type === "textarea") {
+      return (
+        <div key={fd.key} className={`grid gap-1.5 ${colSpan}`}>
+          {labelNode}
+          <Textarea
+            rows={3}
+            value={String(getField(fd.key) ?? "")}
+            onChange={(e) => setField(fd.key, e.target.value, "textarea")}
+            placeholder={fd.placeholder}
+            className={err ? "border-destructive" : ""}
+          />
+          {err && <p className="text-xs text-destructive">{err}</p>}
+        </div>
+      );
+    }
+    return (
+      <div key={fd.key} className={`grid gap-1.5 ${colSpan}`}>
+        {labelNode}
+        <Input
+          type={fd.type === "number" ? "number" : "text"}
+          value={String(getField(fd.key) ?? "")}
+          onChange={(e) => setField(fd.key, e.target.value, fd.type)}
+          placeholder={fd.placeholder}
+          className={err ? "border-destructive" : ""}
+        />
+        {err && <p className="text-xs text-destructive">{err}</p>}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -461,14 +677,14 @@ export function AdminServices() {
           </div>
         ) : (
           <>
-            <div className="hidden md:grid grid-cols-[1.4fr_110px_110px_120px_110px_1fr_120px] gap-3 px-5 py-3 bg-muted/40 border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="hidden md:grid grid-cols-[1.4fr_110px_110px_120px_110px_1fr_150px] gap-3 px-5 py-3 bg-muted/40 border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <span>{t("admin.col.product")}</span>
               <span>{t("admin.field.productType")}</span>
               <span>{t("label.provider")}</span>
               <span>{t("label.price")}</span>
               <span>{t("admin.col.visibility")}</span>
               <span>{t("admin.col.summary")}</span>
-              {isSuperAdmin && <span>{t("admin.col.actions")}</span>}
+              <span>{t("admin.col.actions")}</span>
             </div>
             <div className="divide-y divide-border">
               {filtered.map((s, i) => (
@@ -477,11 +693,11 @@ export function AdminServices() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: i * 0.02 }}
-                  className="grid grid-cols-1 md:grid-cols-[1.4fr_110px_110px_120px_110px_1fr_120px] gap-3 items-center px-5 py-4 hover:bg-muted/30 transition-colors"
+                  className="grid grid-cols-1 md:grid-cols-[1.4fr_110px_110px_120px_110px_1fr_150px] gap-3 items-center px-5 py-4 hover:bg-muted/30 transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="bg-primary/10 p-2 rounded-md shrink-0">
-                      {s.productType === "server" ? <Server className="h-4 w-4 text-primary" /> : <Package className="h-4 w-4 text-primary" />}
+                      <ProductIcon icon={s.icon} productType={(s.productType ?? "server") as ProductType} />
                     </div>
                     <div className="min-w-0">
                       <p className="font-semibold truncate flex items-center gap-2">
@@ -503,21 +719,26 @@ export function AdminServices() {
                   </div>
                   <div className="text-xs text-muted-foreground truncate">{summarySpecs(s, t)}</div>
 
-                  {isSuperAdmin && (
-                    <div className="flex items-center gap-2 justify-end">
-                      <Switch
-                        checked={s.isActive}
-                        onCheckedChange={() => toggleService.mutate(s.id)}
-                        disabled={toggleService.isPending}
-                      />
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setDeleteId(s.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1 justify-end">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setViewTarget(s)} title={t("admin.product.btn.view")}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    {isSuperAdmin && (
+                      <>
+                        <Switch
+                          checked={s.isActive}
+                          onCheckedChange={() => toggleService.mutate(s.id)}
+                          disabled={toggleService.isPending}
+                        />
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setDeleteId(s.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </motion.div>
               ))}
             </div>
@@ -525,6 +746,7 @@ export function AdminServices() {
         )}
       </Card>
 
+      {/* Edit / Create dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -552,8 +774,9 @@ export function AdminServices() {
                 </Select>
               </div>
               <div className="grid gap-1.5 col-span-2">
-                <Label>{t("admin.field.name")}</Label>
-                <Input value={form.name} onChange={(e) => setField("name", e.target.value)} />
+                <Label className="flex items-center gap-1">{t("admin.field.name")}<span className="text-destructive">*</span></Label>
+                <Input value={form.name} onChange={(e) => setField("name", e.target.value)} className={errors.name ? "border-destructive" : ""} />
+                {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
               </div>
               <div className="grid gap-1.5">
                 <Label>{t("admin.field.slug")}</Label>
@@ -572,9 +795,9 @@ export function AdminServices() {
                 <Textarea rows={3} value={form.fullDescription} onChange={(e) => setField("fullDescription", e.target.value)} />
               </div>
               <div className="grid gap-1.5">
-                <Label>{t("label.provider")}</Label>
+                <Label className="flex items-center gap-1">{t("label.provider")}<span className="text-destructive">*</span></Label>
                 <Select value={form.provider} onValueChange={(v) => setField("provider", v)}>
-                  <SelectTrigger><SelectValue placeholder={t("admin.field.selectProvider")} /></SelectTrigger>
+                  <SelectTrigger className={errors.provider ? "border-destructive" : ""}><SelectValue placeholder={t("admin.field.selectProvider")} /></SelectTrigger>
                   <SelectContent>
                     {providers && providers.filter(p => p.active).map((p) => (
                       <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
@@ -584,6 +807,7 @@ export function AdminServices() {
                     )}
                   </SelectContent>
                 </Select>
+                {errors.provider && <p className="text-xs text-destructive">{errors.provider}</p>}
               </div>
               <div className="grid gap-1.5">
                 <Label>{t("admin.field.badge")}</Label>
@@ -636,55 +860,26 @@ export function AdminServices() {
               </div>
             </TabsContent>
 
-            <TabsContent value="specs" className="grid grid-cols-2 gap-4 pt-4">
+            <TabsContent value="specs" className="space-y-6 pt-4">
               {dynamicFields.length === 0 ? (
-                <p className="col-span-2 text-sm text-muted-foreground">{t("admin.product.specs.empty")}</p>
-              ) : dynamicFields.map((fd) => {
-                const colSpan = fd.span === 2 ? "col-span-2" : "";
-                if (fd.type === "switch") {
+                <p className="text-sm text-muted-foreground">{t("admin.product.specs.empty")}</p>
+              ) : (
+                sectionMeta.map((sec) => {
+                  const sectionFields = dynamicFields.filter((f) => (f.section ?? "identity") === sec.id);
+                  if (sectionFields.length === 0) return null;
                   return (
-                    <div key={fd.key} className={`flex items-center gap-2 pt-5 ${colSpan}`}>
-                      <Switch
-                        checked={!!getField(fd.key)}
-                        onCheckedChange={(v) => setField(fd.key, v)}
-                      />
-                      <Label>{fd.label}</Label>
+                    <div key={sec.id} className="space-y-3">
+                      <div className="border-b border-border pb-1">
+                        <h4 className="text-sm font-semibold">{t(sec.titleKey)}</h4>
+                        <p className="text-xs text-muted-foreground">{t(sec.helpKey)}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        {sectionFields.map(renderField)}
+                      </div>
                     </div>
                   );
-                }
-                if (fd.type === "select") {
-                  return (
-                    <div key={fd.key} className={`grid gap-1.5 ${colSpan}`}>
-                      <Label>{fd.label}</Label>
-                      <Select value={String(getField(fd.key) ?? "")} onValueChange={(v) => setField(fd.key, v)}>
-                        <SelectTrigger><SelectValue placeholder={fd.placeholder} /></SelectTrigger>
-                        <SelectContent>
-                          {fd.options?.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  );
-                }
-                if (fd.type === "textarea") {
-                  return (
-                    <div key={fd.key} className={`grid gap-1.5 ${colSpan}`}>
-                      <Label>{fd.label}</Label>
-                      <Textarea rows={3} value={String(getField(fd.key) ?? "")} onChange={(e) => setField(fd.key, e.target.value)} placeholder={fd.placeholder} />
-                    </div>
-                  );
-                }
-                return (
-                  <div key={fd.key} className={`grid gap-1.5 ${colSpan}`}>
-                    <Label>{fd.label}</Label>
-                    <Input
-                      type={fd.type === "number" ? "number" : "text"}
-                      value={String(getField(fd.key) ?? "")}
-                      onChange={(e) => setField(fd.key, fd.type === "number" ? e.target.value : e.target.value)}
-                      placeholder={fd.placeholder}
-                    />
-                  </div>
-                );
-              })}
+                })
+              )}
             </TabsContent>
 
             <TabsContent value="advanced" className="grid grid-cols-2 gap-4 pt-4">
@@ -729,6 +924,15 @@ export function AdminServices() {
         </DialogContent>
       </Dialog>
 
+      {/* Read-only details drawer */}
+      <Sheet open={viewTarget !== null} onOpenChange={(o) => !o && setViewTarget(null)}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          {viewTarget && (
+            <ViewDrawer product={viewTarget} t={t} />
+          )}
+        </SheetContent>
+      </Sheet>
+
       <Dialog open={deleteId !== null} onOpenChange={(o) => !o && setDeleteId(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -750,5 +954,105 @@ export function AdminServices() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function ViewDrawer({ product, t }: { product: Product; t: (k: string) => string }) {
+  const productType = (product.productType ?? "server") as ProductType;
+  const fields = getDynamicFields(productType, t);
+
+  const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
+    <div className="flex justify-between gap-3 py-1.5 text-sm border-b border-border/40 last:border-b-0">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium text-end break-words max-w-[60%]">{value}</span>
+    </div>
+  );
+  const renderValue = (f: FieldDef): React.ReactNode => {
+    let raw: unknown;
+    if (f.key.startsWith("config.")) {
+      raw = getNested(product.config ?? {}, f.key.slice("config.".length));
+    } else {
+      raw = (product as unknown as Record<string, unknown>)[f.key];
+    }
+    if (raw == null || raw === "") return <span className="text-muted-foreground">—</span>;
+    if (f.type === "switch") return raw ? t("subscription.yes") : t("subscription.no");
+    return String(raw);
+  };
+
+  const grouped = (["identity", "capacity", "behavior"] as SectionId[]).map((id) => ({
+    id, fields: fields.filter((f) => (f.section ?? "identity") === id),
+  })).filter((g) => g.fields.length > 0);
+
+  return (
+    <>
+      <SheetHeader>
+        <SheetTitle className="flex items-center gap-2">
+          <ProductIcon icon={product.icon} productType={productType} />
+          {product.name}
+        </SheetTitle>
+      </SheetHeader>
+      <div className="mt-4 space-y-5">
+        <section>
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            {t("admin.product.view.identity")}
+          </h4>
+          <Row label={t("admin.field.productType")} value={t(`admin.productType.${productType}`)} />
+          <Row label={t("admin.field.slug")} value={product.slug || "—"} />
+          <Row label={t("admin.field.category")} value={product.category || "—"} />
+          <Row label={t("label.provider")} value={product.provider} />
+          <Row label={t("admin.field.badge")} value={product.badge || "—"} />
+          {product.shortDescription && <Row label={t("admin.field.shortDescription")} value={product.shortDescription} />}
+        </section>
+
+        <section>
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            {t("admin.product.view.pricing")}
+          </h4>
+          <Row label={t("admin.field.billingType")} value={product.billingType || "monthly"} />
+          <Row label={t("admin.field.priceMonthly")} value={`$${Number(product.priceMonthly).toFixed(2)}`} />
+          <Row label={t("admin.field.priceYearly")} value={`$${Number(product.priceYearly ?? 0).toFixed(2)}`} />
+          <Row label={t("admin.field.setupFee")} value={`$${Number(product.setupFee ?? 0).toFixed(2)}`} />
+        </section>
+
+        <section>
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            {t("admin.product.view.typeSpecs")}
+          </h4>
+          {grouped.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("admin.product.view.empty")}</p>
+          ) : (
+            grouped.map((g) => (
+              <div key={g.id} className="mb-3">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80 mb-1">
+                  {t(`admin.product.section.${g.id}`)}
+                </p>
+                {g.fields.map((f) => (
+                  <Row key={f.key} label={f.label} value={renderValue(f)} />
+                ))}
+              </div>
+            ))
+          )}
+        </section>
+
+        <section>
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            {t("admin.product.view.provisioning")}
+          </h4>
+          <Row label={t("admin.field.provisioningType")} value={product.provisioningType || "manual"} />
+          <Row label={t("admin.field.autoProvision")} value={product.autoProvision ? t("subscription.yes") : t("subscription.no")} />
+        </section>
+
+        <section>
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+            {t("admin.product.view.meta")}
+          </h4>
+          <Row label={t("admin.field.sortOrder")} value={String(product.sortOrder ?? 0)} />
+          <Row label={t("admin.product.view.createdAt")} value={new Date(product.createdAt).toLocaleString()} />
+          {product.updatedAt && (
+            <Row label={t("admin.product.view.updatedAt")} value={new Date(product.updatedAt).toLocaleString()} />
+          )}
+        </section>
+      </div>
+    </>
   );
 }
