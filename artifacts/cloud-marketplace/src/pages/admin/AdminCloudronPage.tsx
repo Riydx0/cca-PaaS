@@ -31,6 +31,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   CloudOff,
   RefreshCw,
   Plus,
@@ -56,6 +64,8 @@ import {
   BookOpen,
   ImageOff,
   X,
+  Settings2,
+  ChevronDown,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ReactMarkdown from "react-markdown";
@@ -1953,113 +1963,117 @@ export function AdminCloudronPage() {
                             {lastUpdated ? new Date(lastUpdated).toLocaleDateString() : "—"}
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                              {detailsHref && (
-                                <Link href={detailsHref}>
+                            <div className="flex items-center justify-end">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-7 px-2 text-xs"
-                                    data-testid={`button-view-details-${app.id}`}
+                                    className="h-8 gap-1.5 text-xs"
+                                    data-testid={`button-configure-app-${app.id}`}
+                                    disabled={isBusy && syncingAppId !== app.id}
                                   >
-                                    <Info className="h-3.5 w-3.5 me-1" />
-                                    {t("admin.cloudron.app.btn.viewDetails")}
+                                    {isBusy || syncingAppId === app.id ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <Settings2 className="h-3.5 w-3.5" />
+                                    )}
+                                    {t("admin.cloudron.app.btn.configure")}
+                                    <ChevronDown className="h-3.5 w-3.5 opacity-60" />
                                   </Button>
-                                </Link>
-                              )}
-                              {fqdn && (
-                                <a href={`https://${fqdn}`} target="_blank" rel="noopener noreferrer">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 px-2 text-xs"
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56">
+                                  <DropdownMenuLabel className="text-xs text-muted-foreground font-normal truncate">
+                                    {app.manifest?.title || app.id}
+                                  </DropdownMenuLabel>
+                                  <DropdownMenuSeparator />
+
+                                  {detailsHref && (
+                                    <DropdownMenuItem asChild data-testid={`button-view-details-${app.id}`}>
+                                      <Link href={detailsHref} className="cursor-pointer">
+                                        <Info className="h-4 w-4 me-2" />
+                                        {t("admin.cloudron.app.btn.viewDetails")}
+                                      </Link>
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem
+                                    disabled={!fqdn}
                                     data-testid={`button-open-app-${app.id}`}
+                                    onSelect={() => {
+                                      if (fqdn) window.open(`https://${fqdn}`, "_blank", "noopener,noreferrer");
+                                    }}
                                   >
-                                    <ExternalLink className="h-3.5 w-3.5 me-1" />
+                                    <ExternalLink className="h-4 w-4 me-2" />
                                     {t("admin.cloudron.app.btn.openApp")}
-                                  </Button>
-                                </a>
-                              )}
-                              {adminUrl && (
-                                <a href={adminUrl} target="_blank" rel="noopener noreferrer">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 px-2 text-xs"
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    disabled={!adminUrl}
                                     data-testid={`button-open-admin-${app.id}`}
+                                    onSelect={() => {
+                                      if (adminUrl) window.open(adminUrl, "_blank", "noopener,noreferrer");
+                                    }}
                                   >
-                                    <Globe className="h-3.5 w-3.5 me-1" />
+                                    <Globe className="h-4 w-4 me-2" />
                                     {t("admin.cloudron.app.btn.openAdmin")}
-                                  </Button>
-                                </a>
-                              )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 px-2 text-xs"
-                                disabled={syncingAppId === app.id || !instanceId}
-                                onClick={() => syncAppMutation.mutate(app.id)}
-                                data-testid={`button-sync-app-${app.id}`}
-                                title={t("admin.cloudron.app.btn.syncHint")}
-                              >
-                                <RefreshCw className={`h-3.5 w-3.5 me-1 ${syncingAppId === app.id ? "animate-spin" : ""}`} />
-                                {t("admin.cloudron.app.btn.sync")}
-                              </Button>
-                              {app.runState === "running" && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs text-amber-700 border-amber-300 hover:bg-amber-50 hover:text-amber-800 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-500/10"
-                                  disabled={isBusy}
-                                  onClick={() => setConfirmAction({ type: "stop", app })}
-                                >
-                                  <Square className="h-3.5 w-3.5 me-1" />
-                                  {t("admin.cloudron.stop.btn")}
-                                </Button>
-                              )}
-                              {app.runState === "stopped" && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:border-emerald-700 dark:hover:bg-emerald-500/10"
-                                  disabled={isBusy}
-                                  onClick={() => setConfirmAction({ type: "start", app })}
-                                >
-                                  <Play className="h-3.5 w-3.5 me-1" />
-                                  {t("admin.cloudron.start.btn")}
-                                </Button>
-                              )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 px-2 text-xs text-blue-600 border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:border-blue-400/40 dark:hover:bg-blue-500/10"
-                                disabled={isBusy}
-                                onClick={() => setConfirmAction({ type: "update", app })}
-                              >
-                                <ArrowUpCircle className="h-3.5 w-3.5 me-1" />
-                                {t("admin.cloudron.update.btn")}
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className={`h-7 px-2 text-xs${app.runState === "stopped" ? " opacity-40 cursor-not-allowed" : ""}`}
-                                disabled={isBusy || app.runState === "stopped"}
-                                title={app.runState === "stopped" ? t("admin.cloudron.restart.disabledStopped") : undefined}
-                                onClick={() => setConfirmAction({ type: "restart", app })}
-                              >
-                                <RotateCcw className="h-3.5 w-3.5 me-1" />
-                                {t("admin.cloudron.restart.btn")}
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 px-2 text-xs text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
-                                disabled={isBusy}
-                                onClick={() => setConfirmAction({ type: "uninstall", app })}
-                              >
-                                <Trash2 className="h-3.5 w-3.5 me-1" />
-                                {t("admin.cloudron.uninstall.btn")}
-                              </Button>
+                                  </DropdownMenuItem>
+
+                                  <DropdownMenuSeparator />
+
+                                  {app.runState === "running" ? (
+                                    <DropdownMenuItem
+                                      disabled={isBusy}
+                                      onSelect={() => setConfirmAction({ type: "stop", app })}
+                                      className="text-amber-700 focus:text-amber-800 dark:text-amber-400"
+                                    >
+                                      <Square className="h-4 w-4 me-2" />
+                                      {t("admin.cloudron.stop.btn")}
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem
+                                      disabled={isBusy || app.runState !== "stopped"}
+                                      onSelect={() => setConfirmAction({ type: "start", app })}
+                                      className="text-emerald-700 focus:text-emerald-800 dark:text-emerald-400"
+                                    >
+                                      <Play className="h-4 w-4 me-2" />
+                                      {t("admin.cloudron.start.btn")}
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem
+                                    disabled={isBusy || app.runState === "stopped"}
+                                    onSelect={() => setConfirmAction({ type: "restart", app })}
+                                  >
+                                    <RotateCcw className="h-4 w-4 me-2" />
+                                    {t("admin.cloudron.restart.btn")}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    disabled={isBusy}
+                                    onSelect={() => setConfirmAction({ type: "update", app })}
+                                    className="text-blue-600 focus:text-blue-700 dark:text-blue-400"
+                                  >
+                                    <ArrowUpCircle className="h-4 w-4 me-2" />
+                                    {t("admin.cloudron.update.btn")}
+                                  </DropdownMenuItem>
+
+                                  <DropdownMenuSeparator />
+
+                                  <DropdownMenuItem
+                                    disabled={syncingAppId === app.id || !instanceId}
+                                    onSelect={() => syncAppMutation.mutate(app.id)}
+                                    data-testid={`button-sync-app-${app.id}`}
+                                  >
+                                    <RefreshCw className={`h-4 w-4 me-2 ${syncingAppId === app.id ? "animate-spin" : ""}`} />
+                                    {t("admin.cloudron.app.btn.sync")}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    disabled={isBusy}
+                                    onSelect={() => setConfirmAction({ type: "uninstall", app })}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4 me-2" />
+                                    {t("admin.cloudron.uninstall.btn")}
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </TableCell>
                         </TableRow>

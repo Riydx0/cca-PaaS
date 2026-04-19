@@ -312,7 +312,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 p-3 lg:p-4 space-y-0.5 overflow-y-auto">
         <NavLinks onClick={onClick} />
         <div className="pt-4 border-t border-sidebar-border mt-4">
           <Link
@@ -350,7 +350,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background flex w-full">
-      <aside className="hidden md:flex w-64 flex-col bg-sidebar text-sidebar-foreground border-e border-sidebar-border shrink-0">
+      <aside className="hidden md:flex w-60 lg:w-64 flex-col bg-sidebar text-sidebar-foreground border-e border-sidebar-border shrink-0">
         <SidebarContent />
       </aside>
 
