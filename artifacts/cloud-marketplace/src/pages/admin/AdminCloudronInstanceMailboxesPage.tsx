@@ -93,6 +93,7 @@ type CreatePayload = {
 type UpdatePayload = Partial<{
   password: string;
   ownerId: string;
+  ownerType: "user" | "group";
   hasPop3: boolean;
   active: boolean;
   storageQuota: number;
@@ -665,6 +666,7 @@ function EditMailboxDialog({
               onValueChange={(v) => setForm((f) => ({
                 ...f,
                 ownerId: v === "__none__" ? "" : v,
+                ownerType: v === "__none__" ? undefined : "user",
               }))}
             >
               <SelectTrigger><SelectValue /></SelectTrigger>
