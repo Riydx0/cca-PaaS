@@ -296,6 +296,7 @@ export default function AdminCloudronInstanceMailboxesPage({ instanceId }: Props
                     <TableHead>{t("admin.cloudron.mailboxes.col.address")}</TableHead>
                     <TableHead>{t("admin.cloudron.mailboxes.col.owner")}</TableHead>
                     <TableHead>{t("admin.cloudron.mailboxes.col.usage")}</TableHead>
+                    <TableHead>{t("admin.cloudron.mailboxes.col.quota")}</TableHead>
                     <TableHead>{t("admin.cloudron.mailboxes.col.status")}</TableHead>
                     <TableHead>{t("admin.cloudron.mailboxes.col.pop3")}</TableHead>
                     <TableHead>{t("admin.cloudron.mailboxes.col.aliases")}</TableHead>
@@ -317,6 +318,11 @@ export default function AdminCloudronInstanceMailboxesPage({ instanceId }: Props
                         <TableCell className="font-medium">{m.address ?? "—"}</TableCell>
                         <TableCell className="text-sm">{ownerLabel}</TableCell>
                         <TableCell><UsageBar used={m.usageBytes} quota={m.quotaBytes} t={t} /></TableCell>
+                        <TableCell className="text-sm whitespace-nowrap">
+                          {m.quotaBytes && m.quotaBytes > 0
+                            ? fmtBytes(m.quotaBytes)
+                            : <span className="text-muted-foreground">{t("admin.cloudron.mailboxes.unlimited")}</span>}
+                        </TableCell>
                         <TableCell>
                           <Badge
                             variant={isActive ? "outline" : "secondary"}

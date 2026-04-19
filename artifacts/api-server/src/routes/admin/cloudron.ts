@@ -1043,6 +1043,10 @@ router.post("/instances/:id/mailboxes/sync", requireAdmin, async (req, res) => {
   } catch (err) { handleCloudronError(res, err); }
 });
 
+// Per-mailbox routes use ":address" (full e-mail "name@domain") rather than just
+// ":name". This is intentional: a Cloudron instance can host mailboxes across
+// multiple mail domains, so the local-part alone is not unique. The address is
+// URL-encoded by the client and used as the cache row's `cloudronMailboxId`.
 router.get("/instances/:id/mailboxes/:address", requireAdmin, async (req, res) => {
   const id = parseInstanceId(req, res); if (id === null) return;
   try {
