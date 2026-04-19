@@ -394,7 +394,41 @@ router.get("/instances/:id/activity", requireAdmin, async (req, res) => {
     return;
   }
 
+  const limit = Math.min(parseInt(String(req.query["limit"] ?? "100"), 10) || 100, 500);
+  const entityTypeRaw = typeof req.query["entityType"] === "string" ? String(req.query["entityType"]) : null;
+  const actionRaw = typeof req.query["action"] === "string" ? String(req.query["action"]) : null;
+  const statusRaw = typeof req.query["status"] === "string" ? String(req.query["status"]) : null;
+  const fromRaw = typeof req.query["from"] === "string" ? String(req.query["from"]) : null;
+  const toRaw = typeof req.query["to"] === "string" ? String(req.query["to"]) : null;
+
+  const ALLOWED_TYPES = ["cloudron_app", "cloudron_mailbox"] as const;
+  const allowedTypes = entityTypeRaw && (ALLOWED_TYPES as readonly string[]).includes(entityTypeRaw)
+    ? [entityTypeRaw]
+    : [...ALLOWED_TYPES];
+
+  const fromDate = fromRaw ? new Date(fromRaw) : null;
+  const toDate = toRaw ? new Date(toRaw) : null;
+  if ((fromDate && isNaN(fromDate.getTime())) || (toDate && isNaN(toDate.getTime()))) {
+    res.status(400).json({ error: "Invalid date range" });
+    return;
+  }
+
   try {
+    const conds: any[] = [
+      inArray(auditLogsTable.entityType, allowedTypes),
+      sql`(${auditLogsTable.details}->>'instanceId')::integer = ${id}`,
+    ];
+    if (actionRaw && /^[a-z0-9_]+$/i.test(actionRaw)) {
+      conds.push(eq(auditLogsTable.action, actionRaw));
+    }
+    if (statusRaw === "success") {
+      conds.push(sql`COALESCE(${auditLogsTable.details}->>'status', 'success') = 'success'`);
+    } else if (statusRaw === "failed") {
+      conds.push(sql`${auditLogsTable.details}->>'status' = 'failed'`);
+    }
+    if (fromDate) conds.push(sql`${auditLogsTable.createdAt} >= ${fromDate}`);
+    if (toDate) conds.push(sql`${auditLogsTable.createdAt} <= ${toDate}`);
+
     const rows = await db
       .select({
         log: auditLogsTable,
@@ -403,14 +437,9 @@ router.get("/instances/:id/activity", requireAdmin, async (req, res) => {
       })
       .from(auditLogsTable)
       .leftJoin(usersTable, eq(auditLogsTable.userId, usersTable.id))
-      .where(
-        and(
-          inArray(auditLogsTable.entityType, ["cloudron_app", "cloudron_mailbox"]),
-          sql`(${auditLogsTable.details}->>'instanceId')::integer = ${id}`
-        )
-      )
+      .where(and(...conds))
       .orderBy(desc(auditLogsTable.createdAt))
-      .limit(50);
+      .limit(limit);
 
     const logs = rows.map((r) => {
       const det = r.log.details as Record<string, unknown> | null;
@@ -433,6 +462,45 @@ router.get("/instances/:id/activity", requireAdmin, async (req, res) => {
   } catch (err) {
     console.error("[admin/cloudron] activity fetch error", err);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/admin/cloudron/instances/:id/clients
+ * Returns the list of users (clients) linked to this Cloudron instance.
+ */
+router.get("/instances/:id/clients", requireAdmin, async (req, res) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid instance ID" }); return; }
+  try {
+    const rows = await db
+      .select({
+        access: cloudronClientAccessTable,
+        userId: usersTable.id,
+        userName: usersTable.name,
+        userEmail: usersTable.email,
+      })
+      .from(cloudronClientAccessTable)
+      .leftJoin(usersTable, eq(cloudronClientAccessTable.userId, usersTable.id))
+      .where(eq(cloudronClientAccessTable.instanceId, id))
+      .orderBy(desc(cloudronClientAccessTable.linkedAt));
+
+    res.json({
+      clients: rows.map((r) => ({
+        id: r.access.id,
+        userId: r.access.userId,
+        permissions: Array.isArray(r.access.permissions) ? r.access.permissions : [],
+        installQuota: r.access.installQuota,
+        relationshipType: r.access.relationshipType,
+        linkedAt: r.access.linkedAt.toISOString(),
+        user: r.userId
+          ? { id: r.userId, name: r.userName, email: r.userEmail ?? "" }
+          : null,
+      })),
+    });
+  } catch (err) {
+    console.error("[admin/cloudron] linked clients error", err);
+    res.status(500).json({ error: "Failed to load linked clients" });
   }
 });
 
