@@ -436,7 +436,13 @@ router.get("/instances/:id/activity", requireAdmin, async (req, res) => {
     200,
   );
 
-  const ALLOWED_TYPES = ["cloudron_app", "cloudron_mailbox", "cloudron_sync"] as const;
+  const ALLOWED_TYPES = [
+    "cloudron_app",
+    "cloudron_user",
+    "cloudron_group",
+    "cloudron_mailbox",
+    "cloudron_sync",
+  ] as const;
   type EntityType = (typeof ALLOWED_TYPES)[number];
   const wantedTypes: EntityType[] =
     entityTypeRaw && (ALLOWED_TYPES as readonly string[]).includes(entityTypeRaw)
