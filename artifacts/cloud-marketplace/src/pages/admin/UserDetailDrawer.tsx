@@ -180,6 +180,56 @@ const ALL_CLOUDRON_PERMS = [
   "view_mail", "create_mailboxes", "edit_mailboxes", "delete_mailboxes",
 ] as const;
 
+type CloudronPermStr = typeof ALL_CLOUDRON_PERMS[number];
+
+interface CloudronPreset {
+  key: "full_access" | "email_only" | "apps_only" | "read_only";
+  labelKey: string;
+  permissions: CloudronPermStr[];
+}
+
+const CLOUDRON_PRESETS: CloudronPreset[] = [
+  {
+    key: "full_access",
+    labelKey: "admin.user.cloudron.preset.full_access",
+    permissions: [...ALL_CLOUDRON_PERMS],
+  },
+  {
+    key: "email_only",
+    labelKey: "admin.user.cloudron.preset.email_only",
+    permissions: [
+      "view_cloudron", "view_mail",
+      "create_mailboxes", "edit_mailboxes", "delete_mailboxes",
+    ],
+  },
+  {
+    key: "apps_only",
+    labelKey: "admin.user.cloudron.preset.apps_only",
+    permissions: [
+      "view_cloudron", "view_apps", "install_apps", "restart_apps",
+      "uninstall_apps", "stop_apps", "start_apps", "view_app_store",
+    ],
+  },
+  {
+    key: "read_only",
+    labelKey: "admin.user.cloudron.preset.read_only",
+    permissions: ["view_cloudron", "view_apps", "view_app_store", "view_mail"],
+  },
+];
+
+function detectActivePreset(perms: string[]): CloudronPreset["key"] | null {
+  const set = new Set(perms);
+  for (const p of CLOUDRON_PRESETS) {
+    if (
+      p.permissions.length === set.size &&
+      p.permissions.every((perm) => set.has(perm))
+    ) {
+      return p.key;
+    }
+  }
+  return null;
+}
+
 interface UserDetailDrawerProps {
   userId: string;
   onClose: () => void;
@@ -800,6 +850,38 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
                                     </SelectContent>
                                   </Select>
                                 )}
+                              </div>
+
+                              <div className="space-y-2">
+                                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                  {t("admin.user.cloudron.preset.title")}
+                                </label>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {CLOUDRON_PRESETS.map((preset) => {
+                                    const active = detectActivePreset(selectedPerms) === preset.key;
+                                    return (
+                                      <Button
+                                        key={preset.key}
+                                        type="button"
+                                        size="sm"
+                                        variant={active ? "default" : "outline"}
+                                        className="h-7 text-xs"
+                                        onClick={() => setSelectedPerms([...preset.permissions])}
+                                        data-testid={`preset-cloudron-${preset.key}`}
+                                      >
+                                        {t(preset.labelKey)}
+                                      </Button>
+                                    );
+                                  })}
+                                  {detectActivePreset(selectedPerms) === null && selectedPerms.length > 0 && (
+                                    <Badge variant="outline" className="h-7 text-[11px] bg-secondary">
+                                      {t("admin.user.cloudron.preset.custom")}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {t("admin.user.cloudron.preset.hint")}
+                                </p>
                               </div>
 
                               <div className="space-y-2">

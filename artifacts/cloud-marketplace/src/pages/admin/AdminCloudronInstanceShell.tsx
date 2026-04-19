@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, type ComponentType } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   Server, RefreshCw, Pencil, ExternalLink, Loader2, ArrowLeft,
   CheckCircle2, XCircle, HelpCircle, AppWindow, Store, Users, UsersRound,
-  Mail, Activity, Settings, Sparkles,
+  Mail, Activity, Settings, Sparkles, ChevronDown, MailCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
@@ -77,6 +77,240 @@ const TABS: TabDef[] = [
 function tabHref(instanceId: number, tab: CloudronInstanceTab): string {
   if (tab === "overview") return `/admin/cloudron/instances/${instanceId}`;
   return `/admin/cloudron/instances/${instanceId}/${tab}`;
+}
+
+type LeafKey = CloudronInstanceTab | "email_settings_soon";
+
+interface SidebarLeaf {
+  key: LeafKey;
+  labelKey: string;
+  icon: ComponentType<{ className?: string }>;
+  disabled?: boolean;
+  testId?: string;
+}
+
+interface SidebarGroup {
+  key: string;
+  labelKey: string;
+  icon: ComponentType<{ className?: string }>;
+  children?: SidebarLeaf[];
+  leaf?: SidebarLeaf;
+}
+
+const SIDEBAR_GROUPS: SidebarGroup[] = [
+  {
+    key: "overview",
+    labelKey: "admin.cloudron.shell.tab.overview",
+    icon: Server,
+    leaf: { key: "overview", labelKey: "admin.cloudron.shell.tab.overview", icon: Server },
+  },
+  {
+    key: "apps",
+    labelKey: "admin.cloudron.shell.group.apps",
+    icon: AppWindow,
+    children: [
+      { key: "apps", labelKey: "admin.cloudron.shell.tab.apps", icon: AppWindow },
+      { key: "appstore", labelKey: "admin.cloudron.shell.tab.appstore", icon: Store },
+    ],
+  },
+  {
+    key: "users",
+    labelKey: "admin.cloudron.shell.group.users",
+    icon: Users,
+    children: [
+      { key: "users", labelKey: "admin.cloudron.shell.tab.users", icon: Users },
+      { key: "groups", labelKey: "admin.cloudron.shell.tab.groups", icon: UsersRound },
+    ],
+  },
+  {
+    key: "email",
+    labelKey: "admin.cloudron.shell.group.email",
+    icon: Mail,
+    children: [
+      { key: "mailboxes", labelKey: "admin.cloudron.shell.tab.mailboxes", icon: Mail },
+      {
+        key: "email_settings_soon",
+        labelKey: "admin.cloudron.shell.tab.emailSettings",
+        icon: MailCheck,
+        disabled: true,
+      },
+    ],
+  },
+  {
+    key: "activity",
+    labelKey: "admin.cloudron.shell.tab.activity",
+    icon: Activity,
+    leaf: { key: "activity", labelKey: "admin.cloudron.shell.tab.activity", icon: Activity },
+  },
+  {
+    key: "settings",
+    labelKey: "admin.cloudron.shell.tab.settings",
+    icon: Settings,
+    leaf: { key: "settings", labelKey: "admin.cloudron.shell.tab.settings", icon: Settings },
+  },
+];
+
+function leafIsActive(leaf: SidebarLeaf, active: CloudronInstanceTab): boolean {
+  return !leaf.disabled && leaf.key === active;
+}
+
+function groupIsActive(group: SidebarGroup, active: CloudronInstanceTab): boolean {
+  if (group.leaf) return leafIsActive(group.leaf, active);
+  return (group.children ?? []).some((c) => leafIsActive(c, active));
+}
+
+function SidebarItemLink({
+  leaf, instanceId, isActive, t, indented = false,
+}: {
+  leaf: SidebarLeaf;
+  instanceId: number;
+  isActive: boolean;
+  t: (k: string) => string;
+  indented?: boolean;
+}) {
+  const Icon = leaf.icon;
+  const base =
+    "group flex items-center gap-2 w-full text-sm font-medium px-3 py-2 rounded-md transition-colors " +
+    (indented ? "ps-9 " : "");
+  if (leaf.disabled) {
+    return (
+      <div
+        className={base + "text-muted-foreground/60 cursor-not-allowed select-none flex justify-between"}
+        aria-disabled="true"
+      >
+        <span className="inline-flex items-center gap-2">
+          <Icon className="h-4 w-4" />
+          {t(leaf.labelKey)}
+        </span>
+        <Badge
+          variant="outline"
+          className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-700 border-amber-200"
+        >
+          {t("admin.cloudron.shell.soon")}
+        </Badge>
+      </div>
+    );
+  }
+  return (
+    <Link
+      href={tabHref(instanceId, leaf.key as CloudronInstanceTab)}
+      className={
+        base +
+        (isActive
+          ? "bg-primary/10 text-primary"
+          : "text-muted-foreground hover:text-foreground hover:bg-muted/60")
+      }
+      aria-current={isActive ? "page" : undefined}
+      data-testid={`tab-cloudron-${leaf.key}`}
+    >
+      <Icon className="h-4 w-4" />
+      {t(leaf.labelKey)}
+    </Link>
+  );
+}
+
+function InstanceSidebar({
+  instanceId, activeTab, t,
+}: { instanceId: number; activeTab: CloudronInstanceTab; t: (k: string) => string }) {
+  const initialOpen: Record<string, boolean> = {};
+  for (const g of SIDEBAR_GROUPS) {
+    if (g.children) initialOpen[g.key] = groupIsActive(g, activeTab);
+  }
+  const [open, setOpen] = useState<Record<string, boolean>>(initialOpen);
+
+  return (
+    <nav
+      className="flex flex-col gap-0.5"
+      aria-label={t("admin.cloudron.shell.tabsAriaLabel")}
+    >
+      {SIDEBAR_GROUPS.map((group) => {
+        if (group.leaf) {
+          return (
+            <SidebarItemLink
+              key={group.key}
+              leaf={group.leaf}
+              instanceId={instanceId}
+              isActive={leafIsActive(group.leaf, activeTab)}
+              t={t}
+            />
+          );
+        }
+        const Icon = group.icon;
+        const isOpen = open[group.key] ?? false;
+        const hasActiveChild = groupIsActive(group, activeTab);
+        return (
+          <div key={group.key} className="flex flex-col">
+            <button
+              type="button"
+              onClick={() => setOpen((s) => ({ ...s, [group.key]: !isOpen }))}
+              className={
+                "group flex items-center gap-2 w-full text-sm font-medium px-3 py-2 rounded-md transition-colors " +
+                (hasActiveChild
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60")
+              }
+              aria-expanded={isOpen}
+            >
+              <Icon className="h-4 w-4" />
+              <span className="flex-1 text-start">{t(group.labelKey)}</span>
+              <ChevronDown
+                className={
+                  "h-4 w-4 transition-transform " + (isOpen ? "rotate-180" : "")
+                }
+              />
+            </button>
+            {isOpen && (
+              <div className="flex flex-col gap-0.5 mt-0.5">
+                {(group.children ?? []).map((child) => (
+                  <SidebarItemLink
+                    key={child.key}
+                    leaf={child}
+                    instanceId={instanceId}
+                    isActive={leafIsActive(child, activeTab)}
+                    t={t}
+                    indented
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
+function MobileTabBar({
+  instanceId, activeTab, t,
+}: { instanceId: number; activeTab: CloudronInstanceTab; t: (k: string) => string }) {
+  return (
+    <nav
+      className="flex items-center gap-1 overflow-x-auto -mx-4 md:hidden px-4 pb-2"
+      aria-label={t("admin.cloudron.shell.tabsAriaLabel")}
+    >
+      {TABS.map((tab) => {
+        const Icon = tab.icon;
+        const isActive = activeTab === tab.key;
+        return (
+          <Link
+            key={tab.key}
+            href={tabHref(instanceId, tab.key)}
+            className={
+              "inline-flex items-center gap-1.5 whitespace-nowrap text-sm font-medium px-3 py-2 rounded-t-md border-b-2 transition-colors " +
+              (isActive
+                ? "border-primary text-primary bg-primary/5"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:border-border")
+            }
+            aria-current={isActive ? "page" : undefined}
+            data-testid={`tab-cloudron-mobile-${tab.key}`}
+          >
+            <Icon className="h-4 w-4" />
+            {t(tab.labelKey)}
+          </Link>
+        );
+      })}
+    </nav>
+  );
 }
 
 interface ShellProps {
@@ -186,37 +420,21 @@ export function AdminCloudronInstanceShell({ instanceId, activeTab, children }: 
           </div>
         </div>
 
-        {/* Tab bar */}
-        <nav
-          className="mt-3 -mb-px flex items-center gap-1 overflow-x-auto"
-          aria-label={t("admin.cloudron.shell.tabsAriaLabel")}
-        >
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.key;
-            return (
-              <Link
-                key={tab.key}
-                href={tabHref(instanceId, tab.key)}
-                className={
-                  "inline-flex items-center gap-1.5 whitespace-nowrap text-sm font-medium px-3 py-2 rounded-t-md border-b-2 transition-colors " +
-                  (isActive
-                    ? "border-primary text-primary bg-primary/5"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-border")
-                }
-                aria-current={isActive ? "page" : undefined}
-                data-testid={`tab-cloudron-${tab.key}`}
-              >
-                <Icon className="h-4 w-4" />
-                {t(tab.labelKey)}
-              </Link>
-            );
-          })}
-        </nav>
+        {/* Mobile horizontal tabs (md:hidden) */}
+        <div className="mt-3 md:hidden">
+          <MobileTabBar instanceId={instanceId} activeTab={activeTab} t={t} />
+        </div>
       </div>
 
-      {/* Tab content */}
-      <div>{children}</div>
+      {/* Two-column: sidebar + content (md+) */}
+      <div className="flex flex-col md:flex-row gap-4 md:gap-6">
+        <aside className="hidden md:block md:w-56 md:shrink-0">
+          <div className="sticky top-44">
+            <InstanceSidebar instanceId={instanceId} activeTab={activeTab} t={t} />
+          </div>
+        </aside>
+        <div className="flex-1 min-w-0">{children}</div>
+      </div>
 
       <EditInstanceModal
         instance={editing}
