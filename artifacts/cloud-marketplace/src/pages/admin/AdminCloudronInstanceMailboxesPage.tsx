@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  RefreshCw, Plus, Loader2, Search, Pencil, Trash2, KeyRound, Mail,
+  RefreshCw, Plus, Loader2, Search, Pencil, Trash2, KeyRound, Mail, Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
@@ -12,6 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Progress } from "@/components/ui/progress";
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
+} from "@/components/ui/sheet";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -27,6 +34,20 @@ import {
 } from "@/components/ui/table";
 import { Empty } from "@/components/ui/empty";
 
+interface MailboxRaw {
+  active?: boolean;
+  hasPop3?: boolean;
+  storageQuota?: number;
+  storageUsage?: number;
+  messagesQuota?: number;
+  messagesUsage?: number;
+  displayName?: string | null;
+  creationTime?: string;
+  domain?: string;
+  ownerType?: string | null;
+  [k: string]: unknown;
+}
+
 interface MailboxRow {
   id: number;
   cloudronMailboxId: string;
@@ -36,7 +57,7 @@ interface MailboxRow {
   usageBytes: number | null;
   quotaBytes: number | null;
   pop3Enabled: boolean | null;
-  rawJson: Record<string, unknown> | null;
+  rawJson: MailboxRaw | null;
   lastSeenAt: string;
   createdAt: string;
   updatedAt: string;
@@ -51,6 +72,12 @@ interface UserRow {
   email: string | null;
 }
 interface UsersResp { users: UserRow[]; }
+
+interface ApiError { message?: string }
+const errMsg = (err: unknown): string =>
+  (typeof err === "object" && err !== null && "message" in err
+    ? String((err as ApiError).message ?? "")
+    : String(err));
 
 type CreatePayload = {
   domain: string;
@@ -82,18 +109,60 @@ function fmtBytes(n: number | null | undefined): string {
   return `${(n / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+function fmtDate(iso: string | undefined | null, locale: string): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
+  } catch { return iso; }
+}
+
+function UsageBar({ used, quota, t }: { used: number | null; quota: number | null; t: (k: string) => string }) {
+  if (quota === null || quota === undefined || quota <= 0) {
+    return <span className="text-muted-foreground text-xs">{t("admin.cloudron.mailboxes.unlimited")}</span>;
+  }
+  const u = used ?? 0;
+  const pct = Math.min(100, Math.round((u / quota) * 100));
+  const color = pct >= 95 ? "bg-destructive" : pct >= 80 ? "bg-amber-500" : "bg-primary";
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="w-32 space-y-1">
+            <div className="text-xs text-muted-foreground">{pct}%</div>
+            <Progress value={pct} className="h-1.5" indicatorClassName={color} />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>
+          {fmtBytes(u)} / {fmtBytes(quota)}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export default function AdminCloudronInstanceMailboxesPage({ instanceId }: Props) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
+  const [debounced, setDebounced] = useState("");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<MailboxRow | null>(null);
+  const [viewing, setViewing] = useState<MailboxRow | null>(null);
   const [deleting, setDeleting] = useState<MailboxRow | null>(null);
   const [resetting, setResetting] = useState<MailboxRow | null>(null);
+  const [rowSyncing, setRowSyncing] = useState<string | null>(null);
+
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(search.trim()), 300);
+    return () => clearTimeout(id);
+  }, [search]);
 
   const { data, isLoading, isError, error, refetch } = useQuery<MailboxesResp>({
-    queryKey: ["cloudron-instance-mailboxes", instanceId],
-    queryFn: () => adminFetch<MailboxesResp>(`/api/admin/cloudron/instances/${instanceId}/mailboxes`),
+    queryKey: ["cloudron-instance-mailboxes", instanceId, debounced],
+    queryFn: () => {
+      const qs = debounced ? `?q=${encodeURIComponent(debounced)}` : "";
+      return adminFetch<MailboxesResp>(`/api/admin/cloudron/instances/${instanceId}/mailboxes${qs}`);
+    },
     enabled: !isNaN(instanceId),
   });
 
@@ -120,19 +189,27 @@ export default function AdminCloudronInstanceMailboxesPage({ instanceId }: Props
       void qc.invalidateQueries({ queryKey: ["cloudron-instance-mailboxes", instanceId] });
       void qc.invalidateQueries({ queryKey: ["cloudron-admin-sync-logs"] });
     },
-    onError: (err: any) =>
-      toast.error(`${t("admin.cloudron.mailboxes.sync.failed")}: ${err?.message ?? ""}`),
+    onError: (err: unknown) =>
+      toast.error(`${t("admin.cloudron.mailboxes.sync.failed")}: ${errMsg(err)}`),
   });
 
-  const filtered = useMemo(() => {
-    const list = data?.mailboxes ?? [];
-    const q = search.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((m) =>
-      (m.address ?? "").toLowerCase().includes(q) ||
-      (m.ownerUserId ?? "").toLowerCase().includes(q),
-    );
-  }, [data, search]);
+  const rowSync = async (m: MailboxRow) => {
+    setRowSyncing(m.cloudronMailboxId);
+    try {
+      await adminFetch(
+        `/api/admin/cloudron/instances/${instanceId}/mailboxes/${encodeURIComponent(m.cloudronMailboxId)}/sync`,
+        { method: "POST" },
+      );
+      toast.success(t("admin.cloudron.mailboxes.rowSync.ok"));
+      void qc.invalidateQueries({ queryKey: ["cloudron-instance-mailboxes", instanceId] });
+    } catch (err) {
+      toast.error(`${t("admin.cloudron.mailboxes.rowSync.failed")}: ${errMsg(err)}`);
+    } finally {
+      setRowSyncing(null);
+    }
+  };
+
+  const list = data?.mailboxes ?? [];
 
   return (
     <div className="space-y-4">
@@ -191,12 +268,12 @@ export default function AdminCloudronInstanceMailboxesPage({ instanceId }: Props
             </div>
           ) : isError ? (
             <div className="py-8 text-sm text-destructive">
-              {(error as any)?.message ?? t("admin.cloudron.mailboxes.loadFailed")}
+              {errMsg(error) || t("admin.cloudron.mailboxes.loadFailed")}
               <Button variant="link" size="sm" onClick={() => refetch()}>
                 {t("admin.cloudron.mailboxes.retry")}
               </Button>
             </div>
-          ) : filtered.length === 0 ? (
+          ) : list.length === 0 ? (
             <Empty>
               <div className="text-sm text-muted-foreground py-6 text-center space-y-3">
                 <div>{t("admin.cloudron.mailboxes.empty")}</div>
@@ -219,24 +296,35 @@ export default function AdminCloudronInstanceMailboxesPage({ instanceId }: Props
                     <TableHead>{t("admin.cloudron.mailboxes.col.address")}</TableHead>
                     <TableHead>{t("admin.cloudron.mailboxes.col.owner")}</TableHead>
                     <TableHead>{t("admin.cloudron.mailboxes.col.usage")}</TableHead>
-                    <TableHead>{t("admin.cloudron.mailboxes.col.quota")}</TableHead>
+                    <TableHead>{t("admin.cloudron.mailboxes.col.status")}</TableHead>
                     <TableHead>{t("admin.cloudron.mailboxes.col.pop3")}</TableHead>
                     <TableHead>{t("admin.cloudron.mailboxes.col.aliases")}</TableHead>
+                    <TableHead>{t("admin.cloudron.mailboxes.col.created")}</TableHead>
                     <TableHead className="text-end">{t("admin.cloudron.mailboxes.col.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((m) => {
+                  {list.map((m) => {
                     const owner = m.ownerUserId ? userByCloudronId.get(m.ownerUserId) : null;
                     const ownerLabel = owner
                       ? (owner.email ?? owner.username ?? owner.cloudronUserId)
                       : (m.ownerUserId ?? "—");
+                    const isActive = m.rawJson?.active !== false;
+                    const created = m.rawJson?.creationTime ?? m.createdAt;
+                    const isRowSyncing = rowSyncing === m.cloudronMailboxId;
                     return (
                       <TableRow key={m.id} data-testid={`row-cloudron-mailbox-${m.cloudronMailboxId}`}>
                         <TableCell className="font-medium">{m.address ?? "—"}</TableCell>
                         <TableCell className="text-sm">{ownerLabel}</TableCell>
-                        <TableCell className="text-sm">{fmtBytes(m.usageBytes)}</TableCell>
-                        <TableCell className="text-sm">{fmtBytes(m.quotaBytes)}</TableCell>
+                        <TableCell><UsageBar used={m.usageBytes} quota={m.quotaBytes} t={t} /></TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={isActive ? "outline" : "secondary"}
+                            className={isActive ? "bg-emerald-50 text-emerald-700 border-emerald-200" : ""}
+                          >
+                            {isActive ? t("admin.cloudron.mailboxes.status.active") : t("admin.cloudron.mailboxes.status.inactive")}
+                          </Badge>
+                        </TableCell>
                         <TableCell>
                           <Badge variant={m.pop3Enabled ? "default" : "secondary"}>
                             {m.pop3Enabled ? t("admin.cloudron.mailboxes.pop3.on") : t("admin.cloudron.mailboxes.pop3.off")}
@@ -245,7 +333,18 @@ export default function AdminCloudronInstanceMailboxesPage({ instanceId }: Props
                         <TableCell className="text-sm text-muted-foreground">
                           {(m.aliasesJson?.length ?? 0) || "—"}
                         </TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          {fmtDate(created, locale)}
+                        </TableCell>
                         <TableCell className="text-end space-x-1 rtl:space-x-reverse">
+                          <Button variant="ghost" size="icon" onClick={() => setViewing(m)} data-testid={`btn-view-mailbox-${m.cloudronMailboxId}`} aria-label={t("admin.cloudron.mailboxes.view")}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => rowSync(m)} disabled={isRowSyncing} data-testid={`btn-rowsync-mailbox-${m.cloudronMailboxId}`} aria-label={t("admin.cloudron.mailboxes.rowSync")}>
+                            {isRowSyncing
+                              ? <Loader2 className="h-4 w-4 animate-spin" />
+                              : <RefreshCw className="h-4 w-4" />}
+                          </Button>
                           <Button variant="ghost" size="icon" onClick={() => setEditing(m)} data-testid={`btn-edit-mailbox-${m.cloudronMailboxId}`}>
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -266,6 +365,11 @@ export default function AdminCloudronInstanceMailboxesPage({ instanceId }: Props
         </CardContent>
       </Card>
 
+      <ViewMailboxDrawer
+        mailbox={viewing}
+        owner={viewing?.ownerUserId ? userByCloudronId.get(viewing.ownerUserId) ?? null : null}
+        onClose={() => setViewing(null)}
+      />
       <CreateMailboxDialog
         open={creating}
         onClose={() => setCreating(false)}
@@ -288,6 +392,75 @@ export default function AdminCloudronInstanceMailboxesPage({ instanceId }: Props
         onClose={() => setDeleting(null)}
         instanceId={instanceId}
       />
+    </div>
+  );
+}
+
+// ---------------- View drawer ----------------
+function ViewMailboxDrawer({
+  mailbox, owner, onClose,
+}: { mailbox: MailboxRow | null; owner: UserRow | null; onClose: () => void }) {
+  const { t, locale } = useI18n();
+  if (!mailbox) return null;
+  const raw = mailbox.rawJson ?? {};
+  const isActive = raw.active !== false;
+  return (
+    <Sheet open={!!mailbox} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            <Mail className="h-4 w-4" />
+            {mailbox.address ?? mailbox.cloudronMailboxId}
+          </SheetTitle>
+          <SheetDescription>{t("admin.cloudron.mailboxes.view.desc")}</SheetDescription>
+        </SheetHeader>
+        <div className="space-y-4 mt-4 text-sm">
+          <DetailRow label={t("admin.cloudron.mailboxes.col.status")}>
+            <Badge variant={isActive ? "outline" : "secondary"} className={isActive ? "bg-emerald-50 text-emerald-700 border-emerald-200" : ""}>
+              {isActive ? t("admin.cloudron.mailboxes.status.active") : t("admin.cloudron.mailboxes.status.inactive")}
+            </Badge>
+          </DetailRow>
+          <DetailRow label={t("admin.cloudron.mailboxes.col.owner")}>
+            <span>{owner ? (owner.email ?? owner.username ?? owner.cloudronUserId) : (mailbox.ownerUserId ?? "—")}</span>
+          </DetailRow>
+          <DetailRow label={t("admin.cloudron.mailboxes.col.pop3")}>
+            <Badge variant={mailbox.pop3Enabled ? "default" : "secondary"}>
+              {mailbox.pop3Enabled ? t("admin.cloudron.mailboxes.pop3.on") : t("admin.cloudron.mailboxes.pop3.off")}
+            </Badge>
+          </DetailRow>
+          <DetailRow label={t("admin.cloudron.mailboxes.col.usage")}>
+            <span>{fmtBytes(mailbox.usageBytes)} / {mailbox.quotaBytes ? fmtBytes(mailbox.quotaBytes) : t("admin.cloudron.mailboxes.unlimited")}</span>
+          </DetailRow>
+          <DetailRow label={t("admin.cloudron.mailboxes.col.aliases")}>
+            {mailbox.aliasesJson && mailbox.aliasesJson.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {mailbox.aliasesJson.map((a) => (
+                  <Badge key={a} variant="secondary" className="text-xs">{a}</Badge>
+                ))}
+              </div>
+            ) : <span className="text-muted-foreground">—</span>}
+          </DetailRow>
+          <DetailRow label={t("admin.cloudron.mailboxes.col.created")}>
+            <span>{fmtDate(raw.creationTime ?? mailbox.createdAt, locale)}</span>
+          </DetailRow>
+          <DetailRow label={t("admin.cloudron.mailboxes.lastSeen")}>
+            <span>{fmtDate(mailbox.lastSeenAt, locale)}</span>
+          </DetailRow>
+          <details className="text-xs text-muted-foreground">
+            <summary className="cursor-pointer">{t("admin.cloudron.mailboxes.rawJson")}</summary>
+            <pre className="mt-2 bg-muted p-2 rounded overflow-x-auto">{JSON.stringify(raw, null, 2)}</pre>
+          </details>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-end">{children}</span>
     </div>
   );
 }
@@ -320,8 +493,8 @@ function CreateMailboxDialog({
       setQuotaMB("");
       onClose();
     },
-    onError: (err: any) =>
-      toast.error(`${t("admin.cloudron.mailboxes.create.failed")}: ${err?.message ?? ""}`),
+    onError: (err: unknown) =>
+      toast.error(`${t("admin.cloudron.mailboxes.create.failed")}: ${errMsg(err)}`),
   });
 
   const onSubmit = () => {
@@ -452,11 +625,12 @@ function EditMailboxDialog({
       void qc.invalidateQueries({ queryKey: ["cloudron-instance-mailboxes", instanceId] });
       onClose();
     },
-    onError: (err: any) =>
-      toast.error(`${t("admin.cloudron.mailboxes.edit.failed")}: ${err?.message ?? ""}`),
+    onError: (err: unknown) =>
+      toast.error(`${t("admin.cloudron.mailboxes.edit.failed")}: ${errMsg(err)}`),
   });
 
   if (!mailbox) return null;
+  const isActive = mailbox.rawJson?.active !== false;
 
   const onSubmit = () => {
     const payload: UpdatePayload = { ...form };
@@ -507,7 +681,7 @@ function EditMailboxDialog({
             <Label htmlFor="edit-mailbox-active">{t("admin.cloudron.mailboxes.form.active")}</Label>
             <Switch
               id="edit-mailbox-active"
-              defaultChecked={(mailbox.rawJson as any)?.active !== false}
+              defaultChecked={isActive}
               onCheckedChange={(v) => setForm((f) => ({ ...f, active: v }))}
             />
           </div>
@@ -550,8 +724,8 @@ function ResetMailboxPasswordDialog({
       setPw("");
       onClose();
     },
-    onError: (err: any) =>
-      toast.error(`${t("admin.cloudron.mailboxes.reset.failed")}: ${err?.message ?? ""}`),
+    onError: (err: unknown) =>
+      toast.error(`${t("admin.cloudron.mailboxes.reset.failed")}: ${errMsg(err)}`),
   });
   if (!mailbox) return null;
   return (
@@ -599,8 +773,8 @@ function DeleteMailboxDialog({
       void qc.invalidateQueries({ queryKey: ["cloudron-instance-mailboxes", instanceId] });
       onClose();
     },
-    onError: (err: any) =>
-      toast.error(`${t("admin.cloudron.mailboxes.delete.failed")}: ${err?.message ?? ""}`),
+    onError: (err: unknown) =>
+      toast.error(`${t("admin.cloudron.mailboxes.delete.failed")}: ${errMsg(err)}`),
   });
   if (!mailbox) return null;
   return (

@@ -1012,9 +1012,17 @@ router.get("/instances/:id/mailboxes", requireAdmin, async (req, res) => {
   try {
     const inst = await getInstanceById(id);
     if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    const q = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
     const rows = await listMailboxesFromCache(id);
+    const filtered = q
+      ? rows.filter(
+          (r) =>
+            (r.address ?? "").toLowerCase().includes(q) ||
+            (r.ownerUserId ?? "").toLowerCase().includes(q),
+        )
+      : rows;
     res.json({
-      mailboxes: rows.map((r) => ({
+      mailboxes: filtered.map((r) => ({
         ...r,
         lastSeenAt: r.lastSeenAt.toISOString(),
         createdAt: r.createdAt.toISOString(),
@@ -1057,14 +1065,32 @@ router.post("/instances/:id/mailboxes", requireAdmin, async (req, res) => {
   if (!body.domain || typeof body.domain !== "string" || !body.name || typeof body.name !== "string") {
     res.status(400).json({ error: "domain and name are required" }); return;
   }
+  const localPart = body.name.trim();
+  const domain = body.domain.trim();
+  if (!/^[A-Za-z0-9._%+-]+$/.test(localPart)) {
+    res.status(400).json({ error: "Invalid mailbox local part" }); return;
+  }
   try {
     const inst = await getInstanceById(id);
     if (!inst) { res.status(404).json({ error: "Instance not found" }); return; }
+    // Validate that the requested domain is a real mail domain on this instance
+    const domains = await listMailDomainsLive(inst);
+    if (!domains.some((d) => d.domain === domain)) {
+      res.status(400).json({ error: `Domain '${domain}' is not configured as a mail domain on this instance` });
+      return;
+    }
+    // Uniqueness check (cache-based; cheap and prevents typical dup attempts)
+    const address = `${localPart}@${domain}`;
+    const existing = await getMailboxFromCache(id, address);
+    if (existing) {
+      res.status(409).json({ error: `Mailbox ${address} already exists` });
+      return;
+    }
     const row = await svcCreateMailbox(
       inst,
       {
-        domain: body.domain.trim(),
-        name: body.name.trim(),
+        domain,
+        name: localPart,
         password: typeof body.password === "string" ? body.password : undefined,
         ownerId: typeof body.ownerId === "string" && body.ownerId ? body.ownerId : undefined,
         ownerType: body.ownerType === "group" ? "group" : body.ownerType === "user" ? "user" : undefined,

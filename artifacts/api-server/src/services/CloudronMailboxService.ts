@@ -59,7 +59,12 @@ function errMessage(err: unknown): string {
 function unwrapMailbox(
   res: { mailbox: CloudronApiMailbox } | CloudronApiMailbox,
 ): CloudronApiMailbox {
-  if (res && typeof res === "object" && "mailbox" in res && (res as any).mailbox) {
+  if (
+    res &&
+    typeof res === "object" &&
+    "mailbox" in res &&
+    (res as { mailbox?: CloudronApiMailbox }).mailbox
+  ) {
     return (res as { mailbox: CloudronApiMailbox }).mailbox;
   }
   return res as CloudronApiMailbox;
