@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAdmin } from "../../middlewares/requireRole";
 import { db } from "@workspace/db";
-import { cloudServicesTable, serverOrdersTable, usersTable } from "@workspace/db/schema";
+import { cloudServicesTable, serverOrdersTable, usersTable, userSubscriptionsTable, subscriptionPlansTable, cloudronInstancesTable } from "@workspace/db/schema";
 import { eq, desc, sql, and, ilike, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { AuditService } from "../../services/audit_service";
@@ -16,9 +16,12 @@ type OrderRow = {
   order: typeof serverOrdersTable.$inferSelect;
   service: typeof cloudServicesTable.$inferSelect | null;
   user: typeof usersTable.$inferSelect | null;
+  subscription?: typeof userSubscriptionsTable.$inferSelect | null;
+  plan?: typeof subscriptionPlansTable.$inferSelect | null;
+  workspace?: typeof cloudronInstancesTable.$inferSelect | null;
 };
 
-function shapeRow({ order, service, user }: OrderRow) {
+function shapeRow({ order, service, user, subscription, plan, workspace }: OrderRow) {
   return {
     ...order,
     cloudService: service
@@ -31,6 +34,16 @@ function shapeRow({ order, service, user }: OrderRow) {
           email: user.email,
           role: user.role,
           createdAt: user.createdAt,
+        }
+      : null,
+    subscription: subscription
+      ? {
+          id: subscription.id,
+          status: subscription.status,
+          billingCycle: subscription.billingCycle,
+          expiresAt: subscription.expiresAt,
+          plan: plan ? { id: plan.id, name: plan.name, slug: plan.slug } : null,
+          workspace: workspace ? { id: workspace.id, name: workspace.name } : null,
         }
       : null,
   };
@@ -54,10 +67,20 @@ router.get("/", requireAdmin, async (req, res) => {
     }
 
     const baseQuery = db
-      .select({ order: serverOrdersTable, service: cloudServicesTable, user: usersTable })
+      .select({
+        order: serverOrdersTable,
+        service: cloudServicesTable,
+        user: usersTable,
+        subscription: userSubscriptionsTable,
+        plan: subscriptionPlansTable,
+        workspace: cloudronInstancesTable,
+      })
       .from(serverOrdersTable)
       .leftJoin(cloudServicesTable, eq(serverOrdersTable.cloudServiceId, cloudServicesTable.id))
-      .leftJoin(usersTable, userIdJoin);
+      .leftJoin(usersTable, userIdJoin)
+      .leftJoin(userSubscriptionsTable, eq(serverOrdersTable.subscriptionId, userSubscriptionsTable.id))
+      .leftJoin(subscriptionPlansTable, eq(userSubscriptionsTable.planId, subscriptionPlansTable.id))
+      .leftJoin(cloudronInstancesTable, eq(userSubscriptionsTable.cloudronInstanceId, cloudronInstancesTable.id));
 
     const rows = (conditions.length > 0
       ? await baseQuery.where(and(...conditions)).orderBy(desc(serverOrdersTable.createdAt))
@@ -78,10 +101,20 @@ router.get("/:id", requireAdmin, async (req, res) => {
   }
   try {
     const rows = (await db
-      .select({ order: serverOrdersTable, service: cloudServicesTable, user: usersTable })
+      .select({
+        order: serverOrdersTable,
+        service: cloudServicesTable,
+        user: usersTable,
+        subscription: userSubscriptionsTable,
+        plan: subscriptionPlansTable,
+        workspace: cloudronInstancesTable,
+      })
       .from(serverOrdersTable)
       .leftJoin(cloudServicesTable, eq(serverOrdersTable.cloudServiceId, cloudServicesTable.id))
       .leftJoin(usersTable, userIdJoin)
+      .leftJoin(userSubscriptionsTable, eq(serverOrdersTable.subscriptionId, userSubscriptionsTable.id))
+      .leftJoin(subscriptionPlansTable, eq(userSubscriptionsTable.planId, subscriptionPlansTable.id))
+      .leftJoin(cloudronInstancesTable, eq(userSubscriptionsTable.cloudronInstanceId, cloudronInstancesTable.id))
       .where(eq(serverOrdersTable.id, id))
       .limit(1)) as OrderRow[];
 

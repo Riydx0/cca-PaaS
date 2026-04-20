@@ -92,6 +92,10 @@ export function AdminSubscriptionsPage() {
         <p className="text-muted-foreground mt-1">{t("admin.subscriptions.titleDesc")}</p>
       </div>
 
+      <div className="rounded-lg border border-amber-300/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+        {t("admin.cloudronAccess.autoNotice")}
+      </div>
+
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-[200px] max-w-xs">

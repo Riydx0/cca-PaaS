@@ -189,11 +189,6 @@ router.post("/verify", requireAuth, async (req: Request, res) => {
       record = { ...record, moyasarPaymentId };
     }
 
-    await db
-      .update(moyasarPaymentsTable)
-      .set({ status: moyasarPayment.status, updatedAt: new Date() })
-      .where(eq(moyasarPaymentsTable.id, record.id));
-
     if (moyasarPayment.status === "paid" && record.subscriptionId == null) {
       const [plan] = await db
         .select()
@@ -205,25 +200,37 @@ router.post("/verify", requireAuth, async (req: Request, res) => {
           ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-        const [sub] = await db
-          .insert(userSubscriptionsTable)
-          .values({
-            userId: record.userId,
-            planId: record.planId,
-            status: "active",
-            billingCycle: record.billingCycle as "monthly" | "yearly",
-            startedAt: new Date(),
-            expiresAt,
-            autoRenew: false,
-            externalSubscriptionId: record.moyasarPaymentId,
-            updatedAt: new Date(),
-          })
-          .returning();
+        // Atomic: payment status + subscription insert + payment↔sub link
+        // all in one DB transaction. If anything fails, the whole thing
+        // rolls back — no orphaned subscription, no half-linked payment.
+        const sub = await db.transaction(async (tx) => {
+          await tx
+            .update(moyasarPaymentsTable)
+            .set({ status: moyasarPayment.status, updatedAt: new Date() })
+            .where(eq(moyasarPaymentsTable.id, record.id));
 
-        await db
-          .update(moyasarPaymentsTable)
-          .set({ subscriptionId: sub.id, updatedAt: new Date() })
-          .where(eq(moyasarPaymentsTable.id, record.id));
+          const [createdSub] = await tx
+            .insert(userSubscriptionsTable)
+            .values({
+              userId: record.userId,
+              planId: record.planId,
+              status: "active",
+              billingCycle: record.billingCycle as "monthly" | "yearly",
+              startedAt: new Date(),
+              expiresAt,
+              autoRenew: false,
+              externalSubscriptionId: record.moyasarPaymentId,
+              updatedAt: new Date(),
+            })
+            .returning();
+
+          await tx
+            .update(moyasarPaymentsTable)
+            .set({ subscriptionId: createdSub.id, updatedAt: new Date() })
+            .where(eq(moyasarPaymentsTable.id, record.id));
+
+          return createdSub;
+        });
 
         await AuditService.logEvent({
           userId: record.userId,
@@ -234,10 +241,25 @@ router.post("/verify", requireAuth, async (req: Request, res) => {
           ipAddress: req.ip ?? null,
         });
 
+        // Activation runs in its own transaction. If it fails, the
+        // subscription exists but workspace is unallocated — admin can
+        // re-sync, and the sweeper will not touch it (status=active).
+        try {
+          await activateSubscription(sub.id, { triggeredBy: "moyasar.verify.paid" });
+        } catch (activationErr) {
+          console.error("[payments] verify auto-activation failed:", activationErr);
+        }
+
         res.json({ status: "paid", subscriptionId: sub.id });
         return;
       }
     }
+
+    // No subscription path — just persist the latest status.
+    await db
+      .update(moyasarPaymentsTable)
+      .set({ status: moyasarPayment.status, updatedAt: new Date() })
+      .where(eq(moyasarPaymentsTable.id, record.id));
 
     res.json({ status: moyasarPayment.status, subscriptionId: record.subscriptionId ?? null });
   } catch (err: unknown) {
@@ -277,11 +299,6 @@ router.post("/webhook", async (req, res) => {
       return;
     }
 
-    await db
-      .update(moyasarPaymentsTable)
-      .set({ status: moyasarPayment.status, updatedAt: new Date() })
-      .where(eq(moyasarPaymentsTable.id, record.id));
-
     if (moyasarPayment.status === "paid" && record.subscriptionId == null) {
       const [plan] = await db
         .select()
@@ -293,25 +310,35 @@ router.post("/webhook", async (req, res) => {
           ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-        const [sub] = await db
-          .insert(userSubscriptionsTable)
-          .values({
-            userId: record.userId,
-            planId: record.planId,
-            status: "active",
-            billingCycle: record.billingCycle as "monthly" | "yearly",
-            startedAt: new Date(),
-            expiresAt,
-            autoRenew: false,
-            externalSubscriptionId: moyasarPaymentId,
-            updatedAt: new Date(),
-          })
-          .returning();
+        // Atomic: payment status + subscription insert + payment↔sub link.
+        const sub = await db.transaction(async (tx) => {
+          await tx
+            .update(moyasarPaymentsTable)
+            .set({ status: moyasarPayment.status, updatedAt: new Date() })
+            .where(eq(moyasarPaymentsTable.id, record.id));
 
-        await db
-          .update(moyasarPaymentsTable)
-          .set({ subscriptionId: sub.id, updatedAt: new Date() })
-          .where(eq(moyasarPaymentsTable.id, record.id));
+          const [createdSub] = await tx
+            .insert(userSubscriptionsTable)
+            .values({
+              userId: record.userId,
+              planId: record.planId,
+              status: "active",
+              billingCycle: record.billingCycle as "monthly" | "yearly",
+              startedAt: new Date(),
+              expiresAt,
+              autoRenew: false,
+              externalSubscriptionId: moyasarPaymentId,
+              updatedAt: new Date(),
+            })
+            .returning();
+
+          await tx
+            .update(moyasarPaymentsTable)
+            .set({ subscriptionId: createdSub.id, updatedAt: new Date() })
+            .where(eq(moyasarPaymentsTable.id, record.id));
+
+          return createdSub;
+        });
 
         await AuditService.logEvent({
           userId: record.userId,

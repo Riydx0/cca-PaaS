@@ -24,7 +24,7 @@ import {
   CLOUDRON_PERMISSIONS,
   type CloudronPermission,
 } from "@workspace/db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { AuditService } from "./audit_service";
 
 const PERMISSION_FEATURE_KEYS: readonly CloudronPermission[] = CLOUDRON_PERMISSIONS;
@@ -208,8 +208,14 @@ export async function activateSubscription(subscriptionId: number, opts?: {
 /**
  * Suspends a subscription:
  *  - sets status = 'suspended' (or 'expired')
- *  - empties permissions on the linked cloudron_client_access (fail-closed)
+ *  - empties permissions on the linked cloudron_client_access (FAIL-CLOSED:
+ *    always revokes, regardless of manual_lock — manual_lock only blocks
+ *    grants, never blocks revocation. This is a security invariant.)
  *  - writes audit log
+ *
+ * Scope: prefers cloudron_client_access rows linked by subscription_id.
+ * Falls back to user_id only if no row is explicitly linked yet (legacy /
+ * pre-link rows). This avoids over-suspending when a user has multiple subs.
  *
  * The access row is intentionally retained (not deleted) so a future
  * re-activation can restore it.
@@ -233,17 +239,41 @@ export async function suspendSubscription(
       .set({ status: newStatus, updatedAt: new Date() })
       .where(eq(userSubscriptionsTable.id, subscriptionId));
 
-    // Only clear permissions for access rows linked to this subscription
-    // and not under manual lock.
-    await tx
-      .update(cloudronClientAccessTable)
-      .set({ permissions: [], installQuota: 0 })
-      .where(
-        and(
-          eq(cloudronClientAccessTable.userId, sub.userId),
-          eq(cloudronClientAccessTable.manualLock, false)
+    // FAIL-CLOSED revocation. Always clear permissions for any access row
+    // tied to this subscription, ignoring manual_lock — a manual lock must
+    // never keep access alive after a payment failure / expiry / refund.
+    const linkedRows = await tx
+      .select({ id: cloudronClientAccessTable.id })
+      .from(cloudronClientAccessTable)
+      .where(eq(cloudronClientAccessTable.subscriptionId, subscriptionId));
+
+    if (linkedRows.length > 0) {
+      await tx
+        .update(cloudronClientAccessTable)
+        .set({ permissions: [], installQuota: 0 })
+        .where(eq(cloudronClientAccessTable.subscriptionId, subscriptionId));
+    } else {
+      // Legacy fallback: rows that pre-date subscription_id linkage.
+      // Only clear if the user has no other active/trial subscription —
+      // otherwise we'd over-suspend.
+      const [otherActive] = await tx
+        .select({ id: userSubscriptionsTable.id })
+        .from(userSubscriptionsTable)
+        .where(
+          and(
+            eq(userSubscriptionsTable.userId, sub.userId),
+            sql`${userSubscriptionsTable.status} IN ('active', 'trial')`,
+            sql`${userSubscriptionsTable.id} <> ${subscriptionId}`
+          )
         )
-      );
+        .limit(1);
+      if (!otherActive) {
+        await tx
+          .update(cloudronClientAccessTable)
+          .set({ permissions: [], installQuota: 0 })
+          .where(eq(cloudronClientAccessTable.userId, sub.userId));
+      }
+    }
   });
 
   await AuditService.logEvent({
