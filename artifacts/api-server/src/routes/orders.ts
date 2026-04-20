@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { cloudServicesTable, serverOrdersTable, providersTable, serviceInstancesTable } from "@workspace/db/schema";
+import { cloudServicesTable, serverOrdersTable, providersTable, serviceInstancesTable, userSubscriptionsTable } from "@workspace/db/schema";
 import { CreateOrderBody } from "@workspace/api-zod";
-import { eq, and, desc, ilike } from "drizzle-orm";
+import { eq, and, desc, ilike, inArray } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireRole";
 import { AuditService } from "../services/audit_service";
 import { serverProvisioningService } from "../services/provisioning/ServerProvisioningService";
@@ -76,6 +76,21 @@ router.post("/", requireAuth, async (req: any, res) => {
     estimatedTime: "5-10 minutes",
   });
 
+  // Link the order to the user's currently active subscription, if any.
+  // This makes the workspace ↔ order ↔ subscription chain queryable for
+  // billing reconciliation and per-plan provisioning quotas.
+  const [activeSub] = await db
+    .select({ id: userSubscriptionsTable.id })
+    .from(userSubscriptionsTable)
+    .where(
+      and(
+        eq(userSubscriptionsTable.userId, parseInt(userId, 10)),
+        inArray(userSubscriptionsTable.status, ["active", "trial"]),
+      ),
+    )
+    .orderBy(desc(userSubscriptionsTable.createdAt))
+    .limit(1);
+
   const [order] = await db
     .insert(serverOrdersTable)
     .values({
@@ -88,6 +103,7 @@ router.post("/", requireAuth, async (req: any, res) => {
       providerResponse,
       provisioningStatus: "pending",
       providerId: matchedProvider?.id ?? null,
+      subscriptionId: activeSub?.id ?? null,
     })
     .returning();
 

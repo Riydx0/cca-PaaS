@@ -502,6 +502,14 @@ const translations = {
     "admin.subscriptions.expiresAt": "Expires",
     "admin.subscriptions.search": "Search by name, email or plan...",
     "admin.subscriptions.empty": "No subscriptions found.",
+    "admin.subscriptions.workspace": "Workspace",
+    "admin.subscriptions.noWorkspace": "Not allocated",
+    "admin.subscriptions.actions": "Actions",
+    "admin.subscriptions.resync": "Re-sync",
+    "admin.subscriptions.resyncTooltip": "Re-allocate workspace and refresh permissions from the plan.",
+    "admin.subscriptions.resyncSuccess": "Subscription re-synced successfully.",
+    "admin.subscriptions.resyncError": "Failed to re-sync subscription.",
+    "admin.cloudronAccess.autoNotice": "Permissions are managed automatically from subscription plans. Manual edits are for emergencies only and will be overwritten the next time the plan is updated.",
 
     // ---- Admin Plans ----
     "admin.plans.title": "Pricing Plans",
@@ -2099,6 +2107,14 @@ const translations = {
     "admin.subscriptions.expiresAt": "ينتهي في",
     "admin.subscriptions.search": "ابحث بالاسم أو البريد أو الخطة...",
     "admin.subscriptions.empty": "لا توجد اشتراكات.",
+    "admin.subscriptions.workspace": "مساحة العمل",
+    "admin.subscriptions.noWorkspace": "غير مخصصة",
+    "admin.subscriptions.actions": "إجراءات",
+    "admin.subscriptions.resync": "إعادة المزامنة",
+    "admin.subscriptions.resyncTooltip": "إعادة تخصيص مساحة العمل وتحديث الصلاحيات من الخطة.",
+    "admin.subscriptions.resyncSuccess": "تمت إعادة مزامنة الاشتراك بنجاح.",
+    "admin.subscriptions.resyncError": "فشلت إعادة مزامنة الاشتراك.",
+    "admin.cloudronAccess.autoNotice": "تتم إدارة الصلاحيات تلقائياً من خطط الاشتراك. التعديل اليدوي للطوارئ فقط وسيُعاد كتابته عند تحديث الخطة.",
 
     // ---- لوحة الخطط (سوبر أدمن) ----
     "admin.plans.title": "خطط الأسعار",

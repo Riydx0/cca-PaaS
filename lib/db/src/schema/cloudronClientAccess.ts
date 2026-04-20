@@ -1,6 +1,7 @@
-import { pgTable, serial, integer, jsonb, timestamp, unique, text } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, jsonb, timestamp, unique, text, boolean } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { cloudronInstancesTable } from "./cloudronInstances";
+import { userSubscriptionsTable } from "./userSubscriptions";
 
 export const CLOUDRON_PERMISSIONS = [
   "view_cloudron",
@@ -32,6 +33,8 @@ export const cloudronClientAccessTable = pgTable(
     permissions: jsonb("permissions").$type<CloudronPermission[]>().notNull().default([]),
     installQuota: integer("install_quota"),
     relationshipType: text("relationship_type").notNull().default("primary"), // primary|shared
+    subscriptionId: integer("subscription_id").references(() => userSubscriptionsTable.id),
+    manualLock: boolean("manual_lock").notNull().default(false),
     linkedAt: timestamp("linked_at").notNull().defaultNow(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },

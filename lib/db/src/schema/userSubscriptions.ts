@@ -2,6 +2,7 @@ import { pgTable, serial, integer, text, boolean, timestamp } from "drizzle-orm/
 import { relations } from "drizzle-orm";
 import { usersTable } from "./users";
 import { subscriptionPlansTable } from "./subscriptionPlans";
+import { cloudronInstancesTable } from "./cloudronInstances";
 
 export const userSubscriptionsTable = pgTable("user_subscriptions", {
   id: serial("id").primaryKey(),
@@ -15,6 +16,7 @@ export const userSubscriptionsTable = pgTable("user_subscriptions", {
   autoRenew: boolean("auto_renew").notNull().default(true),
   notes: text("notes"),
   externalSubscriptionId: text("external_subscription_id"),
+  cloudronInstanceId: integer("cloudron_instance_id").references(() => cloudronInstancesTable.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -27,6 +29,10 @@ export const userSubscriptionsRelations = relations(userSubscriptionsTable, ({ o
   plan: one(subscriptionPlansTable, {
     fields: [userSubscriptionsTable.planId],
     references: [subscriptionPlansTable.id],
+  }),
+  cloudronInstance: one(cloudronInstancesTable, {
+    fields: [userSubscriptionsTable.cloudronInstanceId],
+    references: [cloudronInstancesTable.id],
   }),
 }));
 

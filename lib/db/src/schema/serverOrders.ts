@@ -3,6 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { cloudServicesTable } from "./cloudServices";
 import { providersTable } from "./providers";
+import { userSubscriptionsTable } from "./userSubscriptions";
 import { relations } from "drizzle-orm";
 
 export const serverOrdersTable = pgTable("server_orders", {
@@ -17,6 +18,7 @@ export const serverOrdersTable = pgTable("server_orders", {
   providerId: integer("provider_id").references(() => providersTable.id),
   externalId: text("external_id"),
   provisioningStatus: text("provisioning_status").default("pending"),
+  subscriptionId: integer("subscription_id").references(() => userSubscriptionsTable.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

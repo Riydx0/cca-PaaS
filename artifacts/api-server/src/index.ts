@@ -132,6 +132,14 @@ await cloudronHealthMonitor.start();
 const { cloudronSyncService } = await import("./services/CloudronSyncService.js");
 cloudronSyncService.start();
 
+const { subscriptionExpirationSweeper } = await import("./services/SubscriptionExpirationSweeper.js");
+subscriptionExpirationSweeper.start();
+
+const { backfillLegacyActiveSubscriptions } = await import("./services/legacy_subscription_backfill.js");
+backfillLegacyActiveSubscriptions().catch((err) => {
+  logger.warn({ err }, "Legacy subscription backfill failed (non-fatal)");
+});
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {

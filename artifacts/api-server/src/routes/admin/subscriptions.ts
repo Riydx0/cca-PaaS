@@ -5,9 +5,11 @@ import {
   userSubscriptionsTable,
   subscriptionPlansTable,
   usersTable,
+  cloudronInstancesTable,
 } from "@workspace/db/schema";
 import { eq, ilike, or, desc, count, and } from "drizzle-orm";
 import { AuditService } from "../../services/audit_service";
+import { activateSubscription, suspendSubscription } from "../../services/subscription_activation_service";
 
 const router = Router();
 
@@ -51,10 +53,13 @@ router.get("/", requireAdmin, async (req, res) => {
         planId: subscriptionPlansTable.id,
         planName: subscriptionPlansTable.name,
         planSlug: subscriptionPlansTable.slug,
+        cloudronInstanceId: userSubscriptionsTable.cloudronInstanceId,
+        cloudronInstanceName: cloudronInstancesTable.name,
       })
       .from(userSubscriptionsTable)
       .innerJoin(usersTable, eq(userSubscriptionsTable.userId, usersTable.id))
       .innerJoin(subscriptionPlansTable, eq(userSubscriptionsTable.planId, subscriptionPlansTable.id))
+      .leftJoin(cloudronInstancesTable, eq(userSubscriptionsTable.cloudronInstanceId, cloudronInstancesTable.id))
       .where(whereClause)
       .orderBy(desc(userSubscriptionsTable.createdAt))
       .limit(limitNum)
@@ -123,6 +128,15 @@ router.post("/", requireSuperAdmin, async (req: any, res) => {
       ipAddress: req.ip ?? null,
     });
 
+    // Auto-allocate workspace + sync permissions when admin creates as active.
+    if (status === "active" || status === "trial") {
+      try {
+        await activateSubscription(sub.id, { triggeredBy: `admin.${adminId}.create` });
+      } catch (err) {
+        console.error("[admin/subs] auto-activation on create failed:", err);
+      }
+    }
+
     res.status(201).json(sub);
   } catch (err: any) {
     console.error(err);
@@ -174,6 +188,62 @@ router.patch("/:id", requireSuperAdmin, async (req: any, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to update subscription" });
+  }
+});
+
+/**
+ * POST /api/admin/subscriptions/:id/resync
+ *
+ * Re-runs the activation pipeline for a single subscription:
+ *  - re-derives permissions from the current plan features
+ *  - re-applies them to cloudron_client_access (respects manual_lock)
+ *  - re-allocates an instance from the pool if missing
+ */
+router.post("/:id/resync", requireSuperAdmin, async (req: any, res) => {
+  try {
+    const adminId = req?.session?.userId as number;
+    const subId = Number(req.params.id);
+    if (!Number.isFinite(subId)) {
+      res.status(400).json({ error: "Invalid subscription id" });
+      return;
+    }
+
+    const result = await activateSubscription(subId, {
+      triggeredBy: `admin.${adminId}.resync`,
+    });
+
+    res.json({ success: true, result });
+  } catch (err) {
+    console.error("[admin/subs] resync failed:", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Failed to re-sync subscription",
+    });
+  }
+});
+
+/**
+ * POST /api/admin/subscriptions/:id/suspend
+ *
+ * Manually suspends a subscription (admin override). Empties permissions
+ * on the linked cloudron_client_access (fail-closed).
+ */
+router.post("/:id/suspend", requireSuperAdmin, async (req: any, res) => {
+  try {
+    const adminId = req?.session?.userId as number;
+    const subId = Number(req.params.id);
+    if (!Number.isFinite(subId)) {
+      res.status(400).json({ error: "Invalid subscription id" });
+      return;
+    }
+    await suspendSubscription(subId, {
+      reason: req.body?.reason ?? "admin.manual_suspend",
+      status: "suspended",
+      triggeredBy: `admin.${adminId}.suspend`,
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[admin/subs] suspend failed:", err);
+    res.status(500).json({ error: "Failed to suspend subscription" });
   }
 });
 

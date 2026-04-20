@@ -9,6 +9,7 @@ import {
 import { eq, and } from "drizzle-orm";
 import { MoyasarService } from "../services/moyasar_service";
 import { AuditService } from "../services/audit_service";
+import { activateSubscription, suspendSubscription } from "../services/subscription_activation_service";
 
 const router = Router();
 
@@ -320,6 +321,36 @@ router.post("/webhook", async (req, res) => {
           details: { planId: record.planId, billingCycle: record.billingCycle, moyasarPaymentId },
           ipAddress: null,
         });
+
+        // Auto-allocate workspace + sync permissions. Failures here leave the
+        // subscription created but with no access — admin can re-sync later.
+        try {
+          await activateSubscription(sub.id, { triggeredBy: "moyasar.webhook.paid" });
+        } catch (activationErr) {
+          console.error("[payments] webhook auto-activation failed:", activationErr);
+          await AuditService.logEvent({
+            userId: record.userId,
+            action: "subscription.activation_failed",
+            entityType: "user_subscription",
+            entityId: String(sub.id),
+            details: { error: activationErr instanceof Error ? activationErr.message : String(activationErr) },
+            ipAddress: null,
+          });
+        }
+      }
+    } else if (
+      (moyasarPayment.status === "failed" || moyasarPayment.status === "refunded") &&
+      record.subscriptionId != null
+    ) {
+      // Payment reversed → suspend the linked subscription (fail-closed).
+      try {
+        await suspendSubscription(record.subscriptionId, {
+          reason: `moyasar.${moyasarPayment.status}`,
+          status: "suspended",
+          triggeredBy: "moyasar.webhook",
+        });
+      } catch (suspErr) {
+        console.error("[payments] webhook suspension failed:", suspErr);
       }
     }
 

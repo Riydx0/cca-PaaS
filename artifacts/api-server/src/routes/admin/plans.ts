@@ -8,6 +8,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, count, asc } from "drizzle-orm";
 import { AuditService } from "../../services/audit_service";
+import { resyncPlanSubscribers } from "../../services/subscription_activation_service";
 
 const router = Router();
 router.use(requireSuperAdmin);
@@ -275,13 +276,22 @@ router.put("/:id/features", async (req: any, res) => {
       ipAddress: req.ip ?? null,
     });
 
+    // Re-sync permissions for every active subscriber on this plan.
+    // Errors per-sub are swallowed inside the service; total failure is non-fatal.
+    let resyncReport: { resynced: number; failed: number } | null = null;
+    try {
+      resyncReport = await resyncPlanSubscribers(planId);
+    } catch (err) {
+      console.error("[plans] resync after features update failed:", err);
+    }
+
     const updated = await db
       .select()
       .from(subscriptionPlanFeaturesTable)
       .where(eq(subscriptionPlanFeaturesTable.planId, planId))
       .orderBy(asc(subscriptionPlanFeaturesTable.featureKey));
 
-    res.json({ features: updated });
+    res.json({ features: updated, resync: resyncReport });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to update plan features" });

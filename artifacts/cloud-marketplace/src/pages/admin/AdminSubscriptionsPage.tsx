@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { adminFetch } from "@/lib/adminFetch";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { BadgeCheck, Search, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { BadgeCheck, Search, ChevronLeft, ChevronRight, X, RefreshCw, Server } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
 
 interface Sub {
@@ -23,6 +24,8 @@ interface Sub {
   planId: number;
   planName: string;
   planSlug: string;
+  cloudronInstanceId: number | null;
+  cloudronInstanceName: string | null;
 }
 
 const statusColors: Record<string, string> = {
@@ -40,10 +43,26 @@ function fmt(iso: string | null) {
 
 export function AdminSubscriptionsPage() {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [resyncingId, setResyncingId] = useState<number | null>(null);
   const LIMIT = 20;
+
+  const resyncMutation = useMutation({
+    mutationFn: (subId: number) =>
+      adminFetch(`/api/admin/subscriptions/${subId}/resync`, { method: "POST" }),
+    onMutate: (subId) => setResyncingId(subId),
+    onSuccess: () => {
+      toast.success(t("admin.subscriptions.resyncSuccess"));
+      queryClient.invalidateQueries({ queryKey: ["admin", "subscriptions"] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.message ?? t("admin.subscriptions.resyncError"));
+    },
+    onSettled: () => setResyncingId(null),
+  });
 
   const debouncedSearch = useDebounce(search, 350);
 
@@ -121,6 +140,8 @@ export function AdminSubscriptionsPage() {
                   <th className="text-start px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">{t("admin.subscriptions.cycle")}</th>
                   <th className="text-start px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">{t("admin.subscriptions.startedAt")}</th>
                   <th className="text-start px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">{t("admin.subscriptions.expiresAt")}</th>
+                  <th className="text-start px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">{t("admin.subscriptions.workspace")}</th>
+                  <th className="text-end px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">{t("admin.subscriptions.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -136,7 +157,7 @@ export function AdminSubscriptionsPage() {
                   ))
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-12 text-muted-foreground">
+                    <td colSpan={8} className="text-center py-12 text-muted-foreground">
                       <BadgeCheck className="h-10 w-10 mx-auto mb-2 opacity-20" />
                       {t("admin.subscriptions.empty")}
                     </td>
@@ -161,6 +182,31 @@ export function AdminSubscriptionsPage() {
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{fmt(row.startedAt)}</td>
                       <td className="px-4 py-3 text-muted-foreground">{fmt(row.expiresAt)}</td>
+                      <td className="px-4 py-3">
+                        {row.cloudronInstanceName ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+                            <Server className="h-3.5 w-3.5 text-muted-foreground" />
+                            {row.cloudronInstanceName}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">
+                            {t("admin.subscriptions.noWorkspace")}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => resyncMutation.mutate(row.id)}
+                          disabled={resyncingId === row.id}
+                          title={t("admin.subscriptions.resyncTooltip")}
+                          data-testid={`button-resync-sub-${row.id}`}
+                        >
+                          <RefreshCw className={`h-3.5 w-3.5 ${resyncingId === row.id ? "animate-spin" : ""}`} />
+                          <span className="ms-1.5 hidden sm:inline">{t("admin.subscriptions.resync")}</span>
+                        </Button>
+                      </td>
                     </tr>
                   ))
                 )}
