@@ -200,58 +200,76 @@ router.post("/verify", requireAuth, async (req: Request, res) => {
           ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-        // Atomic: payment status + subscription insert + payment↔sub link
-        // all in one DB transaction. If anything fails, the whole thing
-        // rolls back — no orphaned subscription, no half-linked payment.
-        const sub = await db.transaction(async (tx) => {
-          await tx
+        // TRUE atomic flow: payment status, subscription insert, payment↔sub
+        // link, AND workspace allocation + access grant + permissions sync all
+        // in one DB transaction. If any step fails, the whole thing rolls
+        // back — no orphaned subscription, no paid customer with no workspace.
+        try {
+          const sub = await db.transaction(async (tx) => {
+            await tx
+              .update(moyasarPaymentsTable)
+              .set({ status: moyasarPayment.status, updatedAt: new Date() })
+              .where(eq(moyasarPaymentsTable.id, record.id));
+
+            const [createdSub] = await tx
+              .insert(userSubscriptionsTable)
+              .values({
+                userId: record.userId,
+                planId: record.planId,
+                status: "active",
+                billingCycle: record.billingCycle as "monthly" | "yearly",
+                startedAt: new Date(),
+                expiresAt,
+                autoRenew: false,
+                externalSubscriptionId: record.moyasarPaymentId,
+                updatedAt: new Date(),
+              })
+              .returning();
+
+            await tx
+              .update(moyasarPaymentsTable)
+              .set({ subscriptionId: createdSub.id, updatedAt: new Date() })
+              .where(eq(moyasarPaymentsTable.id, record.id));
+
+            // Activation participates in this same transaction.
+            await activateSubscription(createdSub.id, {
+              triggeredBy: "moyasar.verify.paid",
+              tx: tx as any,
+            });
+
+            return createdSub;
+          });
+
+          await AuditService.logEvent({
+            userId: record.userId,
+            action: "subscription.activated_via_payment",
+            entityType: "user_subscription",
+            entityId: String(sub.id),
+            details: { planId: record.planId, billingCycle: record.billingCycle, moyasarPaymentId: record.moyasarPaymentId },
+            ipAddress: req.ip ?? null,
+          });
+
+          res.json({ status: "paid", subscriptionId: sub.id });
+          return;
+        } catch (txErr) {
+          console.error("[payments] verify atomic activation failed; rolled back:", txErr);
+          await AuditService.logEvent({
+            userId: record.userId,
+            action: "subscription.activation_failed",
+            entityType: "moyasar_payment",
+            entityId: String(record.id),
+            details: { error: txErr instanceof Error ? txErr.message : String(txErr) },
+            ipAddress: req.ip ?? null,
+          });
+          // Persist the latest payment status so the user sees "paid" but no
+          // sub yet; admin can re-trigger via re-sync.
+          await db
             .update(moyasarPaymentsTable)
             .set({ status: moyasarPayment.status, updatedAt: new Date() })
             .where(eq(moyasarPaymentsTable.id, record.id));
-
-          const [createdSub] = await tx
-            .insert(userSubscriptionsTable)
-            .values({
-              userId: record.userId,
-              planId: record.planId,
-              status: "active",
-              billingCycle: record.billingCycle as "monthly" | "yearly",
-              startedAt: new Date(),
-              expiresAt,
-              autoRenew: false,
-              externalSubscriptionId: record.moyasarPaymentId,
-              updatedAt: new Date(),
-            })
-            .returning();
-
-          await tx
-            .update(moyasarPaymentsTable)
-            .set({ subscriptionId: createdSub.id, updatedAt: new Date() })
-            .where(eq(moyasarPaymentsTable.id, record.id));
-
-          return createdSub;
-        });
-
-        await AuditService.logEvent({
-          userId: record.userId,
-          action: "subscription.activated_via_payment",
-          entityType: "user_subscription",
-          entityId: String(sub.id),
-          details: { planId: record.planId, billingCycle: record.billingCycle, moyasarPaymentId: record.moyasarPaymentId },
-          ipAddress: req.ip ?? null,
-        });
-
-        // Activation runs in its own transaction. If it fails, the
-        // subscription exists but workspace is unallocated — admin can
-        // re-sync, and the sweeper will not touch it (status=active).
-        try {
-          await activateSubscription(sub.id, { triggeredBy: "moyasar.verify.paid" });
-        } catch (activationErr) {
-          console.error("[payments] verify auto-activation failed:", activationErr);
+          res.json({ status: moyasarPayment.status, subscriptionId: null, activationError: true });
+          return;
         }
-
-        res.json({ status: "paid", subscriptionId: sub.id });
-        return;
       }
     }
 
@@ -310,7 +328,7 @@ router.post("/webhook", async (req, res) => {
           ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-        // Atomic: payment status + subscription insert + payment↔sub link.
+        // TRUE atomic flow (see /verify above for rationale).
         const sub = await db.transaction(async (tx) => {
           await tx
             .update(moyasarPaymentsTable)
@@ -336,6 +354,11 @@ router.post("/webhook", async (req, res) => {
             .update(moyasarPaymentsTable)
             .set({ subscriptionId: createdSub.id, updatedAt: new Date() })
             .where(eq(moyasarPaymentsTable.id, record.id));
+
+          await activateSubscription(createdSub.id, {
+            triggeredBy: "moyasar.webhook.paid",
+            tx: tx as any,
+          });
 
           return createdSub;
         });

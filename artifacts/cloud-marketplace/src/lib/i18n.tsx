@@ -510,6 +510,10 @@ const translations = {
     "admin.subscriptions.resyncSuccess": "Subscription re-synced successfully.",
     "admin.subscriptions.resyncError": "Failed to re-sync subscription.",
     "admin.cloudronAccess.autoNotice": "Permissions are managed automatically from subscription plans. Manual edits are for emergencies only and will be overwritten the next time the plan is updated.",
+    "admin.orders.linkedSubscription": "Linked Subscription",
+    "admin.orders.subscriptionId": "Subscription ID",
+    "admin.orders.subscriptionStatus": "Subscription Status",
+    "admin.orders.workspace": "Workspace",
 
     // ---- Admin Plans ----
     "admin.plans.title": "Pricing Plans",
@@ -2115,6 +2119,10 @@ const translations = {
     "admin.subscriptions.resyncSuccess": "تمت إعادة مزامنة الاشتراك بنجاح.",
     "admin.subscriptions.resyncError": "فشلت إعادة مزامنة الاشتراك.",
     "admin.cloudronAccess.autoNotice": "تتم إدارة الصلاحيات تلقائياً من خطط الاشتراك. التعديل اليدوي للطوارئ فقط وسيُعاد كتابته عند تحديث الخطة.",
+    "admin.orders.linkedSubscription": "الاشتراك المرتبط",
+    "admin.orders.subscriptionId": "معرّف الاشتراك",
+    "admin.orders.subscriptionStatus": "حالة الاشتراك",
+    "admin.orders.workspace": "مساحة العمل",
 
     // ---- لوحة الخطط (سوبر أدمن) ----
     "admin.plans.title": "خطط الأسعار",

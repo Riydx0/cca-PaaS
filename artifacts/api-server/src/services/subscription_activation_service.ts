@@ -37,12 +37,14 @@ export interface ActivationResult {
   installQuota: number | null;
 }
 
+type DbOrTx = typeof db;
+
 /**
  * Picks an active Cloudron instance with the lowest current client load.
  * Returns null if no active instance is available.
  */
-async function pickInstanceFromPool(): Promise<{ id: number; name: string } | null> {
-  const rows = await db.execute<{ id: number; name: string; client_count: number }>(sql`
+async function pickInstanceFromPool(executor: DbOrTx): Promise<{ id: number; name: string } | null> {
+  const rows = await executor.execute<{ id: number; name: string; client_count: number }>(sql`
     SELECT i.id, i.name, COUNT(a.user_id)::int AS client_count
     FROM cloudron_instances i
     LEFT JOIN cloudron_client_access a ON a.instance_id = i.id
@@ -58,11 +60,11 @@ async function pickInstanceFromPool(): Promise<{ id: number; name: string } | nu
 /**
  * Builds the permissions array + installQuota from a plan's enabled features.
  */
-async function derivePermissionsFromPlan(planId: number): Promise<{
+async function derivePermissionsFromPlan(executor: DbOrTx, planId: number): Promise<{
   permissions: CloudronPermission[];
   installQuota: number | null;
 }> {
-  const features = await db
+  const features = await executor
     .select()
     .from(subscriptionPlanFeaturesTable)
     .where(eq(subscriptionPlanFeaturesTable.planId, planId));
@@ -102,44 +104,52 @@ async function derivePermissionsFromPlan(planId: number): Promise<{
 export async function activateSubscription(subscriptionId: number, opts?: {
   preferredInstanceId?: number;
   triggeredBy?: string;
+  /** Optional caller-provided transaction. When supplied, the entire
+   * activation runs inside that transaction (true atomic flow with the
+   * caller's other writes). */
+  tx?: DbOrTx;
 }): Promise<ActivationResult> {
-  const [sub] = await db
-    .select()
-    .from(userSubscriptionsTable)
-    .where(eq(userSubscriptionsTable.id, subscriptionId))
-    .limit(1);
-  if (!sub) throw new Error(`Subscription ${subscriptionId} not found`);
+  const triggeredBy = opts?.triggeredBy ?? "unknown";
 
-  const [plan] = await db
-    .select()
-    .from(subscriptionPlansTable)
-    .where(eq(subscriptionPlansTable.id, sub.planId))
-    .limit(1);
-  if (!plan) throw new Error(`Plan ${sub.planId} not found`);
-
-  // Step 1: choose / verify instance
-  let instanceId = sub.cloudronInstanceId ?? opts?.preferredInstanceId ?? null;
-  if (instanceId) {
-    const [inst] = await db
-      .select({ id: cloudronInstancesTable.id, isActive: cloudronInstancesTable.isActive })
-      .from(cloudronInstancesTable)
-      .where(eq(cloudronInstancesTable.id, instanceId))
+  const runWithExecutor = async (executor: DbOrTx): Promise<ActivationResult> => {
+    const [sub] = await executor
+      .select()
+      .from(userSubscriptionsTable)
+      .where(eq(userSubscriptionsTable.id, subscriptionId))
       .limit(1);
-    if (!inst || !inst.isActive) instanceId = null;
-  }
-  if (!instanceId) {
-    const picked = await pickInstanceFromPool();
-    if (!picked) throw new Error("No active Cloudron instance available in pool");
-    instanceId = picked.id;
-  }
+    if (!sub) throw new Error(`Subscription ${subscriptionId} not found`);
 
-  // Step 2: derive permissions
-  const { permissions, installQuota } = await derivePermissionsFromPlan(sub.planId);
+    const [plan] = await executor
+      .select()
+      .from(subscriptionPlansTable)
+      .where(eq(subscriptionPlansTable.id, sub.planId))
+      .limit(1);
+    if (!plan) throw new Error(`Plan ${sub.planId} not found`);
 
-  // Step 3: persist (transaction)
-  await db.transaction(async (tx) => {
+    // Step 1: choose / verify instance
+    let instanceId = sub.cloudronInstanceId ?? opts?.preferredInstanceId ?? null;
+    if (instanceId) {
+      const [inst] = await executor
+        .select({ id: cloudronInstancesTable.id, isActive: cloudronInstancesTable.isActive })
+        .from(cloudronInstancesTable)
+        .where(eq(cloudronInstancesTable.id, instanceId))
+        .limit(1);
+      if (!inst || !inst.isActive) instanceId = null;
+    }
+    let allocated = false;
+    if (!instanceId) {
+      const picked = await pickInstanceFromPool(executor);
+      if (!picked) throw new Error("No active Cloudron instance available in pool");
+      instanceId = picked.id;
+      allocated = true;
+    }
+
+    // Step 2: derive permissions
+    const { permissions, installQuota } = await derivePermissionsFromPlan(executor, sub.planId);
+
+    // Step 3: persist
     if (sub.cloudronInstanceId !== instanceId || sub.status !== "active") {
-      await tx
+      await executor
         .update(userSubscriptionsTable)
         .set({
           cloudronInstanceId: instanceId,
@@ -149,18 +159,26 @@ export async function activateSubscription(subscriptionId: number, opts?: {
         .where(eq(userSubscriptionsTable.id, subscriptionId));
     }
 
-    const [existing] = await tx
+    const [existing] = await executor
       .select()
       .from(cloudronClientAccessTable)
       .where(eq(cloudronClientAccessTable.userId, sub.userId))
       .limit(1);
 
+    let granted = !existing;
     if (existing) {
-      // Respect manual lock — admin opted out of automatic sync.
+      // Respect manual lock — admin opted out of automatic sync (grants only;
+      // suspension always overrides this lock — see suspendSubscription).
       if (existing.manualLock) {
-        return;
+        return {
+          subscriptionId,
+          userId: sub.userId,
+          instanceId,
+          permissions,
+          installQuota,
+        };
       }
-      await tx
+      await executor
         .update(cloudronClientAccessTable)
         .set({
           instanceId,
@@ -170,7 +188,7 @@ export async function activateSubscription(subscriptionId: number, opts?: {
         })
         .where(eq(cloudronClientAccessTable.userId, sub.userId));
     } else {
-      await tx.insert(cloudronClientAccessTable).values({
+      await executor.insert(cloudronClientAccessTable).values({
         userId: sub.userId,
         instanceId,
         permissions,
@@ -179,30 +197,65 @@ export async function activateSubscription(subscriptionId: number, opts?: {
         relationshipType: "primary",
       });
     }
-  });
 
-  await AuditService.logEvent({
-    userId: sub.userId,
-    action: "subscription.activated",
-    entityType: "user_subscription",
-    entityId: String(subscriptionId),
-    details: {
-      planId: sub.planId,
+    // Granular audit trail (caller can wrap these in their own tx; audit
+    // writes are fire-and-forget so we don't block on them).
+    if (allocated) {
+      AuditService.logEvent({
+        userId: sub.userId,
+        action: "instance.allocated",
+        entityType: "cloudron_instance",
+        entityId: String(instanceId),
+        details: { subscriptionId, triggeredBy },
+        ipAddress: null,
+      }).catch(() => {});
+    }
+    if (granted) {
+      AuditService.logEvent({
+        userId: sub.userId,
+        action: "access.granted",
+        entityType: "cloudron_client_access",
+        entityId: String(sub.userId),
+        details: { subscriptionId, instanceId, triggeredBy },
+        ipAddress: null,
+      }).catch(() => {});
+    }
+    AuditService.logEvent({
+      userId: sub.userId,
+      action: "permissions.synced",
+      entityType: "user_subscription",
+      entityId: String(subscriptionId),
+      details: { permissionsCount: permissions.length, installQuota, triggeredBy },
+      ipAddress: null,
+    }).catch(() => {});
+    AuditService.logEvent({
+      userId: sub.userId,
+      action: "subscription.activated",
+      entityType: "user_subscription",
+      entityId: String(subscriptionId),
+      details: {
+        planId: sub.planId,
+        instanceId,
+        permissionsCount: permissions.length,
+        installQuota,
+        triggeredBy,
+      },
+      ipAddress: null,
+    }).catch(() => {});
+
+    return {
+      subscriptionId,
+      userId: sub.userId,
       instanceId,
-      permissionsCount: permissions.length,
+      permissions,
       installQuota,
-      triggeredBy: opts?.triggeredBy ?? "unknown",
-    },
-    ipAddress: null,
-  });
-
-  return {
-    subscriptionId,
-    userId: sub.userId,
-    instanceId,
-    permissions,
-    installQuota,
+    };
   };
+
+  // Caller-provided tx: run inside it (TRUE atomic flow). Otherwise open
+  // our own transaction so the activation is atomic on its own.
+  if (opts?.tx) return runWithExecutor(opts.tx);
+  return db.transaction(async (tx) => runWithExecutor(tx as unknown as DbOrTx));
 }
 
 /**

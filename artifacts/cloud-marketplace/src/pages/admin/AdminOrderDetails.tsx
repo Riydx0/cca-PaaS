@@ -38,6 +38,14 @@ interface OrderService {
   region: string;
   priceMonthly: number;
 }
+interface OrderSubscription {
+  id: number;
+  status: string;
+  billingCycle: string;
+  expiresAt: string | null;
+  plan: { id: number; name: string; slug: string } | null;
+  workspace: { id: number; name: string } | null;
+}
 interface OrderDetails {
   id: number;
   userId: string;
@@ -49,6 +57,7 @@ interface OrderDetails {
   createdAt: string;
   user: OrderUser | null;
   cloudService: OrderService | null;
+  subscription: OrderSubscription | null;
 }
 
 export function AdminOrderDetails() {
@@ -125,6 +134,7 @@ export function AdminOrderDetails() {
 
   const u = order.user;
   const s = order.cloudService;
+  const sub = order.subscription;
 
   return (
     <div className="space-y-6">
@@ -180,6 +190,35 @@ export function AdminOrderDetails() {
           </p>
         )}
       </Card>
+
+      {sub && (
+        <Card className="p-6 space-y-4">
+          <div className="flex items-center gap-2 text-lg font-semibold">
+            <Receipt className="h-5 w-5 text-primary" />
+            {t("admin.orders.linkedSubscription")}
+          </div>
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <DetailRow label={t("admin.orders.subscriptionId")} value={`#${sub.id}`} />
+            <DetailRow label={t("admin.orders.plan")} value={sub.plan?.name ?? "—"} />
+            <DetailRow
+              label={t("admin.orders.subscriptionStatus")}
+              value={<Badge variant="secondary">{sub.status}</Badge>}
+            />
+            <DetailRow
+              label={t("admin.orders.workspace")}
+              value={sub.workspace?.name ?? t("admin.subscriptions.noWorkspace")}
+            />
+            <DetailRow
+              label={t("admin.subscriptions.cycle")}
+              value={sub.billingCycle}
+            />
+            <DetailRow
+              label={t("admin.subscriptions.expiresAt")}
+              value={sub.expiresAt ? new Date(sub.expiresAt).toLocaleDateString() : "—"}
+            />
+          </dl>
+        </Card>
+      )}
 
       <Card className="p-6 space-y-4">
         <div className="flex items-center gap-2 text-lg font-semibold">
