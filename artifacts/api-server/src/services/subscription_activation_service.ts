@@ -37,7 +37,9 @@ export interface ActivationResult {
   installQuota: number | null;
 }
 
-type DbOrTx = typeof db;
+type DbClient = typeof db;
+type Tx = Parameters<Parameters<DbClient["transaction"]>[0]>[0];
+type DbOrTx = DbClient | Tx;
 
 /**
  * Picks an active Cloudron instance with the lowest current client load.
@@ -255,7 +257,7 @@ export async function activateSubscription(subscriptionId: number, opts?: {
   // Caller-provided tx: run inside it (TRUE atomic flow). Otherwise open
   // our own transaction so the activation is atomic on its own.
   if (opts?.tx) return runWithExecutor(opts.tx);
-  return db.transaction(async (tx) => runWithExecutor(tx as unknown as DbOrTx));
+  return db.transaction(async (tx) => runWithExecutor(tx));
 }
 
 /**

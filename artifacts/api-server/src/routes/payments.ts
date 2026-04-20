@@ -234,7 +234,7 @@ router.post("/verify", requireAuth, async (req: Request, res) => {
             // Activation participates in this same transaction.
             await activateSubscription(createdSub.id, {
               triggeredBy: "moyasar.verify.paid",
-              tx: tx as any,
+              tx,
             });
 
             return createdSub;
@@ -317,6 +317,16 @@ router.post("/webhook", async (req, res) => {
       return;
     }
 
+    // Always persist the latest gateway status. The atomic create-sub branch
+    // below repeats the write inside its own transaction (idempotent) so we
+    // never end up with a stale `moyasar_payments.status`.
+    if (moyasarPayment.status !== record.status) {
+      await db
+        .update(moyasarPaymentsTable)
+        .set({ status: moyasarPayment.status, updatedAt: new Date() })
+        .where(eq(moyasarPaymentsTable.id, record.id));
+    }
+
     if (moyasarPayment.status === "paid" && record.subscriptionId == null) {
       const [plan] = await db
         .select()
@@ -328,62 +338,59 @@ router.post("/webhook", async (req, res) => {
           ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-        // TRUE atomic flow (see /verify above for rationale).
-        const sub = await db.transaction(async (tx) => {
-          await tx
-            .update(moyasarPaymentsTable)
-            .set({ status: moyasarPayment.status, updatedAt: new Date() })
-            .where(eq(moyasarPaymentsTable.id, record.id));
+        // TRUE atomic flow: subscription insert, payment↔sub link, and
+        // workspace allocation/access/permissions sync all in one tx.
+        try {
+          const sub = await db.transaction(async (tx) => {
+            await tx
+              .update(moyasarPaymentsTable)
+              .set({ status: moyasarPayment.status, updatedAt: new Date() })
+              .where(eq(moyasarPaymentsTable.id, record.id));
 
-          const [createdSub] = await tx
-            .insert(userSubscriptionsTable)
-            .values({
-              userId: record.userId,
-              planId: record.planId,
-              status: "active",
-              billingCycle: record.billingCycle as "monthly" | "yearly",
-              startedAt: new Date(),
-              expiresAt,
-              autoRenew: false,
-              externalSubscriptionId: moyasarPaymentId,
-              updatedAt: new Date(),
-            })
-            .returning();
+            const [createdSub] = await tx
+              .insert(userSubscriptionsTable)
+              .values({
+                userId: record.userId,
+                planId: record.planId,
+                status: "active",
+                billingCycle: record.billingCycle as "monthly" | "yearly",
+                startedAt: new Date(),
+                expiresAt,
+                autoRenew: false,
+                externalSubscriptionId: moyasarPaymentId,
+                updatedAt: new Date(),
+              })
+              .returning();
 
-          await tx
-            .update(moyasarPaymentsTable)
-            .set({ subscriptionId: createdSub.id, updatedAt: new Date() })
-            .where(eq(moyasarPaymentsTable.id, record.id));
+            await tx
+              .update(moyasarPaymentsTable)
+              .set({ subscriptionId: createdSub.id, updatedAt: new Date() })
+              .where(eq(moyasarPaymentsTable.id, record.id));
 
-          await activateSubscription(createdSub.id, {
-            triggeredBy: "moyasar.webhook.paid",
-            tx: tx as any,
+            await activateSubscription(createdSub.id, {
+              triggeredBy: "moyasar.webhook.paid",
+              tx,
+            });
+
+            return createdSub;
           });
 
-          return createdSub;
-        });
-
-        await AuditService.logEvent({
-          userId: record.userId,
-          action: "subscription.activated_via_webhook",
-          entityType: "user_subscription",
-          entityId: String(sub.id),
-          details: { planId: record.planId, billingCycle: record.billingCycle, moyasarPaymentId },
-          ipAddress: null,
-        });
-
-        // Auto-allocate workspace + sync permissions. Failures here leave the
-        // subscription created but with no access — admin can re-sync later.
-        try {
-          await activateSubscription(sub.id, { triggeredBy: "moyasar.webhook.paid" });
-        } catch (activationErr) {
-          console.error("[payments] webhook auto-activation failed:", activationErr);
+          await AuditService.logEvent({
+            userId: record.userId,
+            action: "subscription.activated_via_webhook",
+            entityType: "user_subscription",
+            entityId: String(sub.id),
+            details: { planId: record.planId, billingCycle: record.billingCycle, moyasarPaymentId },
+            ipAddress: null,
+          });
+        } catch (txErr) {
+          console.error("[payments] webhook atomic activation failed; rolled back:", txErr);
           await AuditService.logEvent({
             userId: record.userId,
             action: "subscription.activation_failed",
-            entityType: "user_subscription",
-            entityId: String(sub.id),
-            details: { error: activationErr instanceof Error ? activationErr.message : String(activationErr) },
+            entityType: "moyasar_payment",
+            entityId: String(record.id),
+            details: { error: txErr instanceof Error ? txErr.message : String(txErr) },
             ipAddress: null,
           });
         }
