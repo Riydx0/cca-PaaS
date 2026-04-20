@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useI18n } from "@/lib/i18n";
 import { adminFetch } from "@/lib/adminFetch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -187,11 +188,14 @@ export function AdminSubscriptionsPage() {
                       <td className="px-4 py-3 text-muted-foreground">{fmt(row.startedAt)}</td>
                       <td className="px-4 py-3 text-muted-foreground">{fmt(row.expiresAt)}</td>
                       <td className="px-4 py-3">
-                        {row.cloudronInstanceName ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs font-medium">
-                            <Server className="h-3.5 w-3.5 text-muted-foreground" />
+                        {row.cloudronInstanceName && row.cloudronInstanceId ? (
+                          <Link
+                            href={`/admin/cloudron/instances/${row.cloudronInstanceId}`}
+                            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                          >
+                            <Server className="h-3.5 w-3.5" />
                             {row.cloudronInstanceName}
-                          </span>
+                          </Link>
                         ) : (
                           <span className="text-xs text-muted-foreground italic">
                             {t("admin.subscriptions.noWorkspace")}
