@@ -5,6 +5,7 @@ import {
   moyasarPaymentsTable,
   userSubscriptionsTable,
   subscriptionPlansTable,
+  serverOrdersTable,
 } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { MoyasarService } from "../services/moyasar_service";
@@ -15,6 +16,19 @@ const router = Router();
 
 const APP_BASE_URL = process.env.APP_BASE_URL ?? "https://owaar.com";
 const CALLBACK_URL = `${APP_BASE_URL}/payment/callback`;
+
+function parseOrderIdFromMetadata(metadata: string | null): number | null {
+  if (!metadata) return null;
+  try {
+    const parsed = JSON.parse(metadata);
+    const oid = parsed?.orderId;
+    if (oid == null) return null;
+    const n = Number(oid);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
 
 function getAmountForPlan(
   plan: { priceMonthly: string | null; priceYearly: string | null },
@@ -44,11 +58,31 @@ router.post("/initiate", requireAuth, async (req: Request, res) => {
   }
   try {
     const userId = req.session.userId as number;
-    const { planId, billingCycle = "monthly", source } = req.body ?? {};
+    const { planId, billingCycle = "monthly", source, orderId } = req.body ?? {};
 
     if (!planId) {
       res.status(400).json({ error: "planId is required" });
       return;
+    }
+
+    // Validate optional checkout-origin orderId belongs to this user.
+    let validatedOrderId: number | null = null;
+    if (orderId != null) {
+      const oid = Number(orderId);
+      if (!Number.isFinite(oid) || oid <= 0) {
+        res.status(400).json({ error: "Invalid orderId" });
+        return;
+      }
+      const [ord] = await db
+        .select({ id: serverOrdersTable.id })
+        .from(serverOrdersTable)
+        .where(and(eq(serverOrdersTable.id, oid), eq(serverOrdersTable.userId, userId)))
+        .limit(1);
+      if (!ord) {
+        res.status(404).json({ error: "Order not found" });
+        return;
+      }
+      validatedOrderId = oid;
     }
 
     if (!["monthly", "yearly"].includes(billingCycle)) {
@@ -80,7 +114,7 @@ router.post("/initiate", requireAuth, async (req: Request, res) => {
         amount: String(amountHalala / 100),
         currency: plan.currency ?? "SAR",
         status: "initiated",
-        metadata: JSON.stringify({ planSlug: plan.slug }),
+        metadata: JSON.stringify({ planSlug: plan.slug, orderId: validatedOrderId }),
         updatedAt: new Date(),
       })
       .returning();
@@ -200,10 +234,32 @@ router.post("/verify", requireAuth, async (req: Request, res) => {
           ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
+        // Recover checkout-origin orderId from payment metadata.
+        const checkoutOrderId = parseOrderIdFromMetadata(record.metadata);
+
+        // payment.paid is the canonical "money received" event in the audit
+        // chain. It always fires before any subscription work so the trail
+        // reflects gateway truth even if activation later rolls back.
+        await AuditService.logEvent({
+          userId: record.userId,
+          action: "payment.paid",
+          entityType: "moyasar_payment",
+          entityId: String(record.id),
+          details: {
+            moyasarPaymentId: record.moyasarPaymentId,
+            amount: record.amount,
+            currency: record.currency,
+            planId: record.planId,
+            orderId: checkoutOrderId,
+            source: "verify",
+          },
+          ipAddress: req.ip ?? null,
+        });
+
         // TRUE atomic flow: payment status, subscription insert, payment↔sub
-        // link, AND workspace allocation + access grant + permissions sync all
-        // in one DB transaction. If any step fails, the whole thing rolls
-        // back — no orphaned subscription, no paid customer with no workspace.
+        // link, server_orders↔sub link AND workspace allocation + access grant
+        // + permissions sync all in one DB transaction. If any step fails,
+        // the whole thing rolls back.
         try {
           const sub = await db.transaction(async (tx) => {
             await tx
@@ -231,6 +287,17 @@ router.post("/verify", requireAuth, async (req: Request, res) => {
               .set({ subscriptionId: createdSub.id, updatedAt: new Date() })
               .where(eq(moyasarPaymentsTable.id, record.id));
 
+            // Checkout-origin: link the originating order to the new sub.
+            if (checkoutOrderId != null) {
+              await tx
+                .update(serverOrdersTable)
+                .set({ subscriptionId: createdSub.id })
+                .where(and(
+                  eq(serverOrdersTable.id, checkoutOrderId),
+                  eq(serverOrdersTable.userId, record.userId),
+                ));
+            }
+
             // Activation participates in this same transaction.
             await activateSubscription(createdSub.id, {
               triggeredBy: "moyasar.verify.paid",
@@ -245,11 +312,16 @@ router.post("/verify", requireAuth, async (req: Request, res) => {
             action: "subscription.activated_via_payment",
             entityType: "user_subscription",
             entityId: String(sub.id),
-            details: { planId: record.planId, billingCycle: record.billingCycle, moyasarPaymentId: record.moyasarPaymentId },
+            details: {
+              planId: record.planId,
+              billingCycle: record.billingCycle,
+              moyasarPaymentId: record.moyasarPaymentId,
+              orderId: checkoutOrderId,
+            },
             ipAddress: req.ip ?? null,
           });
 
-          res.json({ status: "paid", subscriptionId: sub.id });
+          res.json({ status: "paid", subscriptionId: sub.id, orderId: checkoutOrderId });
           return;
         } catch (txErr) {
           console.error("[payments] verify atomic activation failed; rolled back:", txErr);
@@ -338,8 +410,27 @@ router.post("/webhook", async (req, res) => {
           ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-        // TRUE atomic flow: subscription insert, payment↔sub link, and
-        // workspace allocation/access/permissions sync all in one tx.
+        const checkoutOrderId = parseOrderIdFromMetadata(record.metadata);
+
+        await AuditService.logEvent({
+          userId: record.userId,
+          action: "payment.paid",
+          entityType: "moyasar_payment",
+          entityId: String(record.id),
+          details: {
+            moyasarPaymentId,
+            amount: record.amount,
+            currency: record.currency,
+            planId: record.planId,
+            orderId: checkoutOrderId,
+            source: "webhook",
+          },
+          ipAddress: null,
+        });
+
+        // TRUE atomic flow: subscription insert, payment↔sub link,
+        // server_orders↔sub link, and workspace allocation/access/permissions
+        // sync all in one tx.
         try {
           const sub = await db.transaction(async (tx) => {
             await tx
@@ -367,6 +458,16 @@ router.post("/webhook", async (req, res) => {
               .set({ subscriptionId: createdSub.id, updatedAt: new Date() })
               .where(eq(moyasarPaymentsTable.id, record.id));
 
+            if (checkoutOrderId != null) {
+              await tx
+                .update(serverOrdersTable)
+                .set({ subscriptionId: createdSub.id })
+                .where(and(
+                  eq(serverOrdersTable.id, checkoutOrderId),
+                  eq(serverOrdersTable.userId, record.userId),
+                ));
+            }
+
             await activateSubscription(createdSub.id, {
               triggeredBy: "moyasar.webhook.paid",
               tx,
@@ -380,7 +481,7 @@ router.post("/webhook", async (req, res) => {
             action: "subscription.activated_via_webhook",
             entityType: "user_subscription",
             entityId: String(sub.id),
-            details: { planId: record.planId, billingCycle: record.billingCycle, moyasarPaymentId },
+            details: { planId: record.planId, billingCycle: record.billingCycle, moyasarPaymentId, orderId: checkoutOrderId },
             ipAddress: null,
           });
         } catch (txErr) {

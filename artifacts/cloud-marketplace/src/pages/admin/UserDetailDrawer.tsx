@@ -752,6 +752,9 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
                         <p className="text-sm font-semibold">{t("admin.user.cloudron.title")}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">{t("admin.user.cloudron.subtitle")}</p>
                       </div>
+                      <div className="rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-800 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+                        {t("admin.cloudronAccess.autoNotice")}
+                      </div>
 
                       {accessQuery.isLoading ? (
                         <div className="flex items-center gap-2 py-6 text-muted-foreground justify-center">
