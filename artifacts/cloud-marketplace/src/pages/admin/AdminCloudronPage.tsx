@@ -1677,7 +1677,7 @@ function CloudronMiniStats() {
   );
 }
 
-export function AdminCloudronPage() {
+export function AdminCloudronPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useI18n();
   const qc = useQueryClient();
   const [scopedRouteMatch, scopedRouteParams] = useRoute<{ id: string }>("/admin/cloudron/instances/:id/apps");
@@ -1798,7 +1798,7 @@ export function AdminCloudronPage() {
           </AlertDescription>
         </Alert>
       )}
-      {scopedInstance && (
+      {scopedInstance && !embedded && (
         <div className="flex items-center gap-2 text-sm">
           <Link href="/admin/cloudron/instances" className="text-primary hover:underline">
             ← {t("admin.cloudron.instances.backToList")}
@@ -1817,11 +1817,13 @@ export function AdminCloudronPage() {
         </div>
       )}
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold">{t("admin.cloudron.title")}</h1>
-          <p className="text-muted-foreground mt-1">{t("admin.cloudron.subtitle")}</p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
+        {!embedded && (
+          <div>
+            <h1 className="text-2xl font-bold">{t("admin.cloudron.title")}</h1>
+            <p className="text-muted-foreground mt-1">{t("admin.cloudron.subtitle")}</p>
+          </div>
+        )}
+        <div className={`flex items-center gap-2 shrink-0 ${embedded ? "ms-auto" : ""}`}>
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 me-2 ${isLoading ? "animate-spin" : ""}`} />
             {t("admin.cloudron.refresh")}

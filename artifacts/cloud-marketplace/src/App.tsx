@@ -137,7 +137,7 @@ function CloudronInstanceAppsRoute() {
   if (isNaN(id)) return <p className="text-sm text-destructive">Invalid instance ID</p>;
   return (
     <AdminCloudronInstanceShell instanceId={id} activeTab="apps">
-      <AdminCloudronPage />
+      <AdminCloudronPage embedded />
     </AdminCloudronInstanceShell>
   );
 }
