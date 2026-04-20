@@ -76,7 +76,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     cloudronStatus === null
       ? undefined
       : cloudronStatus.connected
-        ? t("admin.nav.cloudronTooltip.connected").replace("{url}", cloudronStatus.baseUrl || "Cloudron")
+        ? t("admin.nav.cloudronTooltip.connected").replace("{url}", cloudronStatus.baseUrl || "CloudRx")
         : cloudronStatus.enabled && cloudronStatus.configured
           ? t("admin.nav.cloudronTooltip.disconnected").replace("{error}", cloudronStatus.error || t("admin.nav.cloudronIndicator.disconnected"))
           : t("admin.nav.cloudronTooltip.disabled");

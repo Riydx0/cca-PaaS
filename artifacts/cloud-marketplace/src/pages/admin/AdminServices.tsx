@@ -253,7 +253,7 @@ function getDynamicFields(productType: ProductType, t: (k: string) => string): F
       ];
     case "cloud_app":
       return [
-        { key: "config.platform", label: t("admin.product.app.platform"), placeholder: "Cloudron", section: "identity" },
+        { key: "config.platform", label: t("admin.product.app.platform"), placeholder: "CloudRx", section: "identity" },
         { key: "config.appSource", label: t("admin.product.app.source"), placeholder: "official | custom", section: "identity" },
         { key: "config.appId", label: t("admin.product.app.id"), span: 2, section: "identity", required: true },
         { key: "config.defaultPlan", label: t("admin.product.app.defaultPlan"), span: 2, section: "capacity" },

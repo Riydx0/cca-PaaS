@@ -36,8 +36,8 @@ export function CloudronStatusBanner() {
     if (data.state === "healthy") {
       setDismissedOutageAt(null);
       if (previous === "unreachable") {
-        const instanceLabel = data.instanceName ?? "Cloudron";
-        toast.success("Cloudron connection restored", {
+        const instanceLabel = data.instanceName ?? "CloudRx";
+        toast.success("CloudRx connection restored", {
           description: `The ${instanceLabel} instance is reachable again.`,
           duration: 5000,
           icon: <CheckCircle2 className="h-4 w-4 text-green-600" />,
@@ -56,7 +56,7 @@ export function CloudronStatusBanner() {
 
   if (isDismissed) return null;
 
-  const instanceLabel = data.instanceName ?? "Cloudron";
+  const instanceLabel = data.instanceName ?? "CloudRx";
   const checkedAt = data.lastCheckedAt
     ? new Date(data.lastCheckedAt).toLocaleString()
     : null;
@@ -65,7 +65,7 @@ export function CloudronStatusBanner() {
     <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500 dark:text-red-400" />
       <div className="flex-1 min-w-0">
-        <p className="font-semibold">Cloudron connection lost</p>
+        <p className="font-semibold">CloudRx connection lost</p>
         <p className="mt-0.5 text-red-700 dark:text-red-400">
           The <strong>{instanceLabel}</strong> instance is currently unreachable.
           {data.error && (
@@ -76,7 +76,7 @@ export function CloudronStatusBanner() {
           )}
         </p>
         <p className="mt-1 opacity-70">
-          Super admins have been notified by email. Please check your Cloudron server and network connectivity.
+          Super admins have been notified by email. Please check your CloudRx server and network connectivity.
         </p>
       </div>
       <button
