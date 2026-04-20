@@ -20,6 +20,12 @@ function fmt(n: number, c: string) {
   return new Intl.NumberFormat(undefined, { style: "currency", currency: c, maximumFractionDigits: 2 }).format(n);
 }
 
+function fmtStr(s: string | null | undefined, c: string): string | null {
+  if (s == null || s === "") return null;
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? fmt(n, c) : null;
+}
+
 export function AdminCloudronInstanceDetailsPage() {
   const { t } = useI18n();
   const [, params] = useRoute("/admin/cloudron/instances/:id");
@@ -86,14 +92,14 @@ function OverviewTabContent({ id, t }: { id: number; t: (k: string) => string })
           <Field label={t("admin.cloudron.form.licenseType")} value={inst.licenseType} />
           <Field label={t("admin.cloudron.form.billingCycle")} value={inst.billingCycle} />
           <Field label={t("admin.cloudron.form.currency")} value={cur} />
-          <Field label={t("admin.cloudron.form.serverCost")} value={inst.serverCost ? fmt(parseFloat(inst.serverCost), cur) : null} />
-          <Field label={t("admin.cloudron.form.licenseCost")} value={inst.licenseCost ? fmt(parseFloat(inst.licenseCost), cur) : null} />
+          <Field label={t("admin.cloudron.form.serverCost")} value={fmtStr(inst.serverCost, cur)} />
+          <Field label={t("admin.cloudron.form.licenseCost")} value={fmtStr(inst.licenseCost, cur)} />
           <Field label={t("admin.cloudron.form.purchaseDate")} value={inst.purchaseDate} />
           <Field label={t("admin.cloudron.form.renewalDate")} value={inst.renewalDate} />
           <Field label={t("admin.cloudron.dash.monthlyCost")} value={fin ? fmt(fin.monthlyEquivalent, cur) : null} valueClass="text-red-600 font-semibold" />
           <Field label={t("admin.cloudron.dash.yearlyCost")} value={fin ? fmt(fin.yearlyEquivalent, cur) : null} valueClass="text-red-600 font-semibold" />
-          <Field label={t("admin.cloudron.form.sellingPriceMonthly")} value={inst.sellingPriceMonthly ? fmt(parseFloat(inst.sellingPriceMonthly), cur) : null} valueClass="text-blue-600 font-semibold" />
-          <Field label={t("admin.cloudron.form.sellingPriceYearly")} value={inst.sellingPriceYearly ? fmt(parseFloat(inst.sellingPriceYearly), cur) : null} valueClass="text-blue-600 font-semibold" />
+          <Field label={t("admin.cloudron.form.sellingPriceMonthly")} value={fmtStr(inst.sellingPriceMonthly, cur)} valueClass="text-blue-600 font-semibold" />
+          <Field label={t("admin.cloudron.form.sellingPriceYearly")} value={fmtStr(inst.sellingPriceYearly, cur)} valueClass="text-blue-600 font-semibold" />
           <Field label={t("admin.cloudron.dash.monthlyProfit")} value={fin ? `${fmt(fin.profitMonthly, cur)} (${fin.marginMonthlyPct}%)` : null} valueClass={fin && fin.profitMonthly >= 0 ? "text-emerald-700 font-semibold" : "text-red-700 font-semibold"} />
           <Field label={t("admin.cloudron.dash.yearlyProfit")} value={fin ? `${fmt(fin.profitYearly, cur)} (${fin.marginYearlyPct}%)` : null} valueClass={fin && fin.profitYearly >= 0 ? "text-emerald-700 font-semibold" : "text-red-700 font-semibold"} />
         </CardContent>
