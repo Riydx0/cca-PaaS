@@ -363,7 +363,7 @@ export function AdminCloudronInstanceShell({ instanceId, activeTab, children }: 
   return (
     <div className="space-y-4">
       {/* Sticky header */}
-      <div className="sticky top-0 z-20 -mx-4 md:-mx-6 -mt-4 md:-mt-6 px-4 md:px-6 pt-4 pb-3 bg-background/85 backdrop-blur border-b border-border">
+      <div className="sticky top-0 z-20 -mx-4 md:-mx-6 -mt-4 md:-mt-6 px-4 md:px-6 pt-4 pb-3 bg-background/95 backdrop-blur-xl border-b border-border shadow-sm">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="space-y-1 min-w-0">
             <Link
